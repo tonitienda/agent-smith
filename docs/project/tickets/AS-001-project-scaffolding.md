@@ -1,7 +1,7 @@
 ---
 id: AS-001
 title: Project scaffolding, CI pipeline, and Apache-2.0 license
-status: ready-to-implement
+status: done
 github_issue: 1
 depends_on: []
 area: foundation
@@ -11,7 +11,7 @@ source: PRD.md D6, D8
 
 # AS-001 · Project scaffolding, CI pipeline, and Apache-2.0 license
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -23,10 +23,10 @@ Bootstrap the Agent Smith repository: Go module, standard project layout, build 
 
 ## Acceptance criteria
 
-- [ ] `go build ./cmd/smith` produces a single static binary on macOS and Linux.
-- [ ] CI runs lint + tests on every PR and fails on violations.
-- [ ] Apache-2.0 LICENSE file present; README states the one-liner and links the PRD.
-- [ ] `make build`, `make test`, `make lint` all work locally.
+- [x] `go build ./cmd/smith` produces a single static binary on macOS and Linux.
+- [x] CI runs lint + tests on every PR and fails on violations.
+- [x] Apache-2.0 LICENSE file present; README states the one-liner and links the PRD.
+- [x] `make build`, `make test`, `make lint` all work locally.
 
 ## Dependencies
 

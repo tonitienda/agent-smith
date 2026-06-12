@@ -10,7 +10,7 @@
 
 **Agent Smith** is a fast, provider-agnostic coding agent written in Go — a single binary that works with **Anthropic and OpenAI** (plus OpenAI-compatible endpoints) and treats the LLM as a swappable reasoning engine. The bet: model intelligence is commoditizing, so the durable value of a third-party agent is the **harness** — context engineering, cost/speed control, observability, and portability. Agent Smith aims to be the best harness, not the best brain.
 
-> Status: **pre-code**. The product spec ([PRD](docs/project/PRD.md)) and a fully ticketed backlog ([59 tickets](docs/project/tickets/README.md)) are done; implementation starts at AS-001. The only code so far is the [`ticket-sync`](cmd/ticket-sync/main.go) tool that mirrors tickets to GitHub issues.
+> Status: **scaffolded**. The product spec ([PRD](docs/project/PRD.md)) and a fully ticketed backlog ([59 tickets](docs/project/tickets/README.md)) are done; AS-001 has landed the Go CLI scaffold, build/test/lint targets, CI, and Apache-2.0 licensing. The agent runtime is still implemented ticket-by-ticket from the roadmap.
 
 ## The problem
 
@@ -85,12 +85,25 @@ Background/async runner, replayable runs + OpenTelemetry, cross-session analytic
 ```
 docs/project/PRD.md        product spec — read the Decision Log (D0–D9) first
 docs/project/tickets/      one file per ticket (AS-NNN-slug.md) + index README
+cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
+internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
+.github/workflows/         CI for build, vet, lint, and tests
+```
+
+## Development
+
+The primary binary is `smith`:
+
+```sh
+make build      # builds a static ./smith binary from ./cmd/smith
+make test       # runs all Go tests
+make lint       # runs go vet and golangci-lint when installed
 ```
 
 ## License
 
-Apache-2.0 (Decision Log D8 — OSS-first). The license file lands with project scaffolding ([AS-001](docs/project/tickets/AS-001-project-scaffolding.md)).
+Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).
 
 ---
 
