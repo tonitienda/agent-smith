@@ -32,7 +32,7 @@ import (
 	"strings"
 )
 
-const ticketsDir = "tickets"
+const ticketsDir = "docs/project/tickets"
 
 var (
 	ticketFileRe = regexp.MustCompile(`^AS-\d+.*\.md$`)
