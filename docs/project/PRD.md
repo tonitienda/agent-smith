@@ -1,7 +1,7 @@
 # Agent Smith — Product Requirements Document (Initial Draft)
 
 > Status: **Draft v0.3** (post stress-test) · Owner: Toni · Date: 2026-06-12
-> A provider-agnostic coding agent built on an **open, stable data substrate** for agent sessions, with first-class **context observability and control** across Anthropic and OpenAI. Efficiency is a design criterion, not a headline claim (see Decision Log, D5).
+> A provider-agnostic coding agent built on an **open, stable data substrate** for agent sessions, with first-class **context observability and control** across Anthropic, OpenAI, and mainstream compatible agent/API surfaces. Efficiency is a design criterion, not a headline claim (see Decision Log, D5).
 
 ---
 
@@ -25,7 +25,7 @@ Locked commitments from a design stress-test. Sections 1–10 remain the origina
 
 **D3 · Core data model.** The session is an **append-only, immutable event log of content blocks** (text / tool-call / tool-result / file-read / reasoning; stable ID). The model-facing **context is a *projection* over the log**, not stored state. `/clean`, `/tidy`, `/compact`, `/rewind` append exclusion or derived-block events (with provenance); they never mutate history. Reversibility and auditability become structural, and additive-only becomes natural. (Resolves §10 Q3.)
 
-**D4 · Bilingual schema.** The immutable block schema is modeled as the **union/superset of Anthropic *and* OpenAI wire formats, designed up front** (spike both; normalization layer) before it is frozen — so provider #2 never forces a breaking change.
+**D4 · Polyglot schema.** The immutable block schema is modeled as the **union/superset of mainstream agent/provider wire formats, designed up front** — starting with Anthropic and OpenAI, and explicitly surveying public surfaces from mainstream coding agents such as xAI/Grok Build (OpenAI-compatible Responses API, headless streaming JSON, MCP-facing events), Codex/Gemini/Cursor/Cline/Aider where stable formats exist. The spike classifies each surface as schema input, compatibility note, or out of scope before the schema is frozen — so provider #2 or a mainstream agent import/export never forces a breaking change.
 
 **D5 · Cost/speed = criterion, not claim.** "Cheaper/faster than a *naive* harness on the same model" is an **internal design criterion + guardrail metric**, measured on a benchmark suite — *not* a marketing promise. External positioning leads with control, observability, and neutrality. (Supersedes the "30–50% cheaper" headline in §6.)
 
