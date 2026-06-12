@@ -1,0 +1,7 @@
+# Binaries
+/smith
+/ticket-sync
+*.test
+
+# OS
+.DS_Store
