@@ -25,7 +25,7 @@ The V1 subset of parity power commands (D6: "a subset of 7.16"). `/cost` ships w
 
 - [ ] `/clear` starts a clean context; the previous session appears in `/resume`.
 - [ ] `/model` switches provider mid-session and the next turn uses the new model; the event log records the switch.
-- [ ] A session started on Anthropic resumes and continues on OpenAI without transcript corruption (the bilingual-schema payoff, D4 — test this explicitly).
+- [ ] A session started on Anthropic resumes and continues on OpenAI without transcript corruption (the polyglot-schema payoff, D4 — test this explicitly).
 - [ ] `/resume` restores a session whose projection is identical to its last live state.
 
 ## Dependencies

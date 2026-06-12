@@ -22,7 +22,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-001](AS-001-project-scaffolding.md) | Project scaffolding, CI, Apache-2.0 | foundation | done | — |
-| [AS-002](AS-002-wire-format-spike.md) | Spike: Anthropic/OpenAI wire-format union (D4) | schema | ready | 001 |
+| [AS-002](AS-002-wire-format-spike.md) | Spike: mainstream agent wire-format union (D4) | schema | ready | 001 |
 | [AS-003](AS-003-block-schema-v1.md) | Immutable content-block schema v1 | schema | ready | 002 |
 | [AS-004](AS-004-additive-only-guard.md) | Additive-only schema guard (CI) | schema | ready | 003 |
 | [AS-005](AS-005-event-log-store.md) | Append-only event log store | core-log | ready | 003 |
