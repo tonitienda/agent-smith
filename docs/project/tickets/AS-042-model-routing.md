@@ -23,7 +23,7 @@ What's clearly buildable: a **tier abstraction** (`cheap | standard | strong` ma
 
 1. **Does routing ever apply to the main interactive loop in v1**, or only to explicitly-tiered work (sub-agents, compaction, analyzers)? Auto-detecting "mechanical subtasks" inside the main loop is a much harder, riskier feature than tier mapping — the §6 guardrail (task success must not regress) is directly at stake.
 2. **Auto-escalate on failure** — what is "failure"? Tool-error loops, user correction, explicit model admission? How many retries before escalating, and does the escalated attempt reuse the cheap attempt's output?
-3. **Cross-provider routing** — may the cheap tier live on a different provider than the strong tier mid-session (the bilingual schema permits it; does policy)?
+3. **Cross-provider routing** — may the cheap tier live on a different provider than the strong tier mid-session (the polyglot schema permits it; does policy)?
 4. **Policy schema** — per-task-type rules, per-tool rules, or just tier defaults + per-feature tier declarations?
 
 ## Acceptance criteria (draft, to confirm after clarification)
