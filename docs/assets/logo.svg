@@ -1,0 +1,62 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Agent Smith logo: a minimalist suited agent with sunglasses, white shirt, black tie and earpiece on a dark background with falling green code">
+  <defs>
+    <linearGradient id="lens" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d4d28"/>
+      <stop offset="0.55" stop-color="#0a2112"/>
+      <stop offset="1" stop-color="#030a05"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect width="256" height="256" rx="56" fill="#0a0f0c"/>
+
+  <!-- matrix rain (kept to the edges) -->
+  <g fill="#00ff41" font-family="'Courier New',Courier,monospace" font-size="13" opacity="0.16">
+    <text x="22" y="44">1<tspan x="22" dy="18">0</tspan><tspan x="22" dy="18">0</tspan><tspan x="22" dy="18">1</tspan><tspan x="22" dy="18">1</tspan><tspan x="22" dy="18">0</tspan></text>
+    <text x="44" y="74" opacity="0.6">0<tspan x="44" dy="18">1</tspan><tspan x="44" dy="18">1</tspan><tspan x="44" dy="18">0</tspan></text>
+    <text x="206" y="54" opacity="0.8">1<tspan x="206" dy="18">1</tspan><tspan x="206" dy="18">0</tspan><tspan x="206" dy="18">1</tspan><tspan x="206" dy="18">0</tspan></text>
+    <text x="228" y="84" opacity="0.55">0<tspan x="228" dy="18">0</tspan><tspan x="228" dy="18">1</tspan><tspan x="228" dy="18">0</tspan></text>
+  </g>
+
+  <!-- faint glow behind the figure -->
+  <circle cx="128" cy="112" r="80" fill="#00ff41" opacity="0.05"/>
+
+  <!-- neck -->
+  <rect x="113" y="118" width="30" height="54" fill="#1f261f"/>
+
+  <!-- ears -->
+  <ellipse cx="87" cy="104" rx="6" ry="10" fill="#2a322b"/>
+  <ellipse cx="169" cy="104" rx="6" ry="10" fill="#2a322b"/>
+
+  <!-- head -->
+  <ellipse cx="128" cy="98" rx="40" ry="48" fill="#2a322b"/>
+
+  <!-- slicked-back hair -->
+  <path d="M88 98 C88 34 168 34 168 98 C150 62 106 62 88 98 Z" fill="#141a12"/>
+
+  <!-- sunglasses -->
+  <g stroke="#0b0f0b" stroke-width="3" stroke-linecap="round">
+    <line x1="88" y1="97" x2="100" y2="94"/>
+    <line x1="156" y1="94" x2="168" y2="97"/>
+    <line x1="124" y1="90" x2="132" y2="90"/>
+  </g>
+  <rect x="99" y="86" width="26" height="17" rx="5" fill="url(#lens)" stroke="#060806" stroke-width="1.5"/>
+  <rect x="131" y="86" width="26" height="17" rx="5" fill="url(#lens)" stroke="#060806" stroke-width="1.5"/>
+  <line x1="104" y1="91" x2="118" y2="89.5" stroke="#5dfa84" stroke-width="1.4" stroke-linecap="round" opacity="0.45"/>
+  <line x1="136" y1="91" x2="150" y2="89.5" stroke="#5dfa84" stroke-width="1.4" stroke-linecap="round" opacity="0.45"/>
+
+  <!-- earpiece: bud + coiled wire down to the collar -->
+  <circle cx="168" cy="103" r="3.2" fill="#b9c7bb"/>
+  <path d="M169 106 C179 112 178 120 170 124 C179 128 178 136 170 140 C179 144 178 152 170 156 C176 159 177 164 174 169"
+        fill="none" stroke="#b9c7bb" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+
+  <!-- suit / shoulders -->
+  <path d="M28 256 C32 202 66 180 104 170 C112 168 144 168 152 170 C190 180 224 202 228 256 Z" fill="#171d18"/>
+
+  <!-- white shirt -->
+  <path d="M104 170 L152 170 L128 216 Z" fill="#eceae3"/>
+
+  <!-- black tie: knot + blade -->
+  <path d="M121 170 L135 170 L131 181 L125 181 Z" fill="#070907" stroke="#2e3630" stroke-width="1"/>
+  <path d="M125 181 L131 181 L137 224 L128 236 L119 224 Z" fill="#070907" stroke="#2e3630" stroke-width="1"/>
+</svg>
