@@ -52,7 +52,7 @@ On top of that substrate sit the **five wedges** — the features none of the in
 │  Capability layer: memory files (AGENT/CLAUDE/AGENTS.md)   │
 │  skills · MCP client · hooks · subagents · slash commands  │
 ├────────────────────────────────────────────────────────────┤
-│  Providers:  Anthropic │ OpenAI │ xAI/Grok/OpenAI-compatible │
+│ Providers: Anthropic │ OpenAI │ xAI/Grok/OpenAI-compatible │
 └────────────────────────────────────────────────────────────┘
 ```
 

@@ -24,7 +24,7 @@ Compare, for each included provider/agent surface:
 - Token usage reporting, including cache-related fields.
 - Prompt-caching semantics (explicit `cache_control` vs automatic).
 - For OpenAI: decide which API surface we target (Chat Completions vs Responses API) and document why.
-- For xAI/Grok Build: map both the OpenAI-compatible API shape used by `grok-build-*` models and the headless/agent surfaces that are public enough to preserve (`--output-format streaming-json`, ACP-facing events, server-side tools, citations, and code-execution outputs). Treat undocumented/private transcript internals as non-normative observations only.
+- For xAI/Grok Build: map both the OpenAI-compatible API shape used by grok-build-* models and the headless/agent surfaces that are public enough to preserve (--output-format streaming-json, MCP-facing events, server-side tools, citations, and code-execution outputs). Treat undocumented/private transcript internals as non-normative observations only.
 - Include a short survey of other mainstream coding agents with public formats (for example Codex CLI/headless streams, Gemini CLI, Cursor/Cline/Aider where available) and explicitly classify each as either **schema input** (public/stable enough to model), **compatibility note** (covered by OpenAI-compatible/API projection), or **out of scope** (private/unstable).
 
 Deliverable: `docs/design/block-schema-union.md` — a field-by-field mapping into a proposed superset schema, with normalization rules and a list of provider/agent-exclusive concepts and how the schema represents them as optional fields. The doc must include source links and retrieval dates for every external format it treats as schema input, because these agent formats change quickly.
@@ -34,7 +34,7 @@ Deliverable: `docs/design/block-schema-union.md` — a field-by-field mapping in
 - [ ] Design doc covers every block type named in D3 (text / tool-call / tool-result / file-read / reasoning).
 - [ ] Every provider/agent-exclusive field that is public enough to model is identified with its representation in the union schema; private or unstable formats are explicitly marked non-normative.
 - [ ] The OpenAI API surface choice (Chat Completions vs Responses) is made and justified.
-- [ ] xAI/Grok Build is covered explicitly, including whether its model API is represented as an OpenAI-compatible projection, whether any Responses/API extensions need first-class optional fields, and how headless `streaming-json`/ACP events map into or stay outside the block schema.
+- [ ] xAI/Grok Build is covered explicitly, including whether its model API is represented as an OpenAI-compatible projection, whether any Responses/API extensions need first-class optional fields, and how headless streaming-json/MCP events map into or stay outside the block schema.
 - [ ] At least two additional mainstream coding-agent public formats are surveyed, with a clear include/compatibility/out-of-scope decision for each.
 - [ ] Doc reviewed and accepted as the basis for the AS-003 schema freeze.
 
