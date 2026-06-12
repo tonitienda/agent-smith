@@ -11,7 +11,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 
 - One file per ticket: `AS-NNN-slug.md`. Frontmatter fields:
   - `id` — stable ticket ID (`AS-NNN`), used in `depends_on` references.
-  - `status` — `ready-to-implement` | `needs-clarification` | later: `in-progress`, `done`.
+  - `status` — `ready-to-implement` | `needs-clarification` | `done` (later: `in-progress`).
   - `github_issue` — `null` until the GitHub issue is created; then the issue number. Keep it in sync.
   - `depends_on` — ticket IDs that should land (or at least be designed) first.
   - `area`, `priority`, `source` — grouping, PRD tier, and the PRD sections the ticket comes from.
@@ -21,7 +21,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-001](AS-001-project-scaffolding.md) | Project scaffolding, CI, Apache-2.0 | foundation | ready | — |
+| [AS-001](AS-001-project-scaffolding.md) | Project scaffolding, CI, Apache-2.0 | foundation | done | — |
 | [AS-002](AS-002-wire-format-spike.md) | Spike: mainstream agent wire-format union (D4) | schema | ready | 001 |
 | [AS-003](AS-003-block-schema-v1.md) | Immutable content-block schema v1 | schema | ready | 002 |
 | [AS-004](AS-004-additive-only-guard.md) | Additive-only schema guard (CI) | schema | ready | 003 |
