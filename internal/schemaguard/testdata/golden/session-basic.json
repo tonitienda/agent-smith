@@ -1,0 +1,86 @@
+{
+  "schema": "agent-smith.blocks.v1",
+  "schema_version": "1",
+  "blocks": [
+    {
+      "id": "blk_sys",
+      "kind": "text",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "system",
+      "text": {
+        "text": "You are a helpful coding agent."
+      }
+    },
+    {
+      "id": "blk_user",
+      "kind": "text",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "user",
+      "text": {
+        "text": "List the files in the repo root."
+      }
+    },
+    {
+      "id": "blk_think",
+      "kind": "reasoning",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "reasoning": {
+        "text": "I should run ls.",
+        "replay_scope": "portable"
+      }
+    },
+    {
+      "id": "blk_call",
+      "kind": "tool_call",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "stop_reason": "tool_use",
+      "tool_call": {
+        "tool_use_id": "toolu_basic_1",
+        "name": "shell",
+        "arguments": {
+          "cmd": "ls"
+        },
+        "tool_kind": "client"
+      }
+    },
+    {
+      "id": "blk_result",
+      "kind": "tool_result",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "tool",
+      "tool_result": {
+        "tool_use_id": "toolu_basic_1",
+        "content": [
+          {
+            "type": "text",
+            "text": "README.md\ngo.mod"
+          }
+        ],
+        "exit_code": 0,
+        "stdout": "README.md\ngo.mod\n"
+      }
+    },
+    {
+      "id": "blk_answer",
+      "kind": "text",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "stop_reason": "end_turn",
+      "tokens": {
+        "input": 412,
+        "output": 37
+      },
+      "text": {
+        "text": "The repo root contains README.md and go.mod."
+      }
+    }
+  ]
+}

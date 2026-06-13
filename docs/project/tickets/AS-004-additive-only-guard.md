@@ -1,7 +1,7 @@
 ---
 id: AS-004
 title: Additive-only schema guard (compatibility tests + CI enforcement)
-status: ready-to-implement
+status: done
 github_issue: 4
 depends_on: [AS-003]
 area: schema
@@ -11,7 +11,9 @@ source: PRD.md D2
 
 # AS-004 · Additive-only schema guard
 
-**Status: ready to implement**
+**Status: done**
+
+Implemented as the [`schema-guard`](../../../cmd/schema-guard) tool and the [`internal/schemaguard`](../../../internal/schemaguard) package: a reflective schema descriptor diffed against a committed baseline (`testdata/schema_baseline.json`), a permanently-kept golden v1 session corpus (`testdata/golden/`), and the contributor process in [`docs/schema/EVOLUTION.md`](../../schema/EVOLUTION.md). Enforcement runs in CI through the existing `go test ./...` path (`TestSchemaIsAdditiveOnly`, golden-parse tests, and `TestCompareDetectsBreakingChanges`). `make schema-guard` checks on demand; `make schema-baseline` records additive changes (and refuses breaking ones).
 
 ## Description
 
@@ -24,10 +26,10 @@ D2 commits to **additive-only from V1, forever**: no removals, no repurposing, n
 
 ## Acceptance criteria
 
-- [ ] Removing or renaming any schema field causes a CI failure with a clear message.
-- [ ] Adding a new optional field passes CI without touching old golden files.
-- [ ] Golden sessions from v1 parse correctly and are kept permanently.
-- [ ] `docs/schema/EVOLUTION.md` states the rules and the process for additions.
+- [x] Removing or renaming any schema field causes a CI failure with a clear message.
+- [x] Adding a new optional field passes CI without touching old golden files.
+- [x] Golden sessions from v1 parse correctly and are kept permanently.
+- [x] `docs/schema/EVOLUTION.md` states the rules and the process for additions.
 
 ## Dependencies
 
