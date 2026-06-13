@@ -68,12 +68,14 @@ type FileReadBody struct {
 }
 
 // LineRange is a line or byte range within a file (union §6.4). A nil *LineRange
-// means the whole file.
+// means the whole file. Each bound is a pointer so a reported 0 (a meaningful
+// 0-based byte offset) is distinguishable from an unreported bound — the same
+// "missing means unreported, never zero" rule applied to Tokens and ExitCode.
 type LineRange struct {
-	StartLine int `json:"start_line,omitempty"`
-	EndLine   int `json:"end_line,omitempty"`
-	StartByte int `json:"start_byte,omitempty"`
-	EndByte   int `json:"end_byte,omitempty"`
+	StartLine *int `json:"start_line,omitempty"`
+	EndLine   *int `json:"end_line,omitempty"`
+	StartByte *int `json:"start_byte,omitempty"`
+	EndByte   *int `json:"end_byte,omitempty"`
 }
 
 // ReasoningBody is the body of a KindReasoning block (union §6.5). Encrypted is

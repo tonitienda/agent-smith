@@ -39,7 +39,12 @@ type Document struct {
 	Ext     map[string]json.RawMessage `json:"ext,omitempty"`
 }
 
-// NewDocument returns a Document tagged with the current schema version.
+// NewDocument returns a Document tagged with the current schema version. A nil
+// blocks slice is normalized to an empty slice so the document marshals as
+// "blocks": [] rather than "blocks": null, which is friendlier for consumers.
 func NewDocument(blocks ...Block) Document {
+	if blocks == nil {
+		blocks = []Block{}
+	}
 	return Document{Schema: SchemaID, Version: SchemaVersion, Blocks: blocks}
 }

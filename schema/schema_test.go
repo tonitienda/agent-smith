@@ -124,7 +124,7 @@ func sampleBlocks() []Block {
 	fileRead.Role = RoleHarness
 	fileRead.FileRead = &FileReadBody{
 		Path:        "/home/user/agent-smith/go.mod",
-		Range:       &LineRange{StartLine: 1, EndLine: 3},
+		Range:       &LineRange{StartLine: intPtr(1), EndLine: intPtr(3)},
 		Content:     "module ...",
 		ContentHash: "sha256:abc",
 		OffloadRef:  "",
@@ -187,6 +187,18 @@ func TestDocumentRoundTripLossless(t *testing.T) {
 	}
 	if got.Schema != SchemaID || got.Version != SchemaVersion {
 		t.Fatalf("schema tag lost: %q %q", got.Schema, got.Version)
+	}
+}
+
+// TestNewDocumentMarshalsEmptyBlocks guards that a document built with no
+// blocks serializes "blocks" as [] rather than null, for client robustness.
+func TestNewDocumentMarshalsEmptyBlocks(t *testing.T) {
+	data, err := json.Marshal(NewDocument())
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"blocks":[]`) {
+		t.Fatalf("empty document must marshal blocks as [], got %s", data)
 	}
 }
 
