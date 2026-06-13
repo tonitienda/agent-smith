@@ -7,6 +7,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 - Backlog: one file per ticket in `docs/project/tickets/` (`AS-NNN-slug.md`), indexed in its [README](docs/project/tickets/README.md).
 - Frontmatter is machine-read by `cmd/ticket-sync` — keep `id`, `title`, `status`, `github_issue`, `depends_on`, `area`, `priority` intact. Ticket IDs are stable: never renumber or reuse.
 - `status` is `ready-to-implement`, `needs-clarification`, or `done`; `needs-clarification` tickets must contain an "Open questions" section. New tickets continue the AS-NNN sequence.
+- **Surface follow-on work as a ticket, not a TODO.** When a task reveals additional work — a refinement, a validation pass, a discovered gap, a punted decision — create a new `AS-NNN` ticket for it (continue the sequence, file it in `docs/project/tickets/AS-NNN-slug.md`, add it to the README index) so it's tracked properly instead of being lost in a comment or PR description. (Example: AS-060 was spun out of the AS-002 spike.)
 - When adding or changing tickets, update the index table in the tickets README.
 - **Files are the source of truth over GitHub issues** — edit the file, then sync (`go run ./cmd/ticket-sync`, `-dry-run` to preview, `-all` for everything). The tool writes issue numbers back into frontmatter; never invent a `github_issue` value by hand.
 
