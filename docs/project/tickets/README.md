@@ -27,7 +27,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-004](AS-004-additive-only-guard.md) | Additive-only schema guard (CI) | schema | done | 003 |
 | [AS-005](AS-005-event-log-store.md) | Append-only event log store | core-log | done | 003 |
 | [AS-006](AS-006-context-projection-engine.md) | Context projection engine | core-log | done | 005 |
-| [AS-007](AS-007-session-persistence.md) | Session persistence (save/list/load) | core-log | ready | 005 |
+| [AS-007](AS-007-session-persistence.md) | Session persistence (save/list/load) | core-log | done | 005 |
 | [AS-008](AS-008-provider-interface.md) | Provider abstraction interface | provider | ready | 002, 003 |
 | [AS-009](AS-009-anthropic-provider.md) | Anthropic provider | provider | ready | 008 |
 | [AS-010](AS-010-openai-provider.md) | OpenAI provider (+ compatible endpoints) | provider | ready | 008 |

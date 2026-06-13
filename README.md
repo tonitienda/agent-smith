@@ -10,7 +10,7 @@
 
 **Agent Smith** is a fast, provider-agnostic coding agent written in Go — a single binary that works with **Anthropic and OpenAI** (plus OpenAI-compatible endpoints) and treats the LLM as a swappable reasoning engine. The bet: model intelligence is commoditizing, so the durable value of a third-party agent is the **harness** — context engineering, cost/speed control, observability, and portability. Agent Smith aims to be the best harness, not the best brain.
 
-> Status: **scaffolded**. The product spec ([PRD](docs/project/PRD.md)) and a fully ticketed backlog ([59 tickets](docs/project/tickets/README.md)) are done; AS-001 has landed the Go CLI scaffold, build/test/lint targets, CI, and Apache-2.0 licensing. The agent runtime is still implemented ticket-by-ticket from the roadmap.
+> Status: **core substrate in progress**. The product spec ([PRD](docs/project/PRD.md)) and fully ticketed backlog are done; AS-001 through AS-007 have landed the Go CLI scaffold, schema/event-log/projection substrate, and project-scoped disk session persistence. The agent runtime is still implemented ticket-by-ticket from the roadmap.
 
 ## The problem
 
@@ -88,6 +88,7 @@ docs/project/tickets/      one file per ticket (AS-NNN-slug.md) + index README
 cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
 internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
+internal/session/          project-scoped disk persistence for append-only session logs
 .github/workflows/         CI for build, vet, lint, tests, and merged-ticket issue sync
 ```
 
