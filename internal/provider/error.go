@@ -73,9 +73,15 @@ type Error struct {
 // kind's conventional posture. Adapters layer the HTTP status, RetryAfter, or a
 // wrapped cause on the returned value as needed.
 func New(kind ErrorKind, format string, args ...any) *Error {
+	// With no args, treat format as a literal so a message containing a percent
+	// sign (e.g. "at 100% capacity") is not mangled into a %!(NOVERB) by Sprintf.
+	msg := format
+	if len(args) > 0 {
+		msg = fmt.Sprintf(format, args...)
+	}
 	return &Error{
 		Kind:      kind,
-		Message:   fmt.Sprintf(format, args...),
+		Message:   msg,
 		Retryable: kind.defaultRetryable(),
 	}
 }
