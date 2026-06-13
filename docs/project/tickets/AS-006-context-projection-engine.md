@@ -1,7 +1,7 @@
 ---
 id: AS-006
 title: Context projection engine (model-facing context as a pure projection over the log)
-status: ready-to-implement
+status: done
 github_issue: 6
 depends_on: [AS-005]
 area: core-log
@@ -11,7 +11,7 @@ source: PRD.md D3, §5
 
 # AS-006 · Context projection engine
 
-**Status: ready to implement**
+**Status: done** — implemented in `internal/projection` (pure function over `[]schema.Block`, point-in-time `ProjectAt`, exclusion + derived-block folding, deterministic single reverse pass, golden test).
 
 ## Description
 
@@ -26,11 +26,11 @@ The model-facing context is a **projection over the event log, not stored state*
 
 ## Acceptance criteria
 
-- [ ] Projection of a log with no edit events equals the raw conversation.
-- [ ] Excluding a block removes it from the projection without touching the log.
-- [ ] Undoing an exclusion (appending a counter-event) restores the projection exactly.
-- [ ] Point-in-time projection at any event index is correct and covered by tests.
-- [ ] Projection is deterministic (golden tests).
+- [x] Projection of a log with no edit events equals the raw conversation.
+- [x] Excluding a block removes it from the projection without touching the log.
+- [x] Undoing an exclusion (appending a counter-event) restores the projection exactly.
+- [x] Point-in-time projection at any event index is correct and covered by tests.
+- [x] Projection is deterministic (golden tests).
 
 ## Dependencies
 
