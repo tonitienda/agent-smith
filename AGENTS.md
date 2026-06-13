@@ -1,3 +1,3 @@
 # Agent instructions
 
-See [CLAUDE.md](CLAUDE.md) for the canonical repository instructions. Keep this file as a thin pointer so agent guidance is maintained in one place.
+Read and follow [`CLAUDE.md`](CLAUDE.md). It is the shared working guide for all coding agents in this repository so agent behavior stays consistent across tools.
