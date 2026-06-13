@@ -294,6 +294,7 @@ func (s *chatStream) Next() bool {
 				// closes without a [DONE] sentinel).
 				if ev, ok := s.flushStop(); ok {
 					s.pending = append(s.pending, ev)
+					s.done = true
 					continue
 				}
 				s.done = true
