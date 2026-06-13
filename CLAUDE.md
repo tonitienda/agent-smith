@@ -14,7 +14,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 
 ## Conventions
 
-- Go: stdlib-only for repo tooling; `gofmt`, `go vet`, `go test ./...`, and relevant `make` targets must pass before committing.
+- Go: stdlib-only for repo tooling; `./scripts/agent-quality-gate.sh` must pass before committing. Configure Claude project hooks (or the nearest equivalent) to run that script before final handoff so `make fmt`, `make test`, `make vet`, and `make lint` match CI.
 - Scope discipline (PRD D6): V1 = AS-001…AS-030. Don't pull deferred features into V1 tickets; punted/hard problems are documented explicitly, never silently (D0).
 - Schema/data design follows additive-only thinking (D2) — applies to our own file formats (tickets, rollups) too.
 
