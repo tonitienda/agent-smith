@@ -13,10 +13,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/eventlog"
@@ -159,6 +161,11 @@ func (s *Store) List() ([]Summary, error) {
 		if err != nil || meta.ProjectPath != s.projectDir {
 			continue
 		}
+		if _, err := os.Stat(filepath.Join(dir, eventLogFile)); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf("session: stat log for %s: %w", meta.ID, err)
+		}
 		summary, err := summarize(dir, meta)
 		if err != nil {
 			return nil, err
@@ -205,25 +212,49 @@ func writeMetadata(dir string, meta Metadata) error {
 		return fmt.Errorf("session: marshal metadata: %w", err)
 	}
 	b = append(b, '\n')
+
 	path := filepath.Join(dir, metadataFile)
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		return fmt.Errorf("session: write metadata: %w", err)
-	}
-	f, err := os.Open(path)
+	tmp, err := os.CreateTemp(dir, metadataFile+".*.tmp")
 	if err != nil {
-		return fmt.Errorf("session: reopen metadata: %w", err)
+		return fmt.Errorf("session: create metadata temp file: %w", err)
 	}
-	defer f.Close()
-	if err := f.Sync(); err != nil {
-		return fmt.Errorf("session: sync metadata: %w", err)
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("session: write metadata temp file: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("session: sync metadata temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("session: close metadata temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("session: commit metadata: %w", err)
+	}
+	cleanup = false
+	if err := syncDirBestEffort(dir); err != nil {
+		return err
+	}
+	return nil
+}
+
+func syncDirBestEffort(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
-		return fmt.Errorf("session: open metadata directory: %w", err)
+		return fmt.Errorf("session: open directory for sync: %w", err)
 	}
 	defer d.Close()
-	if err := d.Sync(); err != nil {
-		return fmt.Errorf("session: sync metadata directory: %w", err)
+	if err := d.Sync(); err != nil && !errors.Is(err, fs.ErrInvalid) && !errors.Is(err, syscall.EINVAL) {
+		return fmt.Errorf("session: sync directory: %w", err)
 	}
 	return nil
 }

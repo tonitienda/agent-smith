@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -104,6 +105,47 @@ func TestListIsProjectScopedAndDerivedFromLog(t *testing.T) {
 	}
 	if summary.UpdatedAt.IsZero() || summary.UpdatedAt.Before(summary.CreatedAt.Add(-time.Second)) {
 		t.Fatalf("summary updated_at = %s, created_at = %s", summary.UpdatedAt, summary.CreatedAt)
+	}
+}
+
+func TestListSkipsIncompleteSessionWithoutCreatingLog(t *testing.T) {
+	root := t.TempDir()
+	project := filepath.Join(t.TempDir(), "repo")
+	store, err := NewStore(root, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := filepath.Join(store.ProjectSessionsDir(), "sess_incomplete")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := Metadata{ID: "sess_incomplete", ProjectPath: store.ProjectDir(), CreatedAt: time.Now().UTC(), Title: "partial"}
+	if err := writeMetadata(dir, meta); err != nil {
+		t.Fatal(err)
+	}
+
+	summaries, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 0 {
+		t.Fatalf("summaries = %#v, want none for incomplete session", summaries)
+	}
+	if _, err := os.Stat(filepath.Join(dir, eventLogFile)); !os.IsNotExist(err) {
+		t.Fatalf("List created event log: stat err = %v", err)
+	}
+}
+
+func TestOpenRejectsTraversalIDs(t *testing.T) {
+	store, err := NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"", ".", "..", "../outside", `..\outside`} {
+		if _, err := store.Open(id); err == nil {
+			t.Fatalf("Open(%q) succeeded, want error", id)
+		}
 	}
 }
 
