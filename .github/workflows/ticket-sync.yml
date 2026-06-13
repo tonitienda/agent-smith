@@ -33,9 +33,11 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           TICKET_SYNC_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
+
           mapfile -t changed_ticket_files < <(
-            gh api "repos/${TICKET_SYNC_REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename' \
-              | awk '/^docs\/project\/tickets\/AS-[0-9]+.*\.md$/ { print }'
+            gh api "repos/${TICKET_SYNC_REPO}/pulls/${PR_NUMBER}/files" --paginate \
+              --jq '.[] | select(.filename | test("^docs/project/tickets/AS-[0-9]+.*\\.md$")) | .filename'
           )
 
           tickets=()

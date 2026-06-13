@@ -81,6 +81,14 @@ func main() {
 		tickets = append(tickets, t)
 	}
 
+	if *requireExisting {
+		for _, t := range tickets {
+			if err := requireLinkedIssue(t); err != nil {
+				fatal(fmt.Errorf("%s: %w", t.path, err))
+			}
+		}
+	}
+
 	repo := ""
 	if !*dryRun {
 		if repo, err = resolveRepo(*repoFlag); err != nil {
@@ -234,7 +242,11 @@ func labels(t *ticket) []string {
 	return ls
 }
 
-func payload(t *ticket) ([]byte, error) {
+type payloadOptions struct {
+	includeState bool
+}
+
+func payload(t *ticket, opts payloadOptions) ([]byte, error) {
 	footer := fmt.Sprintf(
 		"\n---\n_Synced from `%s` — the file is the source of truth; edits made directly to this issue will be overwritten._\n",
 		t.path,
@@ -244,11 +256,18 @@ func payload(t *ticket) ([]byte, error) {
 		"body":   t.body + footer,
 		"labels": labels(t),
 	}
-	if t.status == "done" {
+	if opts.includeState && t.status == "done" {
 		body["state"] = "closed"
 		body["state_reason"] = "completed"
 	}
 	return json.Marshal(body)
+}
+
+func closePayload() ([]byte, error) {
+	return json.Marshal(map[string]string{
+		"state":        "closed",
+		"state_reason": "completed",
+	})
 }
 
 type syncOptions struct {
@@ -256,9 +275,18 @@ type syncOptions struct {
 	requireExisting bool
 }
 
-func syncTicket(repo string, t *ticket, opts syncOptions) error {
-	if opts.requireExisting && t.issue == 0 {
+func requireLinkedIssue(t *ticket) error {
+	if t.issue == 0 {
 		return errors.New("github_issue is null; run ticket-sync before merging so this ticket is linked to an issue")
+	}
+	return nil
+}
+
+func syncTicket(repo string, t *ticket, opts syncOptions) error {
+	if opts.requireExisting {
+		if err := requireLinkedIssue(t); err != nil {
+			return err
+		}
 	}
 
 	if opts.dryRun {
@@ -266,18 +294,18 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 		if t.issue == 0 {
 			action = "create issue"
 		}
-		if t.status == "done" && t.issue != 0 {
+		if t.status == "done" {
 			action += " and close it"
 		}
 		_, err := fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
 		return err
 	}
 
-	body, err := payload(t)
-	if err != nil {
-		return err
-	}
 	if t.issue == 0 {
+		body, err := payload(t, payloadOptions{})
+		if err != nil {
+			return err
+		}
 		resp, err := ghAPI(fmt.Sprintf("repos/%s/issues", repo), "POST", body)
 		if err != nil {
 			return err
@@ -291,14 +319,34 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 		if err := writeIssueNumber(t.path, res.Number); err != nil {
 			return fmt.Errorf("issue #%d created but writing the number back failed: %w", res.Number, err)
 		}
+		if t.status == "done" {
+			if err := closeIssue(repo, res.Number); err != nil {
+				return fmt.Errorf("issue #%d created but closing it failed: %w", res.Number, err)
+			}
+			_, err = fmt.Printf("%s: created and closed issue #%d\n", t.id, res.Number)
+			return err
+		}
 		_, err = fmt.Printf("%s: created issue #%d\n", t.id, res.Number)
 		return err
 	}
 
+	body, err := payload(t, payloadOptions{includeState: true})
+	if err != nil {
+		return err
+	}
 	if _, err := ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, t.issue), "PATCH", body); err != nil {
 		return err
 	}
 	_, err = fmt.Printf("%s: updated issue #%d\n", t.id, t.issue)
+	return err
+}
+
+func closeIssue(repo string, issue int) error {
+	body, err := closePayload()
+	if err != nil {
+		return err
+	}
+	_, err = ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, issue), "PATCH", body)
 	return err
 }
 
