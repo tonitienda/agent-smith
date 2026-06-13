@@ -11,9 +11,12 @@
 //
 // By default it selects ticket files that are added/edited but not yet pushed
 // (uncommitted changes plus commits ahead of the upstream). Use -all to sync
-// every ticket, or pass explicit paths.
-// Use -require-existing in merge automation when only already-linked tickets
-// should be synced.
+// every ticket, or pass explicit paths. Use -changed-since 12h to select
+// tickets committed within a window plus any still unlinked (github_issue:
+// null) — the selection the scheduled sync uses.
+// Use -require-existing in merge automation when an unlinked ticket should be
+// a hard error, or -skip-unlinked to quietly leave unlinked tickets for the
+// scheduled sync to create.
 //
 // GitHub access goes through the gh CLI, so `gh auth login` must have been
 // run. The target repo is taken from -repo, then $TICKET_SYNC_REPO, then the
@@ -33,13 +36,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const ticketsDir = "docs/project/tickets"
 
 var (
-	ticketFileRe = regexp.MustCompile(`^AS-\d+.*\.md$`)
-	issueLineRe  = regexp.MustCompile(`(?m)^github_issue: *null *$`)
+	ticketFileRe  = regexp.MustCompile(`^AS-\d+.*\.md$`)
+	issueLineRe   = regexp.MustCompile(`(?m)^github_issue: *null *$`)
+	linkedIssueRe = regexp.MustCompile(`(?m)^github_issue: *(\d+) *$`)
 )
 
 type ticket struct {
@@ -56,11 +61,13 @@ type ticket struct {
 func main() {
 	repoFlag := flag.String("repo", "", "GitHub repo as owner/name (default: $TICKET_SYNC_REPO, then the current git remote)")
 	all := flag.Bool("all", false, "sync every ticket file, not just the ones changed since the last push")
+	changedSince := flag.Duration("changed-since", 0, "select tickets whose files were committed within this window, plus any with github_issue: null (e.g. 12h); ignored when -all or explicit paths are given")
 	dryRun := flag.Bool("dry-run", false, "print planned actions without calling GitHub or editing files")
 	requireExisting := flag.Bool("require-existing", false, "fail instead of creating issues for tickets with github_issue: null")
+	skipUnlinked := flag.Bool("skip-unlinked", false, "skip (instead of creating or failing) tickets with github_issue: null")
 	flag.Parse()
 
-	files, err := selectFiles(flag.Args(), *all)
+	files, err := selectFiles(flag.Args(), *all, *changedSince)
 	if err != nil {
 		fatal(err)
 	}
@@ -99,7 +106,7 @@ func main() {
 
 	failed := 0
 	for _, t := range tickets {
-		if err := syncTicket(repo, t, syncOptions{dryRun: *dryRun, requireExisting: *requireExisting}); err != nil {
+		if err := syncTicket(repo, t, syncOptions{dryRun: *dryRun, requireExisting: *requireExisting, skipUnlinked: *skipUnlinked}); err != nil {
 			if _, printErr := fmt.Fprintf(os.Stderr, "error: %s: %v\n", t.path, err); printErr != nil {
 				fatal(printErr)
 			}
@@ -112,19 +119,71 @@ func main() {
 }
 
 // selectFiles returns the ticket files to sync: explicit args if given,
-// every ticket with -all, otherwise the ones git considers not yet pushed.
-func selectFiles(args []string, all bool) ([]string, error) {
+// every ticket with -all, the recently-committed-or-unlinked ones with
+// -changed-since, otherwise the ones git considers not yet pushed.
+func selectFiles(args []string, all bool, since time.Duration) ([]string, error) {
 	if len(args) > 0 {
 		return filterTickets(args), nil
 	}
 	if all {
 		return filepath.Glob(filepath.Join(ticketsDir, "AS-*.md"))
 	}
+	if since > 0 {
+		return selectChangedSince(since)
+	}
 	changed, err := changedFiles()
 	if err != nil {
 		return nil, err
 	}
 	return filterTickets(changed), nil
+}
+
+// selectChangedSince returns every ticket file that was committed within the
+// window OR that has no linked issue yet (github_issue: null/missing). The
+// latter is what makes the scheduled run self-healing: tickets merged without
+// an issue get picked up no matter how long ago they landed.
+//
+// Requires full git history (fetch-depth: 0) so commit times older than HEAD
+// are visible; on a shallow clone only HEAD's changes would be considered
+// recent, but unlinked tickets are still caught by the github_issue check.
+func selectChangedSince(since time.Duration) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(ticketsDir, "AS-*.md"))
+	if err != nil {
+		return nil, err
+	}
+
+	// One git log over the whole tickets dir, rather than one per file, so the
+	// cost is a single process no matter how many tickets exist.
+	cutoff := time.Now().Add(-since).Format(time.RFC3339)
+	out, err := git("log", "--name-only", "--format=", "--since="+cutoff, "--", ticketsDir)
+	if err != nil {
+		return nil, err
+	}
+	recent := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			recent[filepath.Clean(p)] = true
+		}
+	}
+
+	var selected []string
+	for _, f := range matches {
+		if recent[filepath.Clean(f)] || !isLinked(f) {
+			selected = append(selected, f)
+		}
+	}
+	sort.Strings(selected)
+	return selected, nil
+}
+
+// isLinked reports whether the file already records a numeric github_issue.
+// Missing, null, or empty values count as unlinked.
+func isLinked(path string) bool {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return linkedIssueRe.Match(raw)
 }
 
 func filterTickets(paths []string) []string {
@@ -273,6 +332,7 @@ func closePayload() ([]byte, error) {
 type syncOptions struct {
 	dryRun          bool
 	requireExisting bool
+	skipUnlinked    bool
 }
 
 func requireLinkedIssue(t *ticket) error {
@@ -287,6 +347,11 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 		if err := requireLinkedIssue(t); err != nil {
 			return err
 		}
+	}
+
+	if t.issue == 0 && opts.skipUnlinked {
+		_, err := fmt.Printf("%s: skipped (github_issue is null; left for the scheduled sync)\n", t.id)
+		return err
 	}
 
 	if opts.dryRun {

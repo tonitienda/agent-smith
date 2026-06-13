@@ -57,4 +57,8 @@ jobs:
           printf 'Syncing %d ticket file(s):\n' "${#tickets[@]}"
           printf ' - %s\n' "${tickets[@]}"
 
-          go run ./cmd/ticket-sync -repo "${TICKET_SYNC_REPO}" -require-existing "${tickets[@]}"
+          # Update already-linked issues; quietly skip tickets that still have
+          # github_issue: null — the scheduled sync (ticket-sync-scheduled.yml)
+          # creates their issues and commits the numbers back to the repo. This
+          # keeps the merge job from failing on freshly-added, unlinked tickets.
+          go run ./cmd/ticket-sync -repo "${TICKET_SYNC_REPO}" -skip-unlinked "${tickets[@]}"

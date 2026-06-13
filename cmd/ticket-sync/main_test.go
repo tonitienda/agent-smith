@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -83,6 +85,31 @@ func TestRequireExistingRejectsUnlinkedTicket(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "github_issue is null") {
 		t.Fatalf("error %q does not mention missing github_issue", err)
+	}
+}
+
+func TestSkipUnlinkedLeavesUnlinkedTicketAlone(t *testing.T) {
+	// dryRun is false to prove the skip happens before any GitHub call.
+	if err := syncTicket("owner/repo", &ticket{id: "AS-999"}, syncOptions{skipUnlinked: true}); err != nil {
+		t.Fatalf("syncTicket returned error, want unlinked ticket skipped: %v", err)
+	}
+}
+
+func TestIsLinked(t *testing.T) {
+	cases := map[string]bool{
+		"---\nid: AS-1\ngithub_issue: 42\n---\n":   true,
+		"---\nid: AS-1\ngithub_issue: null\n---\n": false,
+		"---\nid: AS-1\ngithub_issue:\n---\n":      false,
+		"---\nid: AS-1\n---\n":                     false,
+	}
+	for content, want := range cases {
+		path := filepath.Join(t.TempDir(), "AS-1-x.md")
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := isLinked(path); got != want {
+			t.Fatalf("isLinked(%q) = %v, want %v", content, got, want)
+		}
 	}
 }
 
