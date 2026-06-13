@@ -17,3 +17,9 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 - Go: stdlib-only for repo tooling; `gofmt`, `go vet`, `go test ./...`, and relevant `make` targets must pass before committing.
 - Scope discipline (PRD D6): V1 = AS-001…AS-030. Don't pull deferred features into V1 tickets; punted/hard problems are documented explicitly, never silently (D0).
 - Schema/data design follows additive-only thinking (D2) — applies to our own file formats (tickets, rollups) too.
+
+## Pull requests
+
+- **Always subscribe to PR activity.** As soon as a PR exists for the branch you're working on (whether you opened it or it was created from the Claude Code UI), call `subscribe_pr_activity` for it so you receive CI results and review comments — then follow through: investigate each event, push fixes for failing CI and actionable review feedback, and ask via `AskUserQuestion` when a fix is ambiguous. Keep watching until the PR is merged or closed, or the user tells you to stop (`unsubscribe_pr_activity`).
+- **Always close the loop on every review comment.** For each review thread, once you've pushed a change that addresses it (or decided it isn't worth doing), post a short reply on that thread saying what you did (reference the commit) or why you're declining, then mark the thread resolved. Never leave an addressed comment silently — the reviewer must be able to see, thread by thread, what was tackled and what was intentionally skipped.
+
