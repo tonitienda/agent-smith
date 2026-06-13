@@ -165,7 +165,7 @@ For each kind: the per-surface mapping, the **normalization rule**, and the **pr
 | Codex CLI | `item.type:"agent_message"` → `text`. |
 | Gemini CLI | `message` event with text payload. |
 
-**Normalization rule:** one `text` block per contiguous assistant/user text span. Multimodal *inputs* (image/audio/file parts) attach to the same block as `parts[]` (see §6.5), not separate kinds, preserving order. A **refusal** is a `text` block with `stop_reason:"refusal"` on the turn and `text.subtype:"refusal"`; the original refusal payload is preserved in `ext`.
+**Normalization rule:** one `text` block per contiguous assistant/user text span. Multimodal *inputs* (image/audio/file parts) attach to the same block as `parts[]` (see §10, *Multimodal inputs*), not separate kinds, preserving order. A purely multimodal turn (image/audio with no accompanying text) is a `text` block with `text` absent and only `parts[]` populated — hence `text` is optional (§12). A **refusal** is a `text` block with `stop_reason:"refusal"` on the turn and `text.subtype:"refusal"`; the original refusal payload is preserved in `ext`.
 
 **Optionals:** `citations[]` (Anthropic, Grok Live Search), `annotations[]` (OpenAI Responses), `subtype` (`normal`|`refusal`), `parts[]` (multimodal).
 
@@ -209,8 +209,10 @@ For each kind: the per-surface mapping, the **normalization rule**, and the **pr
 |---|---|
 | `path` | absolute/normalized path |
 | `range` | `{start_line, end_line}` or byte range (nullable = whole file) |
-| `content` | the bytes/text read |
-| `content_hash` | for dedupe (composition view "duplicated reads") |
+| `content` | the bytes/text read. **Optional** — absent when the content is too large/binary to inline (kept out-of-log, pointer in `offload_ref`) or when the read failed (see `error`). |
+| `content_hash` | for dedupe (composition view "duplicated reads"). **Optional** — absent when `content` is (nothing to hash on a failed/offloaded read). |
+| `offload_ref` | optional pointer to out-of-log storage when `content` is too large/binary to inline. |
+| `error` | optional — records a failed read (so the attempt + metadata are still in the log) instead of forcing `content`. |
 | `produced_by` | `tool_use_id` of the read call, if any (provenance) |
 | `media_type` | text/image/pdf/etc. (covers document inputs) |
 | `source` | `tool` \| `attachment` \| `mcp_resource` |
@@ -342,11 +344,11 @@ None of these blocks AS-003: each is reachable additively later.
 Concrete shape AS-003 should implement (Go types + JSON), expressed as the envelope (§3) plus the five block kinds (§6). Summary:
 
 - **Envelope**: `id, kind, seq, ts, role, provenance, provider{vendor,surface,model,native_type,native_id}, tokens?, cost_usd?, cache?, excluded_by?, ext?`.
-- **text**: `text, subtype?, parts?[], citations?[], annotations?[]`.
+- **text**: `text?, subtype?, parts?[], citations?[], annotations?[]` — `text` is optional so a purely multimodal turn (only `parts[]`) is representable.
 - **tool_call**: `tool_use_id, name, arguments(object), arguments_raw?, tool_kind, tool_subtype?, parallel_group?, mcp_server?`.
 - **tool_result**: `tool_use_id, content[], is_error, citations?[], exit_code?, stdout?, stderr?, structured_content?, truncated?, offload_ref?`.
-- **file_read**: `path, range?, content, content_hash, produced_by?, media_type, source`.
-- **reasoning**: `text, summary?[], encrypted?, signature?, redacted?, replay_scope`.
+- **file_read**: `path, range?, content?, content_hash?, offload_ref?, error?, produced_by?, media_type, source` — `content`/`content_hash` are optional to cover large/binary/offloaded content and failed reads (metadata still logged).
+- **reasoning**: `text?, summary?[], encrypted?, signature?, redacted?, replay_scope?` — `text` is optional (empty when display is omitted); `replay_scope` is optional (not provided by every surface; default to `portable` when absent).
 - **Derived/additive block kinds already anticipated**: `compaction`, `fallback` (both via the same envelope + `provenance.derived_from[]`).
 
 **Hard requirements AS-003 must honor (from this spike):**
