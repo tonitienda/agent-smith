@@ -2,6 +2,16 @@
 
 Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.md](docs/project/PRD.md) — read the **Decision Log (D0–D9) first**; it overrides the rest of the document where they conflict.
 
+
+## Repository instructions
+
+- Product truth lives in `docs/project/PRD.md`; read the Decision Log (D0-D9) before making product or architecture decisions.
+- Keep documentation current for both humans and agents. Consider whether `README.md`, `CLAUDE.md`, or focused docs under `docs/` need updates with each code change.
+- Use standard Go project layout: runnable commands under `cmd/`, shared internal packages under `internal/`.
+- Keep repo tooling stdlib-only unless a ticket explicitly introduces dependencies.
+- Build the user-facing binary through `make build`; it emits a static `./smith` binary by default.
+- All agents (Claude, Codex, GrokBuild) and humans must use `./scripts/agent-quality-gate.sh` before handoff/commit, via hooks or the closest agent-specific equivalent. The gate runs `make fmt`, `make test`, `make vet`, and `make lint`; `make lint` installs and runs the pinned repo-local `golangci-lint` instead of a global binary.
+
 ## Tickets
 
 - Backlog: one file per ticket in `docs/project/tickets/` (`AS-NNN-slug.md`), indexed in its [README](docs/project/tickets/README.md).
@@ -14,7 +24,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 
 ## Conventions
 
-- Go: stdlib-only for repo tooling; `gofmt`, `go vet`, `go test ./...`, and relevant `make` targets must pass before committing.
+- Go: stdlib-only for repo tooling; `./scripts/agent-quality-gate.sh` must pass before committing. Configure Claude project hooks (or the nearest equivalent) to run that script before final handoff so `make fmt`, `make test`, `make vet`, and `make lint` match CI. Codex and GrokBuild should use their equivalent pre-submit/check hooks for the same script.
 - Scope discipline (PRD D6): V1 = AS-001…AS-030. Don't pull deferred features into V1 tickets; punted/hard problems are documented explicitly, never silently (D0).
 - Schema/data design follows additive-only thinking (D2) — applies to our own file formats (tickets, rollups) too.
 

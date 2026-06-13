@@ -90,16 +90,19 @@ internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
 internal/session/          project-scoped disk persistence for append-only session logs
 .github/workflows/         CI for build, vet, lint, tests, and merged-ticket issue sync
+scripts/agent-quality-gate.sh  shared deterministic pre-submit gate for humans and agents
 ```
 
 ## Development
 
-The primary binary is `smith`:
+The primary binary is `smith`. Before handing off changes, humans and agents should run `./scripts/agent-quality-gate.sh` (documented in [Agent quality gates](docs/agent-quality-gates.md)) so formatting, unit tests, vet, and lint match CI:
 
 ```sh
 make build      # builds a static ./smith binary from ./cmd/smith
 make test       # runs all Go tests
-make lint       # runs go vet and golangci-lint v2.12 when available
+make vet        # runs go vet
+make lint       # installs/runs the pinned golangci-lint version (v2.12.2)
+make verify     # runs fmt, test, vet, and lint in the same order agents use
 ```
 
 ## License
