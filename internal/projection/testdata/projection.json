@@ -1,0 +1,62 @@
+[
+  {
+    "id": "a",
+    "kind": "text",
+    "seq": 0,
+    "ts": "2026-06-13T12:00:00Z",
+    "role": "assistant",
+    "excluded_by": [
+      "sum"
+    ],
+    "text": {
+      "text": "first"
+    },
+    "live": false,
+    "reason": "excluded"
+  },
+  {
+    "id": "b",
+    "kind": "text",
+    "seq": 0,
+    "ts": "2026-06-13T12:00:00Z",
+    "role": "assistant",
+    "text": {
+      "text": "second"
+    },
+    "live": true
+  },
+  {
+    "id": "c",
+    "kind": "text",
+    "seq": 0,
+    "ts": "2026-06-13T12:00:00Z",
+    "role": "assistant",
+    "excluded_by": [
+      "sum",
+      "excl-c"
+    ],
+    "text": {
+      "text": "third"
+    },
+    "live": false,
+    "reason": "excluded"
+  },
+  {
+    "id": "sum",
+    "kind": "compaction",
+    "seq": 0,
+    "ts": "2026-06-13T12:00:00Z",
+    "role": "harness",
+    "provenance": {
+      "producer": "/compact",
+      "derived_from": [
+        "a",
+        "c"
+      ]
+    },
+    "text": {
+      "text": "summary of a+c"
+    },
+    "live": true
+  }
+]
