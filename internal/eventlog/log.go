@@ -63,15 +63,13 @@ func Open(path string) (*Log, error) {
 		return nil, fmt.Errorf("eventlog: open %s: %w", path, err)
 	}
 	if err := l.replay(f); err != nil {
-		f.Close()
-		return nil, err
+		return nil, errors.Join(err, f.Close())
 	}
 	// Position the file at the end so appends extend the log; replay leaves the
 	// offset wherever the last complete line ended (which also truncates a torn
 	// trailing fragment from the next write's perspective).
 	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		f.Close()
-		return nil, fmt.Errorf("eventlog: seek %s: %w", path, err)
+		return nil, errors.Join(fmt.Errorf("eventlog: seek %s: %w", path, err), f.Close())
 	}
 	l.file = f
 	return l, nil
