@@ -39,8 +39,8 @@ type Log struct {
 	nextSeq int
 
 	// Disk backing (nil for an in-memory-only log).
-	file *os.File
-	w    *bufio.Writer
+	file   *os.File
+	closed bool
 }
 
 // New returns an empty, in-memory-only log. Its events are never persisted; use
@@ -74,7 +74,6 @@ func Open(path string) (*Log, error) {
 		return nil, fmt.Errorf("eventlog: seek %s: %w", path, err)
 	}
 	l.file = f
-	l.w = bufio.NewWriter(f)
 	return l, nil
 }
 
@@ -87,6 +86,11 @@ func (l *Log) replay(f *os.File) error {
 	var offset int64
 	for {
 		line, err := r.ReadBytes('\n')
+		// A non-EOF read error is a real I/O failure; surface it directly rather
+		// than mistaking the partial bytes for JSON corruption.
+		if err != nil && err != io.EOF {
+			return fmt.Errorf("eventlog: read: %w", err)
+		}
 		if len(line) > 0 && err == io.EOF {
 			// Unterminated trailing fragment: a torn write. Drop it and reclaim
 			// the bytes so the next append starts a fresh, valid line.
@@ -107,9 +111,6 @@ func (l *Log) replay(f *os.File) error {
 		}
 		if err == io.EOF {
 			break
-		}
-		if err != nil {
-			return fmt.Errorf("eventlog: read: %w", err)
 		}
 	}
 	return nil
@@ -141,6 +142,9 @@ func (l *Log) Append(b schema.Block) (schema.Block, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if l.closed {
+		return schema.Block{}, errors.New("eventlog: append to a closed log")
+	}
 	if b.ID == "" {
 		return schema.Block{}, errors.New("eventlog: cannot append a block with no id")
 	}
@@ -161,7 +165,7 @@ func (l *Log) Append(b schema.Block) (schema.Block, error) {
 
 	// Persist before mutating in-memory state: if the write fails the log is
 	// unchanged and the error is reported, so memory and disk never diverge.
-	if l.w != nil {
+	if l.file != nil {
 		if err := l.persist(b); err != nil {
 			return schema.Block{}, err
 		}
@@ -173,21 +177,18 @@ func (l *Log) Append(b schema.Block) (schema.Block, error) {
 	return b, nil
 }
 
-// persist writes one event as a single JSONL line and flushes it through to the
-// underlying file so a crash after Append returns cannot lose it.
+// persist writes one event as a single JSONL line and fsyncs it so a crash
+// after Append returns cannot lose it. The line is written with one Write call
+// to the file directly — no buffering — so a failed write leaves no half-line
+// queued to be re-emitted on the next append (which would corrupt the log).
 func (l *Log) persist(b schema.Block) error {
 	line, err := json.Marshal(b)
 	if err != nil {
 		return fmt.Errorf("eventlog: marshal %s: %w", b.ID, err)
 	}
-	if _, err := l.w.Write(line); err != nil {
+	line = append(line, '\n')
+	if _, err := l.file.Write(line); err != nil {
 		return fmt.Errorf("eventlog: write %s: %w", b.ID, err)
-	}
-	if err := l.w.WriteByte('\n'); err != nil {
-		return fmt.Errorf("eventlog: write %s: %w", b.ID, err)
-	}
-	if err := l.w.Flush(); err != nil {
-		return fmt.Errorf("eventlog: flush %s: %w", b.ID, err)
 	}
 	if err := l.file.Sync(); err != nil {
 		return fmt.Errorf("eventlog: sync %s: %w", b.ID, err)
@@ -223,8 +224,10 @@ func (l *Log) ByID(id string) (schema.Block, bool) {
 	return l.events[i], true
 }
 
-// Events returns a snapshot copy of every event in append order. Mutating the
-// returned slice does not affect the log.
+// Events returns a snapshot copy of every event in append order. Adding to or
+// reordering the returned slice does not affect the log. The copy is shallow,
+// though: each Block still shares its pointer fields (Text, Provenance, …) with
+// the stored event, so callers must treat the returned blocks as read-only.
 func (l *Log) Events() []schema.Block {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -233,17 +236,21 @@ func (l *Log) Events() []schema.Block {
 	return out
 }
 
-// Close flushes and releases the disk file. It is a no-op for an in-memory log
-// and is safe to call more than once.
+// Close marks the log closed — rejecting any further Append — and releases the
+// disk file. It is safe to call more than once and is a no-op for an in-memory
+// log beyond marking it closed.
 func (l *Log) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.closed {
+		return nil
+	}
+	l.closed = true
 	if l.file == nil {
 		return nil
 	}
-	flushErr := l.w.Flush()
 	syncErr := l.file.Sync()
 	closeErr := l.file.Close()
-	l.file, l.w = nil, nil
-	return errors.Join(flushErr, syncErr, closeErr)
+	l.file = nil
+	return errors.Join(syncErr, closeErr)
 }

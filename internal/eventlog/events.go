@@ -48,11 +48,17 @@ func NewExclusion(producer string, removes ...string) schema.Block {
 // replacement body. Existing Provenance fields on b are preserved; only
 // Producer and DerivedFrom are set/extended.
 func Derive(b schema.Block, producer string, sources ...string) schema.Block {
-	if b.Provenance == nil {
-		b.Provenance = &schema.Provenance{}
+	// b is a value copy, but b.Provenance is a pointer shared with the caller's
+	// block. Copy the Provenance struct and its DerivedFrom slice so stamping the
+	// derived block never mutates the source block the caller still holds.
+	var prov schema.Provenance
+	if b.Provenance != nil {
+		prov = *b.Provenance
 	}
-	b.Provenance.Producer = producer
-	b.Provenance.DerivedFrom = append(b.Provenance.DerivedFrom, sources...)
+	prov.Producer = producer
+	prov.DerivedFrom = append(append([]string(nil), prov.DerivedFrom...), sources...)
+	b.Provenance = &prov
+
 	if b.ID == "" {
 		b.ID = schema.NewID()
 	}

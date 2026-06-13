@@ -70,7 +70,7 @@ func FuzzAppendReload(f *testing.F) {
 		if err != nil {
 			t.Fatalf("reopen: %v", err)
 		}
-		defer reopened.Close()
+		defer mustClose(t, reopened)
 
 		if got, w := marshalEvents(t, reopened.Events()), marshalEvents(t, want); got != w {
 			t.Fatalf("round-trip mismatch.\n got: %s\nwant: %s", got, w)

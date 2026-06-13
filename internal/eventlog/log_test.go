@@ -64,9 +64,9 @@ func TestAppendAssignsMonotonicSeqAndPreservesOrder(t *testing.T) {
 func TestByIDLookup(t *testing.T) {
 	l := New()
 	mid := schema.NewID()
-	l.Append(textBlock(schema.NewID(), "first"))
-	l.Append(textBlock(mid, "target"))
-	l.Append(textBlock(schema.NewID(), "third"))
+	mustAppend(t, l, textBlock(schema.NewID(), "first"))
+	mustAppend(t, l, textBlock(mid, "target"))
+	mustAppend(t, l, textBlock(schema.NewID(), "third"))
 
 	got, ok := l.ByID(mid)
 	if !ok {
@@ -125,7 +125,7 @@ func TestDiskRoundTripIsIdentical(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	defer reopened.Close()
+	defer mustClose(t, reopened)
 
 	before := []schema.Block{a, b, excl, der}
 	if got, want := marshalEvents(t, reopened.Events()), marshalEvents(t, before); got != want {
@@ -208,13 +208,15 @@ func TestTornTrailingLineIsDiscarded(t *testing.T) {
 	if _, err := f.WriteString(`{"id":"blk_torn","kind":"text","seq":2,`); err != nil {
 		t.Fatalf("write torn fragment: %v", err)
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatalf("close torn-write handle: %v", err)
+	}
 
 	reopened, err := Open(path)
 	if err != nil {
 		t.Fatalf("reopen after torn write: %v", err)
 	}
-	defer reopened.Close()
+	defer mustClose(t, reopened)
 
 	if got, want := marshalEvents(t, reopened.Events()), marshalEvents(t, []schema.Block{a, b}); got != want {
 		t.Fatalf("torn reload did not preserve prior events.\n got: %s\nwant: %s", got, want)
@@ -229,13 +231,13 @@ func TestTornTrailingLineIsDiscarded(t *testing.T) {
 	if c.Seq != 2 {
 		t.Fatalf("post-recovery Seq = %d, want 2", c.Seq)
 	}
-	reopened.Close()
+	mustClose(t, reopened)
 
 	verify, err := Open(path)
 	if err != nil {
 		t.Fatalf("final reopen reported corruption after recovery: %v", err)
 	}
-	defer verify.Close()
+	defer mustClose(t, verify)
 	if verify.Len() != 3 {
 		t.Fatalf("final log Len = %d, want 3", verify.Len())
 	}
@@ -270,6 +272,13 @@ func mustAppend(t *testing.T, l *Log, b schema.Block) schema.Block {
 		t.Fatalf("append %s: %v", b.ID, err)
 	}
 	return stored
+}
+
+func mustClose(t *testing.T, l *Log) {
+	t.Helper()
+	if err := l.Close(); err != nil {
+		t.Errorf("close: %v", err)
+	}
 }
 
 func toolCallBlock(id, name string) schema.Block {
