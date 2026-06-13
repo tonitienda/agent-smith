@@ -79,6 +79,15 @@ func TestCompareDetectsBreakingChanges(t *testing.T) {
 			wantSub: "omitempty changed",
 		},
 		{
+			name: "string option change",
+			mutate: func(d *Descriptor) {
+				f := d.Types["Block"].Fields
+				f[0].AsString = true
+				d.Types["Block"] = Type{Fields: f}
+			},
+			wantSub: "`,string` option changed",
+		},
+		{
 			name:    "removed type",
 			mutate:  func(d *Descriptor) { delete(d.Types, "Tokens") },
 			wantSub: `type "Tokens" was removed`,

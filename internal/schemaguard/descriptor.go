@@ -24,14 +24,16 @@ import (
 
 // Field describes one struct field of the schema as it appears on the wire.
 // Name is the Go field name (the stable identity used to detect renames); JSON
-// is the serialized key; Type is a canonical, package-stable type string; and
-// OmitEmpty records wire-presence semantics. A change to any of these on an
-// existing field is a breaking change.
+// is the serialized key; Type is a canonical, package-stable type string;
+// OmitEmpty and AsString record wire-presence and wire-encoding semantics (the
+// json `,string` option serializes a number/bool as a quoted string). A change
+// to any of these on an existing field is a breaking change.
 type Field struct {
 	Name      string `json:"name"`
 	JSON      string `json:"json"`
 	Type      string `json:"type"`
 	OmitEmpty bool   `json:"omitempty"`
+	AsString  bool   `json:"as_string,omitempty"`
 }
 
 // Type describes one struct type reachable from the schema roots.
@@ -79,7 +81,7 @@ func Generate() Descriptor {
 			if f.PkgPath != "" {
 				continue // unexported
 			}
-			jsonName, omit, skip := parseJSONTag(f)
+			jsonName, omit, asString, skip := parseJSONTag(f)
 			if skip {
 				continue
 			}
@@ -88,6 +90,7 @@ func Generate() Descriptor {
 				JSON:      jsonName,
 				Type:      typeString(f.Type),
 				OmitEmpty: omit,
+				AsString:  asString,
 			})
 			enqueueStructTypes(f.Type, &queue)
 		}
@@ -128,24 +131,36 @@ func enumRegistry() map[string][]string {
 
 // deref unwraps a pointer type to its element; other types are returned as-is.
 func deref(t reflect.Type) reflect.Type {
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return t
 }
 
 // enqueueStructTypes appends any struct types reachable through pointers,
-// slices, arrays, and map values of t to the work queue, so nested schema
-// structs are discovered and described.
+// slices, arrays, and map keys/values of t to the work queue, so nested schema
+// structs are discovered and described. A visited set bounds the walk so a
+// (hypothetical) recursive container type — e.g. `type T []T` — cannot loop
+// forever.
 func enqueueStructTypes(t reflect.Type, queue *[]reflect.Type) {
-	switch t.Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Array:
-		enqueueStructTypes(t.Elem(), queue)
-	case reflect.Map:
-		enqueueStructTypes(t.Elem(), queue)
-	case reflect.Struct:
-		*queue = append(*queue, t)
+	visited := map[reflect.Type]bool{}
+	var walk func(reflect.Type)
+	walk = func(cur reflect.Type) {
+		if visited[cur] {
+			return
+		}
+		visited[cur] = true
+		switch cur.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Array:
+			walk(cur.Elem())
+		case reflect.Map:
+			walk(cur.Key())
+			walk(cur.Elem())
+		case reflect.Struct:
+			*queue = append(*queue, cur)
+		}
 	}
+	walk(t)
 }
 
 // typeString renders a canonical, stable string for a field type. Schema
@@ -164,7 +179,7 @@ func typeString(t reflect.Type) string {
 		return path.Base(t.PkgPath()) + "." + t.Name()
 	}
 	switch t.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return "*" + typeString(t.Elem())
 	case reflect.Slice:
 		return "[]" + typeString(t.Elem())
@@ -177,13 +192,16 @@ func typeString(t reflect.Type) string {
 	return t.String()
 }
 
-// parseJSONTag extracts the wire name and omitempty flag from a field's json
-// tag, following encoding/json semantics: an empty/absent tag name defaults to
-// the Go field name, and a "-" name means the field is not serialized.
-func parseJSONTag(f reflect.StructField) (name string, omitempty, skip bool) {
+// parseJSONTag extracts the wire name and the omitempty / string options from a
+// field's json tag, following encoding/json semantics: an empty/absent tag name
+// defaults to the Go field name, and a "-" name means the field is not
+// serialized. The `,string` option is captured because it changes the wire
+// encoding (numbers/bools serialized as quoted strings) and so is part of the
+// contract.
+func parseJSONTag(f reflect.StructField) (name string, omitempty, asString, skip bool) {
 	tag := f.Tag.Get("json")
 	if tag == "-" {
-		return "", false, true
+		return "", false, false, true
 	}
 	parts := strings.Split(tag, ",")
 	name = parts[0]
@@ -191,11 +209,14 @@ func parseJSONTag(f reflect.StructField) (name string, omitempty, skip bool) {
 		name = f.Name
 	}
 	for _, opt := range parts[1:] {
-		if opt == "omitempty" {
+		switch opt {
+		case "omitempty":
 			omitempty = true
+		case "string":
+			asString = true
 		}
 	}
-	return name, omitempty, false
+	return name, omitempty, asString, false
 }
 
 // sortedKeys returns the keys of a string-keyed map in sorted order, for

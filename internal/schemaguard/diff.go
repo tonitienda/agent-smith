@@ -41,6 +41,9 @@ func Compare(baseline, current Descriptor) []string {
 			if cf.OmitEmpty != bf.OmitEmpty {
 				breaks = append(breaks, fmt.Sprintf("%s.%s omitempty changed %v -> %v (wire-presence changes forbidden)", typeName, bf.Name, bf.OmitEmpty, cf.OmitEmpty))
 			}
+			if cf.AsString != bf.AsString {
+				breaks = append(breaks, fmt.Sprintf("%s.%s json `,string` option changed %v -> %v (wire-encoding changes forbidden)", typeName, bf.Name, bf.AsString, cf.AsString))
+			}
 		}
 	}
 

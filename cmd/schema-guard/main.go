@@ -17,6 +17,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -55,8 +56,9 @@ func doCheck(current schemaguard.Descriptor) error {
 		return err
 	}
 	if breaks := schemaguard.Compare(baseline, current); len(breaks) > 0 {
-		return fmt.Errorf("BREAKING schema change(s) detected (the schema is additive-only from V1, PRD D2):\n  - %s\n\nRemovals, renames, type changes, and repurposing are forbidden. If your change is purely additive, run `go run ./cmd/schema-guard -update` to record it; see docs/schema/EVOLUTION.md.",
+		fmt.Fprintf(os.Stderr, "BREAKING schema change(s) detected (the schema is additive-only from V1, PRD D2):\n  - %s\n\nRemovals, renames, type changes, and repurposing are forbidden. If your change is purely additive, run `go run ./cmd/schema-guard -update` to record it; see docs/schema/EVOLUTION.md.\n",
 			strings.Join(breaks, "\n  - "))
+		return errors.New("schema is not additive-only against the committed baseline")
 	}
 	if err := checkGoldens(); err != nil {
 		return err
@@ -70,8 +72,9 @@ func doCheck(current schemaguard.Descriptor) error {
 func doUpdate(current schemaguard.Descriptor) error {
 	if baseline, err := readBaseline(); err == nil {
 		if breaks := schemaguard.Compare(baseline, current); len(breaks) > 0 {
-			return fmt.Errorf("refusing to -update: the change is not additive:\n  - %s\n\nThe schema is additive-only from V1 (PRD D2). Revert the removal/rename/type change instead of regenerating the baseline.",
+			fmt.Fprintf(os.Stderr, "refusing to -update: the change is not additive:\n  - %s\n\nThe schema is additive-only from V1 (PRD D2). Revert the removal/rename/type change instead of regenerating the baseline.\n",
 				strings.Join(breaks, "\n  - "))
+			return errors.New("refusing to -update: change is not additive")
 		}
 	} // a missing baseline is fine: first run creates it.
 
@@ -96,6 +99,9 @@ func checkGoldens() error {
 	files, err := filepath.Glob(filepath.Join(schemaguard.GoldenDir, "*.json"))
 	if err != nil {
 		return err
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("no golden session files found in %s (run from the repo root)", schemaguard.GoldenDir)
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(f)
