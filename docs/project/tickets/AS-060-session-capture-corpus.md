@@ -2,7 +2,7 @@
 id: AS-060
 title: "Capture & compare real vendor session files to refine the block schema before V1 freeze"
 status: ready-to-implement
-github_issue: null
+github_issue: 68
 depends_on: [AS-002, AS-003]
 area: schema
 priority: P0
