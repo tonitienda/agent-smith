@@ -100,7 +100,7 @@ The primary binary is `smith`. Before handing off changes, humans and agents sho
 make build      # builds a static ./smith binary from ./cmd/smith
 make test       # runs all Go tests
 make vet        # runs go vet
-make lint       # installs/runs the pinned golangci-lint version
+make lint       # installs/runs the pinned golangci-lint version (v2.12.2)
 make verify     # runs fmt, test, vet, and lint in the same order agents use
 ```
 

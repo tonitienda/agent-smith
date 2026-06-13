@@ -4,10 +4,10 @@ GOFLAGS ?=
 LDFLAGS ?= -s -w
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
-GOLANGCI_LINT_VERSION ?= v2.12
+GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_BIN ?= .cache/tools/golangci-lint/$(GOLANGCI_LINT_VERSION)/golangci-lint
 
-.PHONY: build test vet lint fmt verify clean schema-guard schema-baseline
+.PHONY: build test vet lint lint-install fmt verify clean schema-guard schema-baseline
 
 build:
 	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -trimpath -ldflags '$(LDFLAGS) -X github.com/tonitienda/agent-smith/internal/version.Version=$(VERSION) -X github.com/tonitienda/agent-smith/internal/version.Commit=$(COMMIT)' -o $(BINARY) ./cmd/smith
@@ -20,6 +20,8 @@ vet:
 
 lint: $(GOLANGCI_LINT_BIN)
 	$(GOLANGCI_LINT_BIN) run
+
+lint-install: $(GOLANGCI_LINT_BIN)
 
 $(GOLANGCI_LINT_BIN):
 	@mkdir -p $$(dirname $@)

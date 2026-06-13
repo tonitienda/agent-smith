@@ -13,7 +13,7 @@ The script intentionally delegates to Make targets so CI, Claude, Codex, GrokBui
 3. `make vet`
 4. `make lint`
 
-`make lint` installs and runs the exact `golangci-lint` version pinned in the Makefile under `.cache/tools/`. It does not fall back to an arbitrary globally installed binary, so local runs and CI use the same linter version and the same Go toolchain selected for the repository.
+`make lint` installs and runs the exact `golangci-lint` version pinned in the Makefile under `.cache/tools/` (currently `v2.12.2`). It does not fall back to an arbitrary globally installed binary, so local runs and CI use the same linter version and the same Go toolchain selected for the repository.
 
 ## Agent integration
 
