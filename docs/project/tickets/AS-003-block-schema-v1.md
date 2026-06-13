@@ -1,7 +1,7 @@
 ---
 id: AS-003
 title: Immutable content-block schema v1 (the frozen substrate)
-status: ready-to-implement
+status: done
 github_issue: 3
 depends_on: [AS-002]
 area: schema
@@ -11,7 +11,7 @@ source: PRD.md D1, D2, D3, D4
 
 # AS-003 · Immutable content-block schema v1
 
-**Status: ready to implement**
+**Status: done** — implemented in the [`schema`](../../../schema) Go package; public contract published at [`docs/schema/README.md`](../../schema/README.md).
 
 ## Description
 
@@ -24,11 +24,11 @@ Define and implement the core data types of the open substrate: the content bloc
 
 ## Acceptance criteria
 
-- [ ] All five block kinds round-trip through JSON losslessly.
-- [ ] Every block has a stable, unique ID and provenance metadata.
-- [ ] Deserializing a document with unknown extra fields succeeds (forward compatibility).
-- [ ] Public schema doc published in-repo, marked v1, with the additive-only rules stated.
-- [ ] Schema accounts for every mapping in the AS-002 union doc (no known provider concept is unrepresentable).
+- [x] All five block kinds round-trip through JSON losslessly. (`TestBlockRoundTripLossless`)
+- [x] Every block has a stable, unique ID and provenance metadata. (`Block.ID` + `NewID`, `Provenance`; `TestNewIDUniqueAndPrefixed`)
+- [x] Deserializing a document with unknown extra fields succeeds (forward compatibility). (`TestUnknownFieldTolerance`)
+- [x] Public schema doc published in-repo, marked v1, with the additive-only rules stated. (`docs/schema/README.md`)
+- [x] Schema accounts for every mapping in the AS-002 union doc (no known provider concept is unrepresentable). (envelope + five bodies + `ext`/`native_*` escape hatches)
 
 ## Dependencies
 
