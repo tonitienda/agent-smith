@@ -2,7 +2,7 @@
 
 The full backlog derived from [PRD.md](../PRD.md), in two waves:
 
-- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`.
+- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060**, a V1-gating schema-validation pass appended after the spike work.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes.
 
 Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
@@ -22,7 +22,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-001](AS-001-project-scaffolding.md) | Project scaffolding, CI, Apache-2.0 | foundation | done | — |
-| [AS-002](AS-002-wire-format-spike.md) | Spike: mainstream agent wire-format union (D4) | schema | ready | 001 |
+| [AS-002](AS-002-wire-format-spike.md) | Spike: mainstream agent wire-format union (D4) | schema | done | 001 |
 | [AS-003](AS-003-block-schema-v1.md) | Immutable content-block schema v1 | schema | ready | 002 |
 | [AS-004](AS-004-additive-only-guard.md) | Additive-only schema guard (CI) | schema | ready | 003 |
 | [AS-005](AS-005-event-log-store.md) | Append-only event log store | core-log | ready | 003 |
@@ -51,6 +51,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-028](AS-028-clean-manual.md) | `/clean` manual removal + preview/undo (wedge) | context-wedge | ready | 006, 026 |
 | [AS-029](AS-029-clean-semantic.md) | `/clean "<topic>"` semantic matching (wedge) | context-wedge | **needs clarification** | 028, 027 |
 | [AS-030](AS-030-benchmark-guardrail-suite.md) | Cost/speed benchmark suite (D5 guardrail) | quality | **needs clarification** | 018, 020 |
+| [AS-060](AS-060-session-capture-corpus.md) | Capture & compare real vendor session files before V1 schema freeze | schema | ready | 002, 003 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 
@@ -88,7 +89,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 
 ## Suggested build order
 
-1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008.
+1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.
 2. **Providers + tools**: 009/010 → 011/012 · 013 → 014/016 → 015.
 3. **Loop + faces**: 018 → 019/021 → 022 → 020/023/024/025.
 4. **The V1 wedges** (the demo): 026 → 028, while 027/029 get their open questions answered.

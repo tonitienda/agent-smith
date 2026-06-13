@@ -1,7 +1,7 @@
 ---
 id: AS-002
 title: "Spike: mainstream agent wire-format union (polyglot schema groundwork)"
-status: ready-to-implement
+status: done
 github_issue: 2
 depends_on: [AS-001]
 area: schema
@@ -11,7 +11,7 @@ source: PRD.md D4
 
 # AS-002 · Spike: mainstream agent wire-format union
 
-**Status: ready to implement**
+**Status: done** — deliverable: [docs/design/block-schema-union.md](../../design/block-schema-union.md).
 
 ## Description
 
@@ -31,12 +31,12 @@ Deliverable: `docs/design/block-schema-union.md` — a field-by-field mapping in
 
 ## Acceptance criteria
 
-- [ ] Design doc covers every block type named in D3 (text / tool-call / tool-result / file-read / reasoning).
-- [ ] Every provider/agent-exclusive field that is public enough to model is identified with its representation in the union schema; private or unstable formats are explicitly marked non-normative.
-- [ ] The OpenAI API surface choice (Chat Completions vs Responses) is made and justified.
-- [ ] xAI/Grok Build is covered explicitly, including whether its model API is represented as an OpenAI-compatible projection, whether any Responses/API extensions need first-class optional fields, and how headless streaming-json/MCP events map into or stay outside the block schema.
-- [ ] At least two additional mainstream coding-agent public formats are surveyed, with a clear include/compatibility/out-of-scope decision for each.
-- [ ] Doc reviewed and accepted as the basis for the AS-003 schema freeze.
+- [x] Design doc covers every block type named in D3 (text / tool-call / tool-result / file-read / reasoning). — §6.1–6.5
+- [x] Every provider/agent-exclusive field that is public enough to model is identified with its representation in the union schema; private or unstable formats are explicitly marked non-normative. — §10, §11
+- [x] The OpenAI API surface choice (Chat Completions vs Responses) is made and justified. — §4 (Responses primary, Chat Completions compatibility)
+- [x] xAI/Grok Build is covered explicitly, including whether its model API is represented as an OpenAI-compatible projection, whether any Responses/API extensions need first-class optional fields, and how headless streaming-json/MCP events map into or stay outside the block schema. — §5
+- [x] At least two additional mainstream coding-agent public formats are surveyed, with a clear include/compatibility/out-of-scope decision for each. — §1 (Codex CLI + Gemini CLI = schema input; Cline = compatibility; Aider = out of scope)
+- [x] Doc reviewed and accepted as the basis for the AS-003 schema freeze. — doc status: accepted input for AS-003
 
 ## Dependencies
 
