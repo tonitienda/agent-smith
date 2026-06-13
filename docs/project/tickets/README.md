@@ -30,7 +30,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-007](AS-007-session-persistence.md) | Session persistence (save/list/load) | core-log | done | 005 |
 | [AS-008](AS-008-provider-interface.md) | Provider abstraction interface | provider | done | 002, 003 |
 | [AS-009](AS-009-anthropic-provider.md) | Anthropic provider | provider | done | 008 |
-| [AS-010](AS-010-openai-provider.md) | OpenAI provider (+ compatible endpoints) | provider | ready | 008 |
+| [AS-010](AS-010-openai-provider.md) | OpenAI provider (+ compatible endpoints) | provider | done | 008 |
 | [AS-011](AS-011-prompt-caching.md) | Prompt caching + cache-aware assembly | provider | ready | 009, 010, 006 |
 | [AS-012](AS-012-provider-conformance-suite.md) | Provider conformance test suite | provider | ready | 009, 010 |
 | [AS-013](AS-013-tool-runtime.md) | Tool runtime framework | tools | ready | 005 |
