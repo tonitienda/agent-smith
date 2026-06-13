@@ -30,6 +30,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 
 ## Pull requests
 
+- **Always open a PR automatically.** When you finish a unit of work on a feature branch — the quality gate (`./scripts/agent-quality-gate.sh`) passes and the work is committed and pushed — open a pull request for it without waiting to be asked. Give it a clear title and a body summarizing the change, the ticket(s) it closes, and how it was verified. The only exceptions are when a PR already exists for the branch (push to it instead) or the user has explicitly told you not to open one.
 - **Always subscribe to PR activity.** As soon as a PR exists for the branch you're working on (whether you opened it or it was created from the Claude Code UI), call `subscribe_pr_activity` for it so you receive CI results and review comments — then follow through: investigate each event, push fixes for failing CI and actionable review feedback, and ask via `AskUserQuestion` when a fix is ambiguous. Keep watching until the PR is merged or closed, or the user tells you to stop (`unsubscribe_pr_activity`).
 - **Always close the loop on every review comment.** For each review thread, once you've pushed a change that addresses it (or decided it isn't worth doing), post a short reply on that thread saying what you did (reference the commit) or why you're declining, then mark the thread resolved. Never leave an addressed comment silently — the reviewer must be able to see, thread by thread, what was tackled and what was intentionally skipped.
 
