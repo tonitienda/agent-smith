@@ -1,0 +1,77 @@
+name: Scheduled ticket sync
+
+# Safety net for ticket -> issue sync. The merge workflow
+# (ticket-sync.yml) updates already-linked issues but skips tickets whose
+# github_issue is still null; this job creates those issues, writes the number
+# back into the ticket file, and commits the change to the default branch.
+#
+# It selects tickets committed in the last 12h plus any still unlinked, so a
+# ticket merged without an issue is healed within one run regardless of age.
+#
+# The file is the source of truth for issue title/body/labels/state and is
+# overwritten on GitHub. Issue comments live only on GitHub and are never
+# touched (the binary only PATCHes title/body/labels/state).
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # every 6 hours
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ticket-sync-scheduled
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Create and update issues for recent or unlinked tickets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          # Full history so -changed-since can see commit times older than HEAD.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Sync recent or unlinked tickets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TICKET_SYNC_REPO: ${{ github.repository }}
+        run: go run ./cmd/ticket-sync -repo "${TICKET_SYNC_REPO}" -changed-since 12h
+
+      - name: Commit written-back issue numbers
+        run: |
+          set -euo pipefail
+
+          if [ -z "$(git status --porcelain docs/project/tickets)" ]; then
+            echo "No ticket files changed; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add docs/project/tickets
+          git commit -m "chore(tickets): write back synced GitHub issue numbers"
+
+          # Rebase onto any concurrent updates before pushing.
+          for attempt in 1 2 3 4; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              exit 0
+            fi
+            echo "Push failed (attempt ${attempt}); rebasing and retrying."
+            git fetch origin "${GITHUB_REF_NAME}"
+            git rebase "origin/${GITHUB_REF_NAME}"
+          done
+
+          echo "Failed to push ticket updates after retries." >&2
+          exit 1
