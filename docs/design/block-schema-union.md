@@ -8,6 +8,11 @@ This document is the design input required by **PRD D4**: the immutable content-
 
 The core data model is fixed by **D3**: an append-only, immutable event log of **content blocks** — `text` / `tool_call` / `tool_result` / `file_read` / `reasoning`, each with a stable ID — over which the model-facing context is a *projection*. This doc maps every surveyed surface onto those five block kinds plus a shared event envelope, and identifies the optional fields the union needs so no known public concept is unrepresentable.
 
+**Two things this revision adds (per review):**
+
+1. **The union must superset across *representation layers*, not just providers.** An agent exposes the *same* session at several layers, each carrying *different* information: the provider wire/API layer (richest on block content + caching), the agent **headless-result** layer (`--output-format json`, `codex exec --json` — rich on cost/usage/turn-count *rollups*), and the agent **persisted-session** layer (Claude `.jsonl`, Codex `rollout-*.jsonl`, Gemini history — rich on *internal* structure: sub-agents, hooks, skill/MCP attribution, per-iteration usage). The earlier draft modeled only the wire layer. **§5A** adds the layer model; **§3** and **§8** are extended for the structural and usage fields it surfaces.
+2. **The schema is not frozen until V1.** D2 is "additive-only **from V1**, forever" — so *pre*-V1 (now, through AS-003) we can still make breaking changes. The union is the up-front design (D4) that *minimizes* future breaks, but it is a **draft we should rest, validate against real captured sessions, and refine** before the V1 freeze locks it. See **§15**.
+
 ---
 
 ## 1. Surveyed surfaces and classification
@@ -48,6 +53,14 @@ All retrieved **2026-06-13** unless noted. Doc-portal pages that blocked automat
 - Cline — session history shape (`api_conversation_history.json` / `ui_messages.json`): observed in the Cline repo task-storage; **compatibility/non-normative**.
 - Aider — chat history file: `https://aider.chat/docs/config/options.html` (`--chat-history-file`, default `.aider.chat.history.md`).
 
+**Representation-layer sources (§5A), retrieved 2026-06-13:**
+
+- Claude Code — headless / programmatic output (`--output-format json`/`stream-json`, result fields incl. `total_cost_usd`, `num_turns`, `duration_ms`, `session_id`): `https://code.claude.com/docs/en/headless`
+- Claude Code — **persisted session `.jsonl`**: **primary-source inspection of this very session's file** `~/.claude/projects/-home-user-agent-smith/<sid>.jsonl` (2026-06-13). Record types `user`/`assistant`/`system`/`attachment`/`queue-operation`; envelope `uuid`/`parentUuid`/`isSidechain`/`sessionId`/`cwd`/`gitBranch`/`version`/`requestId`; `attributionSkill`/`attributionMcpServer`/`attributionMcpTool`; `toolUseResult`; `sourceToolUseID`; `usage.{iterations[], cache_creation.ephemeral_1h_input_tokens/ephemeral_5m_input_tokens, service_tier, speed, server_tool_use}`. Field names are observed, not from published docs (the on-disk format is not a documented contract — treated here as a **stable-enough schema input with a non-normative caveat**).
+- Codex CLI — session/rollout files vs `exec --json`: `https://github.com/openai/codex/discussions/3827`, `https://github.com/openai/codex/issues/2288`, `https://developers.openai.com/codex/noninteractive`
+- Gemini CLI — `--output-format json` (response + `stats`) / headless reference: `https://github.com/google-gemini/gemini-cli/pull/8119`, `https://geminicli.com/docs/cli/headless/`
+- Anthropic Managed-Agents **session threads** (sub-agent layer, `parent_thread_id`, cross-thread messages): `https://platform.claude.com/docs/en/managed-agents/multi-agent.md`
+
 > **Format-churn note (observed 2026-06-13):** xAI now markets its OpenAI-style Chat Completions surface as **deprecated** in favor of a newer unified/Responses-style API, and routes legacy model slugs to `grok-4.3`. Codex `exec --json` changed `item_type → type` and `assistant_message → agent_message`. Gemini CLI's `stream-json` is recent and still stabilizing. These are exactly the kind of fast-moving changes D4 anticipates; the union below is designed so each is an additive field/value, not a break.
 
 ---
@@ -65,6 +78,8 @@ Every block in the append-only log shares one envelope. Fields are additive-only
 | `role` / `origin` | enum | `user` \| `assistant` \| `system` \| `tool` \| `harness`. Captures OpenAI's `developer`/`system` split and Anthropic mid-conversation `system` messages. |
 | `provenance` | object | `{producer, request_id, response_id?, turn_id?, derived_from?[]}` — links derived blocks (`/clean`, `/tidy`, `/compact`, compaction) back to source blocks (D3 reversibility/auditability). |
 | `provider` | object | `{vendor, surface, model, native_type, native_id}` — round-trip fidelity: the provider's own type string and ID are preserved verbatim so we can re-emit losslessly. |
+| `thread` | object? | `{thread_id, parent_block_id?, parent_thread_id?, agent_id?, is_sidechain?}` — **sub-agent / multi-agent structure** (§5A). Locates a block in the sub-agent tree; the main thread has `parent_thread_id: null`. Captures Claude Code `isSidechain` + `sourceToolUseID`, Anthropic Managed-Agents session *threads*, and our own AS-044/AS-046 sub-agents. |
+| `attribution` | object? | `{skill?, mcp_server?, mcp_tool?, tool?, hook?}` — **what produced this block** (persisted-session layer). From Claude Code `attributionSkill` / `attributionMcpServer` / `attributionMcpTool`. Feeds living-skills (AS-049) and `/insights` (AS-045). |
 | `tokens` | object? | `{input, output, cache_read, cache_write, reasoning}` — optional, fillable later by AS-020 accounting. Union of all providers' usage breakdowns (§8). |
 | `cost_usd` | number? | Optional; filled by accounting. |
 | `excluded_by` | string[]? | IDs of exclusion/derivation events that drop this block from the projection (D3). History is never mutated. |
@@ -101,6 +116,37 @@ Net: **Responses is the schema-input source of truth for OpenAI; Chat Completion
   - **Non-normative:** undocumented/private transcript internals of Grok Build are explicitly out of scope per D4 — captured (if ever) only via `ext`, never as first-class fields.
 
 **Conclusion for AS-003:** Grok is represented as an **OpenAI-compatible projection plus two optional fields already required by Anthropic** (`reasoning` passthrough, `citations`). No Grok-exclusive first-class field is needed today; if the new unified API adds Responses-style extensions, they land as additive optionals.
+
+---
+
+## 5A. Representation layers — wire vs headless-result vs persisted-session
+
+The first draft compared **wire/API formats**. But an agent does not have *one* representation of a session — it has several, at different layers, and **they deliberately carry different information**. The reviewer's example is exact: Claude Code's headless JSON *output* is richer in cost/usage/result data, while its persisted session *file* is richer in sub-agent and internal structure. The union schema (and our own log, D3) must be a **superset across layers**, because we both *produce* our own session at all of them and *import* foreign sessions from any of them.
+
+### The three layers
+
+| Layer | What it is | Rich in | Thin on |
+|---|---|---|---|
+| **L1 — Provider/API wire** | One model turn: Messages / Responses / Chat Completions | Block content, tool calls, caching breakpoints, raw `usage` | Session-level rollups; cross-turn / sub-agent structure |
+| **L2 — Agent headless result** | `claude -p --output-format json` / `stream-json`; `codex exec --json`; `gemini --output-format json` | **Rollups**: final result, `total_cost_usd` + per-model cost, `num_turns`, `duration_ms`, `session_id`, `is_error`; session `stats` | Internal structure (sub-agents, hooks, attribution); intermediate blocks (json mode) |
+| **L3 — Agent persisted session** | Claude `~/.claude/projects/<proj>/<sid>.jsonl`; Codex `$CODEX_HOME/sessions/.../rollout-*.jsonl`; Gemini `~/.gemini/history/<proj>/` | **Internal structure**: sub-agent/sidechain tree, hooks, skill/MCP attribution, attachments, parent/child UUID DAG, per-iteration usage, permission/queue events | Nothing — this is the fullest layer; it is the closest external analogue to our own D3 log |
+
+### Per-agent layer map
+
+| Agent | L2 (headless result) | L3 (persisted session) | Layer-exclusive info the union must hold |
+|---|---|---|---|
+| **Claude Code** | `--output-format json`: `{type:"result", subtype, result, session_id, is_error, total_cost_usd, num_turns, duration_ms, usage, modelUsage{}}`; `stream-json` JSONL (`system` init → `assistant`/`user` → `result`) | `<sid>.jsonl`, one record per event: `type` ∈ `user`/`assistant`/`system`/`attachment`/`queue-operation`; envelope `uuid`/`parentUuid` (DAG), `isSidechain`, `sessionId`, `cwd`, `gitBranch`, `version`, `requestId`; `attributionSkill`/`attributionMcpServer`/`attributionMcpTool`; `toolUseResult`; `system` records carry `hookInfos`/`hookErrors`/`stopReason`; user records carry `sourceToolUseID`/`sourceToolAssistantUUID`; `usage` includes `iterations[]`, `cache_creation.{ephemeral_1h_input_tokens, ephemeral_5m_input_tokens}`, `service_tier`, `speed`, `server_tool_use` | sub-agent (`isSidechain`), skill/MCP attribution, hook lifecycle, attachments, per-iteration + TTL-split usage |
+| **Codex CLI** | `exec --json`: JSONL state-change events (`thread.started`/`turn.*`/`item.*`); final `turn.completed` usage | `rollout-*.jsonl` under `$CODEX_HOME/sessions/YYYY/MM/DD/`: full conversation history, tool calls, token usage; resumable (`codex resume`) | full trajectory + resume state not present in the event stream |
+| **Gemini CLI** | `--output-format json`: `{response, stats:{ session duration_ms, model turns, tool calls, user turns }}`; `--output-format stream-json` JSONL | `~/.gemini/history/<project>/` JSON session logs | session `stats` rollup (L2) vs full history (L3) |
+| **OpenAI Responses** | n/a (provider, not an agent) — but **L1 itself is layered**: stored response objects (`store:true`, chained by `previous_response_id`) are server-side session state distinct from the streaming events | n/a | server-managed session state / reasoning reuse via `encrypted_content` |
+
+### Consequences for the union (all additive — D2)
+
+1. **Sub-agents / multi-agent are first-class, not an afterthought.** Added to the envelope as `thread{thread_id, parent_thread_id, parent_block_id, agent_id, is_sidechain}` (§3). This represents Claude Code sidechains, Anthropic Managed-Agents session *threads* (`parent_thread_id`, cross-thread messages), and our own AS-044/AS-046 sub-agents. A sub-agent is just a linked sub-stream of the one append-only log — it fits D3 with no new machinery, only envelope fields.
+2. **Attribution is captured per block.** `attribution{skill, mcp_server, mcp_tool, tool, hook}` (§3) — directly enabling the living-skills wedge (which skill rediscovered which fact, AS-049) and `/insights` cost-by-skill (AS-045). This is information that *only* exists at L3 today; modeling it now means we don't break the schema to add it later.
+3. **Rollups are projections, not stored blocks.** `total_cost_usd`, `num_turns`, `duration_ms`, session `stats` are **derived over the log** (D3: context/rollups are projections). The union does **not** store them as blocks — our cost meter (AS-020) and session rollups *compute* them. But the union must be able to **ingest** them when importing a foreign session that only exposes the L2 result (e.g. a CI run we only have the `--output-format json` for): those land on a session-level rollup record, with provenance noting they were imported, not derived.
+4. **Harness-lifecycle events are non-block events on the same log.** Hooks, permission decisions, queue operations, attachments (Claude `system`/`queue-operation`/`attachment` records) are session events but not model content blocks. D3's log is already an *event* log, so these are additive **event kinds** (e.g. `hook`, `permission`, `attachment`) alongside the five content-block kinds — recorded for audit/replay, excluded from the model-facing projection by default.
+5. **Usage is richer at L3 — extend §8.** Per-iteration usage, TTL-split cache-creation, `service_tier`, `speed`, and server-tool request counts appear in the persisted layer; §8 is extended accordingly.
 
 ---
 
@@ -227,6 +273,16 @@ All four streaming surfaces are **incremental builders of the same blocks** — 
 
 **Normalization rule:** `tokens` is optional per block and per turn; accounting (AS-020) fills it. The union keeps **all** breakdowns; a missing field means "not reported by this surface", never zero. Anthropic's explicit `cache_creation_input_tokens` has no OpenAI analogue (OpenAI auto-caches without a write count) — we keep the field and leave it null for OpenAI, which is exactly the additive-only posture (D2).
 
+**Persisted-layer extensions (§5A).** The Claude Code `.jsonl` `usage` object is richer than the bare API `usage` and the union should carry the extras as optional fields:
+
+| Union field | Source |
+|---|---|
+| `tokens.cache_write_5m` / `tokens.cache_write_1h` | Claude `cache_creation.{ephemeral_5m_input_tokens, ephemeral_1h_input_tokens}` (TTL-split write counts). |
+| `tokens.iterations[]` | Claude `usage.iterations[]` — per-inference-iteration usage within one turn (server-tool loops, continuations). |
+| `usage_meta.service_tier` / `usage_meta.speed` | Claude `service_tier` / `speed` — affect price; needed for accurate cost (AS-020). |
+| `usage_meta.server_tool_use` | Claude `server_tool_use.{web_search_requests, web_fetch_requests}` — billable server-tool call counts. |
+| Session rollup: `total_cost_usd`, `cost_by_model[]`, `num_turns`, `duration_ms` | L2 headless result (`--output-format json`, `gemini stats`) — a **projection/import**, not a block (§5A consequence 3). |
+
 ---
 
 ## 9. Prompt-caching semantics (explicit vs automatic)
@@ -256,6 +312,10 @@ All four streaming surfaces are **incremental builders of the same blocks** — 
 | Multimodal inputs (image/audio/pdf/file) | OpenAI, Anthropic, Gemini | `parts[]` on `text`/`file_read` with `media_type`. |
 | Command-execution detail (exit code, stdout/stderr) | Codex, our shell tool | `tool_result.{exit_code, stdout, stderr}`. |
 | TODO / plan items | Codex (`todo_list`) | Recorded via `ext` (non-normative today); promotable to a `plan` block later if it stabilizes — additive. |
+| **Sub-agent / sidechain tree** (§5A) | Claude Code (`isSidechain`), Anthropic Managed-Agents threads, OpenAI, our AS-044/046 | Envelope `thread{thread_id, parent_thread_id, parent_block_id, agent_id, is_sidechain}`; a sub-agent is a linked sub-stream of the one log. |
+| **Block attribution** (§5A) | Claude Code (`attributionSkill`/`attributionMcp*`) | Envelope `attribution{skill, mcp_server, mcp_tool, tool, hook}`; powers living-skills + `/insights`. |
+| **Harness lifecycle events** (§5A) | Claude Code `system`/`queue-operation`/`attachment` records (hooks, permissions, queue, attachments) | Additive **non-block event kinds** (`hook`/`permission`/`attachment`/…) on the same event log; excluded from the model-facing projection by default. |
+| **Session rollups** (§5A L2) | Claude `total_cost_usd`/`num_turns`/`duration_ms`, Gemini `stats` | A **projection** over the log (derived), or a session-level import record when only L2 is available — not a content block. |
 | Cline `ui_messages.json` | Cline | **Non-normative** — private UI state; ignored or stashed in `ext` on import. |
 | Aider Markdown transcript | Aider | **Out of scope** as schema; importable only by parsing into blocks. |
 
@@ -298,6 +358,9 @@ Concrete shape AS-003 should implement (Go types + JSON), expressed as the envel
 5. **Call↔result pairing by `tool_use_id`** — even when a surface fuses them (Responses/Codex), split into paired blocks with provenance.
 6. **`file_read` is first-class** but defined with a back-projection to a read-tool `tool_result`.
 7. **Optional, never-zero token/cost fields** — missing means unreported.
+8. **Sub-agent / thread structure on the envelope** — `thread{…}` so multi-agent and sidechain sessions round-trip (§5A).
+9. **Block attribution + non-block event kinds** — `attribution{…}` and additive event kinds (`hook`/`permission`/`attachment`) so the persisted-session layer round-trips, not just the wire layer (§5A).
+10. **Rollups are derivable, not stored** — but importable as a session-level record when only the L2 result is available (§5A).
 
 ---
 
@@ -312,4 +375,31 @@ Concrete shape AS-003 should implement (Go types + JSON), expressed as the envel
 | ≥2 additional mainstream coding-agent public formats surveyed with include/compat/out-of-scope decision | §1 (Codex CLI = input, Gemini CLI = input, Cline = compat, Aider = out of scope) |
 | Source links + retrieval dates for every external schema-input format | §2 |
 | Field-by-field mapping into a proposed superset with normalization rules + exclusive-concept handling | §3, §6–§10, §12 |
+| Superset across representation layers (wire / headless-result / persisted-session), incl. sub-agent + cost/usage layering | §5A, §3, §8 |
 | Doc accepted as the basis for AS-003 schema freeze | This doc (status: accepted input for AS-003) |
+
+---
+
+## 14. Representation-layer round-trip checklist
+
+A quick self-test for AS-003: for each layer of each agent, can the union **ingest it and re-emit it without loss?**
+
+- [ ] **L1 wire** (Messages / Responses / Chat Completions) → blocks → wire. Covered by §6–§9.
+- [ ] **L2 headless result** (`--output-format json`, `codex exec --json` final, `gemini stats`) → session rollup record (import) + derivable from the log. Covered by §5A consequence 3, §8.
+- [ ] **L3 persisted session** (Claude `.jsonl`, Codex `rollout-*.jsonl`, Gemini history) → blocks + `thread`/`attribution`/non-block events. Covered by §5A consequences 1/2/4, §3.
+- [ ] **Sub-agent tree** survives a round-trip (parent/child links, sidechain flag).
+- [ ] **Per-iteration + TTL-split usage** survives (no collapse to a single number).
+
+If any box can't be checked at freeze time, it is a missing **optional** field — add it before V1 (§15), not after.
+
+---
+
+## 15. Schema freeze timing — pre-V1 is still malleable
+
+PRD **D2** is precise: *"additive-only **from V1**, forever."* The irreversibility starts at the V1 freeze, **not now**. That gives us a deliberate window:
+
+- **Until AS-003 ships in V1, breaking changes are allowed.** This union is the *up-front design* D4 asks for — its job is to make the eventual freeze safe by anticipating provider #2 and mainstream agent imports — but it is a **draft**, not the contract. We should *rest it, validate it against real captured sessions, and refine* before locking.
+- **Recommended validation before the freeze (cheap, high-value):** capture a handful of real sessions per surface (a Claude Code `.jsonl`, a `codex exec --json` run + its `rollout-*.jsonl`, a Gemini `--output-format json` run, an Anthropic and an OpenAI raw turn, a Grok turn) and run the §14 round-trip checklist against the AS-003 types. Each gap found *now* is a free fix; the same gap found *after* V1 is a permanent optional-field workaround.
+- **What stays additive even post-V1:** the two escape hatches (`ext`, `provider.native_type/native_id`) mean a *missed* concept is never fatal — it round-trips opaquely and can be promoted later. So the freeze is low-risk, and the pre-V1 window is about *reducing the number of opaque-only fields*, not about avoiding a catastrophe.
+
+**Net:** treat this doc as the *baseline* for AS-003, implement against it, but schedule one explicit "validate the union against real captures and refine" pass before the V1 freeze. After V1, the additive-only discipline (D2) takes over.
