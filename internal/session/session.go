@@ -252,9 +252,12 @@ func syncDirBestEffort(dir string) error {
 	if err != nil {
 		return fmt.Errorf("session: open directory for sync: %w", err)
 	}
-	defer d.Close()
 	if err := d.Sync(); err != nil && !errors.Is(err, fs.ErrInvalid) && !errors.Is(err, syscall.EINVAL) {
-		return fmt.Errorf("session: sync directory: %w", err)
+		closeErr := d.Close()
+		return errors.Join(fmt.Errorf("session: sync directory: %w", err), closeErr)
+	}
+	if err := d.Close(); err != nil {
+		return fmt.Errorf("session: close directory after sync: %w", err)
 	}
 	return nil
 }

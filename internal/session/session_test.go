@@ -44,8 +44,10 @@ func TestSessionPersistsAndReloadsProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reloaded.Log.Close()
 	got := projection.Project(reloaded.Log.Events(), projection.Options{}).Live()
+	if err := reloaded.Log.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != len(want) || got[0].ID != want[0].ID || got[0].Text.Text != "world" {
 		t.Fatalf("reloaded projection = %#v, want %#v", got, want)
 	}
