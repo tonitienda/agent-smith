@@ -26,9 +26,10 @@ const (
 	EventTextDelta EventType = "text_delta"
 
 	// EventReasoningDelta is an incremental reasoning fragment: visible/summary
-	// text in Event.TextDelta and/or an Anthropic thinking signature fragment in
-	// Event.SignatureDelta. Encrypted/redacted reasoning is opaque and carried on
-	// the assembled block, never inspected. (§7 "reasoning delta".)
+	// text in Event.TextDelta, an Anthropic thinking signature fragment in
+	// Event.SignatureDelta, and/or opaque encrypted/redacted reasoning in
+	// Event.EncryptedDelta. Encrypted/redacted reasoning is carried on the
+	// assembled block verbatim, never inspected. (§7 "reasoning delta".)
 	EventReasoningDelta EventType = "reasoning_delta"
 
 	// EventToolCallDelta is an incremental fragment of a tool call's JSON
@@ -87,6 +88,12 @@ type Event struct {
 	// SignatureDelta is set on EventReasoningDelta for an Anthropic thinking
 	// signature fragment.
 	SignatureDelta string `json:"signature_delta,omitempty"`
+	// EncryptedDelta is set on EventReasoningDelta for opaque encrypted/redacted
+	// reasoning content (Anthropic redacted_thinking `data`, OpenAI
+	// encrypted_content). It is stored verbatim on the assembled block
+	// (schema.ReasoningBody.Encrypted) and never inspected. Additive (PRD D2);
+	// consumers that do not carry encrypted reasoning ignore it.
+	EncryptedDelta string `json:"encrypted_delta,omitempty"`
 	// ArgumentsDelta is set on EventToolCallDelta.
 	ArgumentsDelta string `json:"arguments_delta,omitempty"`
 
