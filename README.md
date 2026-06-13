@@ -88,7 +88,7 @@ docs/project/tickets/      one file per ticket (AS-NNN-slug.md) + index README
 cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
 internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
-.github/workflows/         CI for build, vet, lint, and tests
+.github/workflows/         CI for build, vet, lint, tests, and merged-ticket issue sync
 ```
 
 ## Development

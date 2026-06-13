@@ -8,7 +8,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 - Frontmatter is machine-read by `cmd/ticket-sync` — keep `id`, `title`, `status`, `github_issue`, `depends_on`, `area`, `priority` intact. Ticket IDs are stable: never renumber or reuse.
 - `status` is `ready-to-implement`, `needs-clarification`, or `done`; `needs-clarification` tickets must contain an "Open questions" section. New tickets continue the AS-NNN sequence.
 - When adding or changing tickets, update the index table in the tickets README.
-- **Files are the source of truth over GitHub issues** — edit the file, then sync (`go run ./cmd/ticket-sync`, `-dry-run` to preview, `-all` for everything). The tool writes issue numbers back into frontmatter; never invent a `github_issue` value by hand.
+- **Files are the source of truth over GitHub issues** — edit the file, then sync (`go run ./cmd/ticket-sync`, `-dry-run` to preview, `-all` for everything). The tool writes issue numbers back into frontmatter; never invent a `github_issue` value by hand. Merged PRs automatically sync changed, already-linked tickets to their GitHub issues and close issues whose ticket frontmatter says `status: done`.
 
 ## Conventions
 

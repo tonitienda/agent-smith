@@ -6,11 +6,14 @@
 //   - github_issue: <n>   -> issue #n is overwritten from the file
 //
 // There is no merging: title, body, and labels on GitHub are replaced with
-// whatever the file says.
+// whatever the file says. Tickets whose frontmatter says `status: done` also
+// close their related GitHub issue.
 //
 // By default it selects ticket files that are added/edited but not yet pushed
 // (uncommitted changes plus commits ahead of the upstream). Use -all to sync
 // every ticket, or pass explicit paths.
+// Use -require-existing in merge automation when only already-linked tickets
+// should be synced.
 //
 // GitHub access goes through the gh CLI, so `gh auth login` must have been
 // run. The target repo is taken from -repo, then $TICKET_SYNC_REPO, then the
@@ -54,6 +57,7 @@ func main() {
 	repoFlag := flag.String("repo", "", "GitHub repo as owner/name (default: $TICKET_SYNC_REPO, then the current git remote)")
 	all := flag.Bool("all", false, "sync every ticket file, not just the ones changed since the last push")
 	dryRun := flag.Bool("dry-run", false, "print planned actions without calling GitHub or editing files")
+	requireExisting := flag.Bool("require-existing", false, "fail instead of creating issues for tickets with github_issue: null")
 	flag.Parse()
 
 	files, err := selectFiles(flag.Args(), *all)
@@ -87,7 +91,7 @@ func main() {
 
 	failed := 0
 	for _, t := range tickets {
-		if err := syncTicket(repo, t, *dryRun); err != nil {
+		if err := syncTicket(repo, t, syncOptions{dryRun: *dryRun, requireExisting: *requireExisting}); err != nil {
 			if _, printErr := fmt.Fprintf(os.Stderr, "error: %s: %v\n", t.path, err); printErr != nil {
 				fatal(printErr)
 			}
@@ -235,18 +239,35 @@ func payload(t *ticket) ([]byte, error) {
 		"\n---\n_Synced from `%s` — the file is the source of truth; edits made directly to this issue will be overwritten._\n",
 		t.path,
 	)
-	return json.Marshal(map[string]any{
+	body := map[string]any{
 		"title":  fmt.Sprintf("[%s] %s", t.id, t.title),
 		"body":   t.body + footer,
 		"labels": labels(t),
-	})
+	}
+	if t.status == "done" {
+		body["state"] = "closed"
+		body["state_reason"] = "completed"
+	}
+	return json.Marshal(body)
 }
 
-func syncTicket(repo string, t *ticket, dryRun bool) error {
-	if dryRun {
+type syncOptions struct {
+	dryRun          bool
+	requireExisting bool
+}
+
+func syncTicket(repo string, t *ticket, opts syncOptions) error {
+	if opts.requireExisting && t.issue == 0 {
+		return errors.New("github_issue is null; run ticket-sync before merging so this ticket is linked to an issue")
+	}
+
+	if opts.dryRun {
 		action := "update issue #" + strconv.Itoa(t.issue)
 		if t.issue == 0 {
 			action = "create issue"
+		}
+		if t.status == "done" && t.issue != 0 {
+			action += " and close it"
 		}
 		_, err := fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
 		return err

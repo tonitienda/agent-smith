@@ -1,0 +1,58 @@
+name: Sync merged tickets
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  sync:
+    name: Sync changed tickets to issues
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out merged code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Sync changed tickets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TICKET_SYNC_REPO: ${{ github.repository }}
+        run: |
+          mapfile -t changed_ticket_files < <(
+            gh api "repos/${TICKET_SYNC_REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename' \
+              | awk '/^docs\/project\/tickets\/AS-[0-9]+.*\.md$/ { print }'
+          )
+
+          tickets=()
+          for file in "${changed_ticket_files[@]}"; do
+            if [ -f "${file}" ]; then
+              tickets+=("${file}")
+            else
+              echo "Skipping deleted ticket file: ${file}"
+            fi
+          done
+
+          if [ "${#tickets[@]}" -eq 0 ]; then
+            echo "No ticket files changed in PR #${PR_NUMBER}; skipping issue sync."
+            exit 0
+          fi
+
+          printf 'Syncing %d ticket file(s):\n' "${#tickets[@]}"
+          printf ' - %s\n' "${tickets[@]}"
+
+          go run ./cmd/ticket-sync -repo "${TICKET_SYNC_REPO}" -require-existing "${tickets[@]}"
