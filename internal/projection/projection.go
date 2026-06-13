@@ -78,7 +78,8 @@ type Block struct {
 // block in append order, each tagged live or dropped. Control-only events
 // (pure exclusions) are the mechanism, not content, so they do not appear here.
 type Projection struct {
-	blocks []Block
+	blocks  []Block
+	liveLen int // count of live blocks, tallied during ProjectAt
 }
 
 // Project computes the projection over every event in order. events is
@@ -103,7 +104,8 @@ func ProjectAt(events []schema.Block, n int, opts Options) *Projection {
 
 	excludedBy := computeExclusions(events)
 
-	p := &Projection{}
+	// At most one rendered block per event; pre-size to avoid reallocations.
+	p := &Projection{blocks: make([]Block, 0, len(events))}
 	for _, e := range events {
 		if !isRendered(e) {
 			continue
@@ -118,6 +120,7 @@ func ProjectAt(events []schema.Block, n int, opts Options) *Projection {
 			pb.Reason = ReasonReplayScope
 		} else {
 			pb.Live = true
+			p.liveLen++
 		}
 		p.blocks = append(p.blocks, pb)
 	}
@@ -192,7 +195,7 @@ func droppedByReplay(b schema.Block, opts Options) bool {
 // append order, ready for provider request assembly. The slice is freshly
 // allocated; the blocks share the log's pointer fields and are read-only.
 func (p *Projection) Live() []schema.Block {
-	out := make([]schema.Block, 0, len(p.blocks))
+	out := make([]schema.Block, 0, p.liveLen)
 	for _, b := range p.blocks {
 		if b.Live {
 			out = append(out, b.Block)
@@ -214,12 +217,4 @@ func (p *Projection) Blocks() []Block {
 func (p *Projection) Len() int { return len(p.blocks) }
 
 // LiveLen returns the number of live blocks in the model-facing context.
-func (p *Projection) LiveLen() int {
-	n := 0
-	for _, b := range p.blocks {
-		if b.Live {
-			n++
-		}
-	}
-	return n
-}
+func (p *Projection) LiveLen() int { return p.liveLen }
