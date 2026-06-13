@@ -1,5 +1,10 @@
 BINARY ?= smith
 GO ?= go
+# GO_VERSION pins the toolchain used to build repo tooling (e.g. golangci-lint)
+# so it matches the module's go directive (go.mod) and CI (.github/workflows/ci.yml).
+# golangci-lint's own go.mod targets an older toolchain; without this it builds
+# with that older Go and then refuses to lint a module on a newer Go.
+GO_VERSION ?= 1.26.3
 GOFLAGS ?=
 LDFLAGS ?= -s -w
 VERSION ?= dev
@@ -25,7 +30,7 @@ lint-install: $(GOLANGCI_LINT_BIN)
 
 $(GOLANGCI_LINT_BIN):
 	@mkdir -p $$(dirname $@)
-	GOBIN=$$(pwd)/$$(dirname $@) $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOTOOLCHAIN=go$(GO_VERSION) GOBIN=$$(pwd)/$$(dirname $@) $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 verify: fmt test vet lint
 
