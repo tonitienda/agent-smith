@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -25,4 +26,20 @@ func TestRunRejectsUnexpectedArguments(t *testing.T) {
 	if !strings.Contains(err.Error(), "unexpected arguments") {
 		t.Fatalf("error %q does not mention unexpected arguments", err)
 	}
+}
+
+func TestRunHelpPropagatesWriterError(t *testing.T) {
+	want := errors.New("write failed")
+	err := run([]string{"--help"}, errWriter{err: want})
+	if !errors.Is(err, want) {
+		t.Fatalf("run returned %v, want %v", err, want)
+	}
+}
+
+type errWriter struct {
+	err error
+}
+
+func (w errWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }

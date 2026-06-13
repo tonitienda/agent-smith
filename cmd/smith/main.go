@@ -12,7 +12,9 @@ import (
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "smith: %v\n", err)
+		if _, printErr := fmt.Fprintf(os.Stderr, "smith: %v\n", err); printErr != nil {
+			os.Exit(1)
+		}
 		os.Exit(1)
 	}
 }
@@ -34,23 +36,29 @@ func run(args []string, out io.Writer) error {
 	}
 
 	if *showHelp {
-		printUsage(out)
-		return nil
+		return printUsage(out)
 	}
 
 	if flags.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
 	}
 
-	printUsage(out)
-	return nil
+	return printUsage(out)
 }
 
-func printUsage(out io.Writer) {
-	fmt.Fprintln(out, "Agent Smith is a provider-agnostic coding agent harness.")
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  smith [--version]")
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Implementation status: scaffold only; agent runtime lands in later tickets.")
+func printUsage(out io.Writer) error {
+	lines := []string{
+		"Agent Smith is a provider-agnostic coding agent harness.",
+		"",
+		"Usage:",
+		"  smith [--version]",
+		"",
+		"Implementation status: scaffold only; agent runtime lands in later tickets.",
+	}
+	for _, line := range lines {
+		if _, err := fmt.Fprintln(out, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }

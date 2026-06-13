@@ -61,7 +61,9 @@ func main() {
 		fatal(err)
 	}
 	if len(files) == 0 {
-		fmt.Println("no changed ticket files; use -all or pass paths explicitly")
+		if _, err := fmt.Fprintln(os.Stdout, "no changed ticket files; use -all or pass paths explicitly"); err != nil {
+			fatal(err)
+		}
 		return
 	}
 	sort.Strings(files)
@@ -86,7 +88,9 @@ func main() {
 	failed := 0
 	for _, t := range tickets {
 		if err := syncTicket(repo, t, *dryRun); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", t.path, err)
+			if _, printErr := fmt.Fprintf(os.Stderr, "error: %s: %v\n", t.path, err); printErr != nil {
+				fatal(printErr)
+			}
 			failed++
 		}
 	}
@@ -244,8 +248,8 @@ func syncTicket(repo string, t *ticket, dryRun bool) error {
 		if t.issue == 0 {
 			action = "create issue"
 		}
-		fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
-		return nil
+		_, err := fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
+		return err
 	}
 
 	body, err := payload(t)
@@ -266,15 +270,15 @@ func syncTicket(repo string, t *ticket, dryRun bool) error {
 		if err := writeIssueNumber(t.path, res.Number); err != nil {
 			return fmt.Errorf("issue #%d created but writing the number back failed: %w", res.Number, err)
 		}
-		fmt.Printf("%s: created issue #%d\n", t.id, res.Number)
-		return nil
+		_, err = fmt.Printf("%s: created issue #%d\n", t.id, res.Number)
+		return err
 	}
 
 	if _, err := ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, t.issue), "PATCH", body); err != nil {
 		return err
 	}
-	fmt.Printf("%s: updated issue #%d\n", t.id, t.issue)
-	return nil
+	_, err = fmt.Printf("%s: updated issue #%d\n", t.id, t.issue)
+	return err
 }
 
 func writeIssueNumber(path string, n int) error {
@@ -342,6 +346,8 @@ func git(args ...string) (string, error) {
 }
 
 func fatal(err error) {
-	fmt.Fprintf(os.Stderr, "ticket-sync: %v\n", err)
+	if _, printErr := fmt.Fprintf(os.Stderr, "ticket-sync: %v\n", err); printErr != nil {
+		os.Exit(1)
+	}
 	os.Exit(1)
 }
