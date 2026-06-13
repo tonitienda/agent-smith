@@ -80,12 +80,24 @@ func TestStreamRetryAfterSeconds(t *testing.T) {
 
 func TestParseRetryAfterHTTPDate(t *testing.T) {
 	future := time.Now().Add(30 * time.Second).UTC().Format(http.TimeFormat)
-	d := parseRetryAfter(future)
+	d := parseRetryAfter(future, "")
 	if d <= 0 || d > 31*time.Second {
 		t.Errorf("parseRetryAfter(date) = %v, want ~30s", d)
 	}
-	if parseRetryAfter("") != 0 || parseRetryAfter("garbage") != 0 {
+	if parseRetryAfter("", "") != 0 || parseRetryAfter("garbage", "") != 0 {
 		t.Error("empty/garbage Retry-After should parse to 0")
+	}
+}
+
+// TestParseRetryAfterClockSkew checks that when a Date header is present the wait
+// is measured against the server's clock, so a skewed client clock does not
+// distort it: Retry-After is 40s after Date regardless of where "now" is.
+func TestParseRetryAfterClockSkew(t *testing.T) {
+	serverNow := time.Now().Add(-10 * time.Minute) // pretend the client clock is 10m fast
+	date := serverNow.UTC().Format(http.TimeFormat)
+	retryAt := serverNow.Add(40 * time.Second).UTC().Format(http.TimeFormat)
+	if got := parseRetryAfter(retryAt, date); got != 40*time.Second {
+		t.Errorf("parseRetryAfter with Date = %v, want 40s (server-relative)", got)
 	}
 }
 

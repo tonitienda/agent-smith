@@ -128,6 +128,33 @@ func TestBuildWireRequestCacheBreakpoints(t *testing.T) {
 	}
 }
 
+func TestBuildWireRequestCacheBreakpointOnImagePart(t *testing.T) {
+	req := provider.Request{
+		Model: "m",
+		Cache: provider.CacheHints{Breakpoints: []schema.CacheBreakpoint{{BlockID: "u1", TTL: "5m"}}},
+		Context: []schema.Block{
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{
+				Parts: []schema.Part{
+					{Type: "text", Text: "look:"},
+					{Type: "image", MediaType: "image/png", Data: "QQ=="},
+				},
+			}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	last := w.Messages[0].Content[len(w.Messages[0].Content)-1]
+	img, ok := last.(wireImage)
+	if !ok {
+		t.Fatalf("last content = %+v, want wireImage", last)
+	}
+	if img.CacheControl == nil || img.CacheControl.TTL != "5m" {
+		t.Errorf("image cache_control = %+v, want ephemeral/5m", img.CacheControl)
+	}
+}
+
 func TestBuildWireRequestReasoningRoundTrip(t *testing.T) {
 	req := provider.Request{
 		Model: "m",

@@ -44,7 +44,7 @@ func (p *Provider) readErrorResponse(resp *http.Response) *provider.Error {
 	e := provider.New(kind, "%s", errMessage(errType, errMsg, resp.StatusCode))
 	e.StatusCode = resp.StatusCode
 	if kind == provider.ErrRateLimit || kind == provider.ErrOverloaded {
-		e.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"))
+		e.RetryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), resp.Header.Get("Date"))
 	}
 	return e
 }
@@ -125,8 +125,11 @@ func errMessage(errType, errMsg string, status int) string {
 }
 
 // parseRetryAfter parses a Retry-After header, supporting both the delta-seconds
-// and HTTP-date forms. It returns 0 when the header is absent or unparsable.
-func parseRetryAfter(v string) time.Duration {
+// and HTTP-date forms. For the date form it measures the wait against the
+// response's Date header (the server's clock) when available, so the result is
+// immune to client-server clock skew, falling back to the local clock otherwise.
+// It returns 0 when the header is absent or unparsable.
+func parseRetryAfter(v, date string) time.Duration {
 	if v == "" {
 		return 0
 	}
@@ -134,6 +137,14 @@ func parseRetryAfter(v string) time.Duration {
 		return time.Duration(secs) * time.Second
 	}
 	if t, err := http.ParseTime(v); err == nil {
+		if date != "" {
+			if serverTime, err := http.ParseTime(date); err == nil {
+				if d := t.Sub(serverTime); d > 0 {
+					return d
+				}
+				return 0
+			}
+		}
 		if d := time.Until(t); d > 0 {
 			return d
 		}

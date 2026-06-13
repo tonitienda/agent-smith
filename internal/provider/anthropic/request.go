@@ -78,8 +78,9 @@ type wireImageSource struct {
 }
 
 type wireImage struct {
-	Type   string          `json:"type"` // "image"
-	Source wireImageSource `json:"source"`
+	Type         string            `json:"type"` // "image"
+	Source       wireImageSource   `json:"source"`
+	CacheControl *wireCacheControl `json:"cache_control,omitempty"`
 }
 
 type wireTool struct {
@@ -218,9 +219,15 @@ func textContent(b *schema.Block, cc *wireCacheControl) []any {
 		for i := range body.Parts {
 			out = append(out, partToWire(&body.Parts[i]))
 		}
-		// Attach the cache breakpoint to the final part of the block.
+		// Attach the cache breakpoint to the final part of the block, whether it
+		// is text or an image (Anthropic supports cache_control on image blocks,
+		// which are large and worth caching).
 		if cc != nil {
-			if t, ok := out[len(out)-1].(wireText); ok {
+			switch t := out[len(out)-1].(type) {
+			case wireText:
+				t.CacheControl = cc
+				out[len(out)-1] = t
+			case wireImage:
 				t.CacheControl = cc
 				out[len(out)-1] = t
 			}
