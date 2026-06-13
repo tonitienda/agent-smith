@@ -6,11 +6,14 @@
 //   - github_issue: <n>   -> issue #n is overwritten from the file
 //
 // There is no merging: title, body, and labels on GitHub are replaced with
-// whatever the file says.
+// whatever the file says. Tickets whose frontmatter says `status: done` also
+// close their related GitHub issue.
 //
 // By default it selects ticket files that are added/edited but not yet pushed
 // (uncommitted changes plus commits ahead of the upstream). Use -all to sync
 // every ticket, or pass explicit paths.
+// Use -require-existing in merge automation when only already-linked tickets
+// should be synced.
 //
 // GitHub access goes through the gh CLI, so `gh auth login` must have been
 // run. The target repo is taken from -repo, then $TICKET_SYNC_REPO, then the
@@ -54,6 +57,7 @@ func main() {
 	repoFlag := flag.String("repo", "", "GitHub repo as owner/name (default: $TICKET_SYNC_REPO, then the current git remote)")
 	all := flag.Bool("all", false, "sync every ticket file, not just the ones changed since the last push")
 	dryRun := flag.Bool("dry-run", false, "print planned actions without calling GitHub or editing files")
+	requireExisting := flag.Bool("require-existing", false, "fail instead of creating issues for tickets with github_issue: null")
 	flag.Parse()
 
 	files, err := selectFiles(flag.Args(), *all)
@@ -77,6 +81,14 @@ func main() {
 		tickets = append(tickets, t)
 	}
 
+	if *requireExisting {
+		for _, t := range tickets {
+			if err := requireLinkedIssue(t); err != nil {
+				fatal(fmt.Errorf("%s: %w", t.path, err))
+			}
+		}
+	}
+
 	repo := ""
 	if !*dryRun {
 		if repo, err = resolveRepo(*repoFlag); err != nil {
@@ -87,7 +99,7 @@ func main() {
 
 	failed := 0
 	for _, t := range tickets {
-		if err := syncTicket(repo, t, *dryRun); err != nil {
+		if err := syncTicket(repo, t, syncOptions{dryRun: *dryRun, requireExisting: *requireExisting}); err != nil {
 			if _, printErr := fmt.Fprintf(os.Stderr, "error: %s: %v\n", t.path, err); printErr != nil {
 				fatal(printErr)
 			}
@@ -230,33 +242,70 @@ func labels(t *ticket) []string {
 	return ls
 }
 
-func payload(t *ticket) ([]byte, error) {
+type payloadOptions struct {
+	includeState bool
+}
+
+func payload(t *ticket, opts payloadOptions) ([]byte, error) {
 	footer := fmt.Sprintf(
 		"\n---\n_Synced from `%s` — the file is the source of truth; edits made directly to this issue will be overwritten._\n",
 		t.path,
 	)
-	return json.Marshal(map[string]any{
+	body := map[string]any{
 		"title":  fmt.Sprintf("[%s] %s", t.id, t.title),
 		"body":   t.body + footer,
 		"labels": labels(t),
+	}
+	if opts.includeState && t.status == "done" {
+		body["state"] = "closed"
+		body["state_reason"] = "completed"
+	}
+	return json.Marshal(body)
+}
+
+func closePayload() ([]byte, error) {
+	return json.Marshal(map[string]string{
+		"state":        "closed",
+		"state_reason": "completed",
 	})
 }
 
-func syncTicket(repo string, t *ticket, dryRun bool) error {
-	if dryRun {
+type syncOptions struct {
+	dryRun          bool
+	requireExisting bool
+}
+
+func requireLinkedIssue(t *ticket) error {
+	if t.issue == 0 {
+		return errors.New("github_issue is null; run ticket-sync before merging so this ticket is linked to an issue")
+	}
+	return nil
+}
+
+func syncTicket(repo string, t *ticket, opts syncOptions) error {
+	if opts.requireExisting {
+		if err := requireLinkedIssue(t); err != nil {
+			return err
+		}
+	}
+
+	if opts.dryRun {
 		action := "update issue #" + strconv.Itoa(t.issue)
 		if t.issue == 0 {
 			action = "create issue"
+		}
+		if t.status == "done" {
+			action += " and close it"
 		}
 		_, err := fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
 		return err
 	}
 
-	body, err := payload(t)
-	if err != nil {
-		return err
-	}
 	if t.issue == 0 {
+		body, err := payload(t, payloadOptions{})
+		if err != nil {
+			return err
+		}
 		resp, err := ghAPI(fmt.Sprintf("repos/%s/issues", repo), "POST", body)
 		if err != nil {
 			return err
@@ -270,14 +319,34 @@ func syncTicket(repo string, t *ticket, dryRun bool) error {
 		if err := writeIssueNumber(t.path, res.Number); err != nil {
 			return fmt.Errorf("issue #%d created but writing the number back failed: %w", res.Number, err)
 		}
+		if t.status == "done" {
+			if err := closeIssue(repo, res.Number); err != nil {
+				return fmt.Errorf("issue #%d created but closing it failed: %w", res.Number, err)
+			}
+			_, err = fmt.Printf("%s: created and closed issue #%d\n", t.id, res.Number)
+			return err
+		}
 		_, err = fmt.Printf("%s: created issue #%d\n", t.id, res.Number)
 		return err
 	}
 
+	body, err := payload(t, payloadOptions{includeState: true})
+	if err != nil {
+		return err
+	}
 	if _, err := ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, t.issue), "PATCH", body); err != nil {
 		return err
 	}
 	_, err = fmt.Printf("%s: updated issue #%d\n", t.id, t.issue)
+	return err
+}
+
+func closeIssue(repo string, issue int) error {
+	body, err := closePayload()
+	if err != nil {
+		return err
+	}
+	_, err = ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, issue), "PATCH", body)
 	return err
 }
 

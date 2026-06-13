@@ -128,5 +128,7 @@ go run ./cmd/ticket-sync -dry-run        # show what would happen
 
 - `github_issue: null` → an issue is created and its number is written back into the frontmatter (commit that change).
 - `github_issue: <n>` → issue `#n` is updated from the file.
+- `status: done` → the synced GitHub issue is closed after its title/body/labels are updated.
 - Labels applied: `status`, `area:<area>`, `priority` (created on the repo if missing).
 - Auth via the `gh` CLI (`gh auth login`). Repo resolution: `-repo owner/name` flag → `TICKET_SYNC_REPO` env var → the current git remote.
+- After a pull request is merged, the **Sync merged tickets** GitHub Actions workflow finds ticket files changed by that PR and runs `go run ./cmd/ticket-sync -require-existing` against them. This keeps related issues current and closes `done` tickets, while failing on `github_issue: null` so new tickets are linked before merge instead of creating uncommitted issue-number changes in CI.
