@@ -15,7 +15,7 @@ From this V1 freeze onward the schema is **additive-only, forever**:
 - **Consumers MUST tolerate missing and unknown data.** An absent optional field is normal (it means "not reported"/"not applicable", *never* an implied zero). Unknown fields and unknown block kinds MUST deserialize without error and be preserved or passed through, not rejected.
 - **There are no deprecation windows.** Nothing is ever scheduled for removal, because nothing is ever removed.
 
-Pre-V1 the draft was malleable (union spike §15); at V1 it locks. Mechanical enforcement of these rules (golden-file corpus + schema-diff CI) is **AS-004**, which also publishes the contributor process in `docs/schema/EVOLUTION.md`.
+Pre-V1 the draft was malleable (union spike §15); at V1 it locks. Mechanical enforcement of these rules (golden-file corpus + schema-diff CI) is **AS-004**, which also publishes the contributor process in `docs/schema/EVOLUTION.md`. A language-neutral **JSON Schema** for non-Go clients — plus a Go↔schema divergence guard, with enums/`additionalProperties` reconciled against the tolerate-unknown rule above — is **AS-061**, scheduled for the V1-freeze window (after the AS-060 real-capture pass settles the shape).
 
 ## The event envelope
 

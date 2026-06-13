@@ -2,7 +2,7 @@
 
 The full backlog derived from [PRD.md](../PRD.md), in two waves:
 
-- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060**, a V1-gating schema-validation pass appended after the spike work.)
+- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes.
 
 Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
@@ -52,6 +52,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-029](AS-029-clean-semantic.md) | `/clean "<topic>"` semantic matching (wedge) | context-wedge | **needs clarification** | 028, 027 |
 | [AS-030](AS-030-benchmark-guardrail-suite.md) | Cost/speed benchmark suite (D5 guardrail) | quality | **needs clarification** | 018, 020 |
 | [AS-060](AS-060-session-capture-corpus.md) | Capture & compare real vendor session files before V1 schema freeze | schema | ready | 002, 003 |
+| [AS-061](AS-061-json-schema-publication.md) | Publish the block schema as JSON Schema (+ Go↔schema divergence guard) | schema | ready | 003, 004, 060 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 
