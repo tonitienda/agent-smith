@@ -1,7 +1,7 @@
 ---
 id: AS-007
 title: Session persistence — save, list, and load sessions on disk
-status: ready-to-implement
+status: done
 github_issue: 7
 depends_on: [AS-005]
 area: core-log
@@ -11,7 +11,7 @@ source: PRD.md §7.9, D6
 
 # AS-007 · Session persistence
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -23,10 +23,10 @@ Sessions must survive process exit and be resumable (§7.9). Because the session
 
 ## Acceptance criteria
 
-- [ ] Killing the process at any point loses no completed events.
-- [ ] A loaded session produces a projection identical to the one at save time.
-- [ ] Sessions are scoped/discoverable per project directory.
-- [ ] Metadata is duplicated nowhere — totals derivable from the log are computed, not stored as truth.
+- [x] Killing the process at any point loses no completed events.
+- [x] A loaded session produces a projection identical to the one at save time.
+- [x] Sessions are scoped/discoverable per project directory.
+- [x] Metadata is duplicated nowhere — totals derivable from the log are computed, not stored as truth.
 
 ## Dependencies
 
