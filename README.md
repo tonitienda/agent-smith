@@ -89,6 +89,7 @@ cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
 internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
 internal/session/          project-scoped disk persistence for append-only session logs
+internal/provider/         provider abstraction: normalized request/stream interface + taxonomy
 .github/workflows/         CI for build, vet, lint, tests, and merged-ticket issue sync
 scripts/agent-quality-gate.sh  shared deterministic pre-submit gate for humans and agents
 ```
