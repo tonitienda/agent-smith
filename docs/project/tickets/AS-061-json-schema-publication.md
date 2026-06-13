@@ -2,7 +2,7 @@
 id: AS-061
 title: "Publish the block schema as JSON Schema (language-neutral contract + Go↔schema divergence guard)"
 status: ready-to-implement
-github_issue: null
+github_issue: 70
 depends_on: [AS-003, AS-004, AS-060]
 area: schema
 priority: P1
