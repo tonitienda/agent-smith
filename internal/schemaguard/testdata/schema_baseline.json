@@ -1,0 +1,883 @@
+{
+  "types": {
+    "Attribution": {
+      "fields": [
+        {
+          "name": "Skill",
+          "json": "skill",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "MCPServer",
+          "json": "mcp_server",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "MCPTool",
+          "json": "mcp_tool",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Tool",
+          "json": "tool",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Hook",
+          "json": "hook",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Block": {
+      "fields": [
+        {
+          "name": "ID",
+          "json": "id",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Kind",
+          "json": "kind",
+          "type": "Kind",
+          "omitempty": false
+        },
+        {
+          "name": "Seq",
+          "json": "seq",
+          "type": "int",
+          "omitempty": false
+        },
+        {
+          "name": "TS",
+          "json": "ts",
+          "type": "time.Time",
+          "omitempty": false
+        },
+        {
+          "name": "Role",
+          "json": "role",
+          "type": "Role",
+          "omitempty": false
+        },
+        {
+          "name": "StopReason",
+          "json": "stop_reason",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Provenance",
+          "json": "provenance",
+          "type": "*Provenance",
+          "omitempty": true
+        },
+        {
+          "name": "Provider",
+          "json": "provider",
+          "type": "*Provider",
+          "omitempty": true
+        },
+        {
+          "name": "Thread",
+          "json": "thread",
+          "type": "*Thread",
+          "omitempty": true
+        },
+        {
+          "name": "Attribution",
+          "json": "attribution",
+          "type": "*Attribution",
+          "omitempty": true
+        },
+        {
+          "name": "Tokens",
+          "json": "tokens",
+          "type": "*Tokens",
+          "omitempty": true
+        },
+        {
+          "name": "CostUSD",
+          "json": "cost_usd",
+          "type": "*float64",
+          "omitempty": true
+        },
+        {
+          "name": "UsageMeta",
+          "json": "usage_meta",
+          "type": "*UsageMeta",
+          "omitempty": true
+        },
+        {
+          "name": "Cache",
+          "json": "cache",
+          "type": "*Cache",
+          "omitempty": true
+        },
+        {
+          "name": "ExcludedBy",
+          "json": "excluded_by",
+          "type": "[]string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        },
+        {
+          "name": "Text",
+          "json": "text",
+          "type": "*TextBody",
+          "omitempty": true
+        },
+        {
+          "name": "ToolCall",
+          "json": "tool_call",
+          "type": "*ToolCallBody",
+          "omitempty": true
+        },
+        {
+          "name": "ToolResult",
+          "json": "tool_result",
+          "type": "*ToolResultBody",
+          "omitempty": true
+        },
+        {
+          "name": "FileRead",
+          "json": "file_read",
+          "type": "*FileReadBody",
+          "omitempty": true
+        },
+        {
+          "name": "Reasoning",
+          "json": "reasoning",
+          "type": "*ReasoningBody",
+          "omitempty": true
+        }
+      ]
+    },
+    "Cache": {
+      "fields": [
+        {
+          "name": "Mode",
+          "json": "mode",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Breakpoints",
+          "json": "breakpoints",
+          "type": "[]CacheBreakpoint",
+          "omitempty": true
+        },
+        {
+          "name": "TTL",
+          "json": "ttl",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "CacheBreakpoint": {
+      "fields": [
+        {
+          "name": "BlockID",
+          "json": "block_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "TTL",
+          "json": "ttl",
+          "type": "string",
+          "omitempty": true
+        }
+      ]
+    },
+    "Citation": {
+      "fields": [
+        {
+          "name": "Type",
+          "json": "type",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "URL",
+          "json": "url",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Title",
+          "json": "title",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "CitedText",
+          "json": "cited_text",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Source",
+          "json": "source",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Document": {
+      "fields": [
+        {
+          "name": "Schema",
+          "json": "schema",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Version",
+          "json": "schema_version",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Blocks",
+          "json": "blocks",
+          "type": "[]Block",
+          "omitempty": false
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "FileReadBody": {
+      "fields": [
+        {
+          "name": "Path",
+          "json": "path",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Range",
+          "json": "range",
+          "type": "*LineRange",
+          "omitempty": true
+        },
+        {
+          "name": "Content",
+          "json": "content",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ContentHash",
+          "json": "content_hash",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "OffloadRef",
+          "json": "offload_ref",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Error",
+          "json": "error",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ProducedBy",
+          "json": "produced_by",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "MediaType",
+          "json": "media_type",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Source",
+          "json": "source",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "LineRange": {
+      "fields": [
+        {
+          "name": "StartLine",
+          "json": "start_line",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "EndLine",
+          "json": "end_line",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "StartByte",
+          "json": "start_byte",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "EndByte",
+          "json": "end_byte",
+          "type": "*int",
+          "omitempty": true
+        }
+      ]
+    },
+    "Part": {
+      "fields": [
+        {
+          "name": "Type",
+          "json": "type",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "MediaType",
+          "json": "media_type",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Text",
+          "json": "text",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "URL",
+          "json": "url",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Data",
+          "json": "data",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "OffloadRef",
+          "json": "offload_ref",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Provenance": {
+      "fields": [
+        {
+          "name": "Producer",
+          "json": "producer",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "RequestID",
+          "json": "request_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ResponseID",
+          "json": "response_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "TurnID",
+          "json": "turn_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "DerivedFrom",
+          "json": "derived_from",
+          "type": "[]string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Provider": {
+      "fields": [
+        {
+          "name": "Vendor",
+          "json": "vendor",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Surface",
+          "json": "surface",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Model",
+          "json": "model",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "NativeType",
+          "json": "native_type",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "NativeID",
+          "json": "native_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "ReasoningBody": {
+      "fields": [
+        {
+          "name": "Text",
+          "json": "text",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Summary",
+          "json": "summary",
+          "type": "[]string",
+          "omitempty": true
+        },
+        {
+          "name": "Encrypted",
+          "json": "encrypted",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Signature",
+          "json": "signature",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Redacted",
+          "json": "redacted",
+          "type": "bool",
+          "omitempty": true
+        },
+        {
+          "name": "ReplayScope",
+          "json": "replay_scope",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "TextBody": {
+      "fields": [
+        {
+          "name": "Text",
+          "json": "text",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Subtype",
+          "json": "subtype",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Parts",
+          "json": "parts",
+          "type": "[]Part",
+          "omitempty": true
+        },
+        {
+          "name": "Citations",
+          "json": "citations",
+          "type": "[]Citation",
+          "omitempty": true
+        },
+        {
+          "name": "Annotations",
+          "json": "annotations",
+          "type": "[]json.RawMessage",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Thread": {
+      "fields": [
+        {
+          "name": "ThreadID",
+          "json": "thread_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ParentBlockID",
+          "json": "parent_block_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ParentThreadID",
+          "json": "parent_thread_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "AgentID",
+          "json": "agent_id",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "IsSidechain",
+          "json": "is_sidechain",
+          "type": "bool",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "Tokens": {
+      "fields": [
+        {
+          "name": "Input",
+          "json": "input",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "Output",
+          "json": "output",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "CacheRead",
+          "json": "cache_read",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "CacheWrite",
+          "json": "cache_write",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "Reasoning",
+          "json": "reasoning",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "CacheWrite5m",
+          "json": "cache_write_5m",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "CacheWrite1h",
+          "json": "cache_write_1h",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "Iterations",
+          "json": "iterations",
+          "type": "[]Tokens",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "ToolCallBody": {
+      "fields": [
+        {
+          "name": "ToolUseID",
+          "json": "tool_use_id",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Name",
+          "json": "name",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Arguments",
+          "json": "arguments",
+          "type": "json.RawMessage",
+          "omitempty": true
+        },
+        {
+          "name": "ArgumentsRaw",
+          "json": "arguments_raw",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ToolKind",
+          "json": "tool_kind",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ToolSubtype",
+          "json": "tool_subtype",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ParallelGroup",
+          "json": "parallel_group",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "MCPServer",
+          "json": "mcp_server",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "ToolResultBody": {
+      "fields": [
+        {
+          "name": "ToolUseID",
+          "json": "tool_use_id",
+          "type": "string",
+          "omitempty": false
+        },
+        {
+          "name": "Content",
+          "json": "content",
+          "type": "[]Part",
+          "omitempty": true
+        },
+        {
+          "name": "IsError",
+          "json": "is_error",
+          "type": "bool",
+          "omitempty": true
+        },
+        {
+          "name": "Citations",
+          "json": "citations",
+          "type": "[]Citation",
+          "omitempty": true
+        },
+        {
+          "name": "ExitCode",
+          "json": "exit_code",
+          "type": "*int",
+          "omitempty": true
+        },
+        {
+          "name": "Stdout",
+          "json": "stdout",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Stderr",
+          "json": "stderr",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "StructuredContent",
+          "json": "structured_content",
+          "type": "json.RawMessage",
+          "omitempty": true
+        },
+        {
+          "name": "Truncated",
+          "json": "truncated",
+          "type": "bool",
+          "omitempty": true
+        },
+        {
+          "name": "OffloadRef",
+          "json": "offload_ref",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    },
+    "UsageMeta": {
+      "fields": [
+        {
+          "name": "ServiceTier",
+          "json": "service_tier",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "Speed",
+          "json": "speed",
+          "type": "string",
+          "omitempty": true
+        },
+        {
+          "name": "ServerToolUse",
+          "json": "server_tool_use",
+          "type": "json.RawMessage",
+          "omitempty": true
+        },
+        {
+          "name": "Ext",
+          "json": "ext",
+          "type": "map[string]json.RawMessage",
+          "omitempty": true
+        }
+      ]
+    }
+  },
+  "enums": {
+    "CacheMode": [
+      "explicit",
+      "automatic"
+    ],
+    "FileSource": [
+      "tool",
+      "attachment",
+      "mcp_resource"
+    ],
+    "Kind": [
+      "text",
+      "tool_call",
+      "tool_result",
+      "file_read",
+      "reasoning",
+      "compaction",
+      "fallback"
+    ],
+    "ReplayScope": [
+      "same_model_only",
+      "portable"
+    ],
+    "Role": [
+      "user",
+      "assistant",
+      "system",
+      "tool",
+      "harness"
+    ],
+    "TextSubtype": [
+      "normal",
+      "refusal"
+    ],
+    "ToolKind": [
+      "client",
+      "server"
+    ]
+  }
+}

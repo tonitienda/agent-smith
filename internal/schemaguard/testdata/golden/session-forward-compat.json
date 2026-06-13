@@ -1,0 +1,25 @@
+{
+  "schema": "agent-smith.blocks.v1",
+  "schema_version": "1",
+  "future_top_level_field": {"anything": true},
+  "blocks": [
+    {
+      "id": "blk_fc_text",
+      "kind": "text",
+      "seq": 0,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "future_envelope_field": 42,
+      "provider": {"vendor": "openai", "future_provider_field": "x"},
+      "text": {"text": "hi", "future_body_field": [1, 2, 3]}
+    },
+    {
+      "id": "blk_fc_future_kind",
+      "kind": "plan",
+      "seq": 1,
+      "ts": "2026-06-13T12:00:01Z",
+      "role": "assistant",
+      "plan": {"items": ["do a thing"]}
+    }
+  ]
+}

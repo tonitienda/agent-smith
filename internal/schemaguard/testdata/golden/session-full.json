@@ -1,0 +1,618 @@
+{
+  "schema": "agent-smith.blocks.v1",
+  "schema_version": "1",
+  "blocks": [
+    {
+      "id": "blk_full_text",
+      "kind": "text",
+      "seq": 7,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "stop_reason": "end_turn",
+      "provenance": {
+        "producer": "anthropic-adapter",
+        "request_id": "req_1",
+        "response_id": "resp_1",
+        "turn_id": "turn_1",
+        "derived_from": [
+          "blk_a",
+          "blk_b"
+        ],
+        "ext": {
+          "prov_x": "y"
+        }
+      },
+      "provider": {
+        "vendor": "anthropic",
+        "surface": "messages",
+        "model": "claude-opus-4-8",
+        "native_type": "text",
+        "native_id": "msg_123",
+        "ext": {
+          "raw": {
+            "k": 1
+          }
+        }
+      },
+      "thread": {
+        "thread_id": "t_1",
+        "parent_block_id": "blk_parent",
+        "parent_thread_id": "t_root",
+        "agent_id": "agent_7",
+        "is_sidechain": true,
+        "ext": {
+          "th": true
+        }
+      },
+      "attribution": {
+        "skill": "deep-research",
+        "mcp_server": "github",
+        "mcp_tool": "list_issues",
+        "tool": "Grep",
+        "hook": "PostToolUse",
+        "ext": {
+          "a": 1
+        }
+      },
+      "tokens": {
+        "input": 100,
+        "output": 0,
+        "cache_read": 20,
+        "cache_write": 30,
+        "reasoning": 5,
+        "cache_write_5m": 11,
+        "cache_write_1h": 22,
+        "iterations": [
+          {
+            "input": 50,
+            "output": 60
+          }
+        ],
+        "ext": {
+          "tk": "v"
+        }
+      },
+      "cost_usd": 0.0123,
+      "usage_meta": {
+        "service_tier": "standard",
+        "speed": "fast",
+        "server_tool_use": {
+          "web_search_requests": 2
+        }
+      },
+      "cache": {
+        "mode": "explicit",
+        "breakpoints": [
+          {
+            "block_id": "blk_bp",
+            "ttl": "5m"
+          }
+        ],
+        "ttl": "5m"
+      },
+      "excluded_by": [
+        "evt_1"
+      ],
+      "ext": {
+        "env_x": {
+          "nested": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "text": {
+        "text": "hello",
+        "subtype": "normal",
+        "parts": [
+          {
+            "type": "image",
+            "media_type": "image/png",
+            "url": "https://x/y.png"
+          }
+        ],
+        "citations": [
+          {
+            "type": "web",
+            "url": "https://src",
+            "title": "Src",
+            "cited_text": "quote",
+            "source": "live_search"
+          }
+        ],
+        "annotations": [
+          {
+            "type": "url_citation"
+          }
+        ],
+        "ext": {
+          "tb": "z"
+        }
+      }
+    },
+    {
+      "id": "blk_full_call",
+      "kind": "tool_call",
+      "seq": 7,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "stop_reason": "end_turn",
+      "provenance": {
+        "producer": "anthropic-adapter",
+        "request_id": "req_1",
+        "response_id": "resp_1",
+        "turn_id": "turn_1",
+        "derived_from": [
+          "blk_a",
+          "blk_b"
+        ],
+        "ext": {
+          "prov_x": "y"
+        }
+      },
+      "provider": {
+        "vendor": "anthropic",
+        "surface": "messages",
+        "model": "claude-opus-4-8",
+        "native_type": "text",
+        "native_id": "msg_123",
+        "ext": {
+          "raw": {
+            "k": 1
+          }
+        }
+      },
+      "thread": {
+        "thread_id": "t_1",
+        "parent_block_id": "blk_parent",
+        "parent_thread_id": "t_root",
+        "agent_id": "agent_7",
+        "is_sidechain": true,
+        "ext": {
+          "th": true
+        }
+      },
+      "attribution": {
+        "skill": "deep-research",
+        "mcp_server": "github",
+        "mcp_tool": "list_issues",
+        "tool": "Grep",
+        "hook": "PostToolUse",
+        "ext": {
+          "a": 1
+        }
+      },
+      "tokens": {
+        "input": 100,
+        "output": 0,
+        "cache_read": 20,
+        "cache_write": 30,
+        "reasoning": 5,
+        "cache_write_5m": 11,
+        "cache_write_1h": 22,
+        "iterations": [
+          {
+            "input": 50,
+            "output": 60
+          }
+        ],
+        "ext": {
+          "tk": "v"
+        }
+      },
+      "cost_usd": 0.0123,
+      "usage_meta": {
+        "service_tier": "standard",
+        "speed": "fast",
+        "server_tool_use": {
+          "web_search_requests": 2
+        }
+      },
+      "cache": {
+        "mode": "explicit",
+        "breakpoints": [
+          {
+            "block_id": "blk_bp",
+            "ttl": "5m"
+          }
+        ],
+        "ttl": "5m"
+      },
+      "excluded_by": [
+        "evt_1"
+      ],
+      "ext": {
+        "env_x": {
+          "nested": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "tool_call": {
+        "tool_use_id": "toolu_full_1",
+        "name": "shell",
+        "arguments": {
+          "cmd": "ls"
+        },
+        "arguments_raw": "{\"cmd\":\"ls\"}",
+        "tool_kind": "client",
+        "tool_subtype": "web_search",
+        "parallel_group": "grp_1",
+        "mcp_server": "github",
+        "ext": {
+          "cb": 1
+        }
+      }
+    },
+    {
+      "id": "blk_full_result",
+      "kind": "tool_result",
+      "seq": 7,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "tool",
+      "stop_reason": "end_turn",
+      "provenance": {
+        "producer": "anthropic-adapter",
+        "request_id": "req_1",
+        "response_id": "resp_1",
+        "turn_id": "turn_1",
+        "derived_from": [
+          "blk_a",
+          "blk_b"
+        ],
+        "ext": {
+          "prov_x": "y"
+        }
+      },
+      "provider": {
+        "vendor": "anthropic",
+        "surface": "messages",
+        "model": "claude-opus-4-8",
+        "native_type": "text",
+        "native_id": "msg_123",
+        "ext": {
+          "raw": {
+            "k": 1
+          }
+        }
+      },
+      "thread": {
+        "thread_id": "t_1",
+        "parent_block_id": "blk_parent",
+        "parent_thread_id": "t_root",
+        "agent_id": "agent_7",
+        "is_sidechain": true,
+        "ext": {
+          "th": true
+        }
+      },
+      "attribution": {
+        "skill": "deep-research",
+        "mcp_server": "github",
+        "mcp_tool": "list_issues",
+        "tool": "Grep",
+        "hook": "PostToolUse",
+        "ext": {
+          "a": 1
+        }
+      },
+      "tokens": {
+        "input": 100,
+        "output": 0,
+        "cache_read": 20,
+        "cache_write": 30,
+        "reasoning": 5,
+        "cache_write_5m": 11,
+        "cache_write_1h": 22,
+        "iterations": [
+          {
+            "input": 50,
+            "output": 60
+          }
+        ],
+        "ext": {
+          "tk": "v"
+        }
+      },
+      "cost_usd": 0.0123,
+      "usage_meta": {
+        "service_tier": "standard",
+        "speed": "fast",
+        "server_tool_use": {
+          "web_search_requests": 2
+        }
+      },
+      "cache": {
+        "mode": "explicit",
+        "breakpoints": [
+          {
+            "block_id": "blk_bp",
+            "ttl": "5m"
+          }
+        ],
+        "ttl": "5m"
+      },
+      "excluded_by": [
+        "evt_1"
+      ],
+      "ext": {
+        "env_x": {
+          "nested": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "tool_result": {
+        "tool_use_id": "toolu_full_1",
+        "content": [
+          {
+            "type": "text",
+            "text": "file listing"
+          }
+        ],
+        "is_error": true,
+        "citations": [
+          {
+            "url": "https://c"
+          }
+        ],
+        "exit_code": 0,
+        "stdout": "out",
+        "stderr": "err",
+        "structured_content": {
+          "files": [
+            "a",
+            "b"
+          ]
+        },
+        "truncated": true,
+        "offload_ref": "blob://123",
+        "ext": {
+          "rb": "r"
+        }
+      }
+    },
+    {
+      "id": "blk_full_fileread",
+      "kind": "file_read",
+      "seq": 7,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "harness",
+      "stop_reason": "end_turn",
+      "provenance": {
+        "producer": "anthropic-adapter",
+        "request_id": "req_1",
+        "response_id": "resp_1",
+        "turn_id": "turn_1",
+        "derived_from": [
+          "blk_a",
+          "blk_b"
+        ],
+        "ext": {
+          "prov_x": "y"
+        }
+      },
+      "provider": {
+        "vendor": "anthropic",
+        "surface": "messages",
+        "model": "claude-opus-4-8",
+        "native_type": "text",
+        "native_id": "msg_123",
+        "ext": {
+          "raw": {
+            "k": 1
+          }
+        }
+      },
+      "thread": {
+        "thread_id": "t_1",
+        "parent_block_id": "blk_parent",
+        "parent_thread_id": "t_root",
+        "agent_id": "agent_7",
+        "is_sidechain": true,
+        "ext": {
+          "th": true
+        }
+      },
+      "attribution": {
+        "skill": "deep-research",
+        "mcp_server": "github",
+        "mcp_tool": "list_issues",
+        "tool": "Grep",
+        "hook": "PostToolUse",
+        "ext": {
+          "a": 1
+        }
+      },
+      "tokens": {
+        "input": 100,
+        "output": 0,
+        "cache_read": 20,
+        "cache_write": 30,
+        "reasoning": 5,
+        "cache_write_5m": 11,
+        "cache_write_1h": 22,
+        "iterations": [
+          {
+            "input": 50,
+            "output": 60
+          }
+        ],
+        "ext": {
+          "tk": "v"
+        }
+      },
+      "cost_usd": 0.0123,
+      "usage_meta": {
+        "service_tier": "standard",
+        "speed": "fast",
+        "server_tool_use": {
+          "web_search_requests": 2
+        }
+      },
+      "cache": {
+        "mode": "explicit",
+        "breakpoints": [
+          {
+            "block_id": "blk_bp",
+            "ttl": "5m"
+          }
+        ],
+        "ttl": "5m"
+      },
+      "excluded_by": [
+        "evt_1"
+      ],
+      "ext": {
+        "env_x": {
+          "nested": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "file_read": {
+        "path": "/repo/go.mod",
+        "range": {
+          "start_line": 1,
+          "end_line": 3,
+          "start_byte": 0,
+          "end_byte": 64
+        },
+        "content": "module ...",
+        "content_hash": "sha256:abc",
+        "offload_ref": "blob://456",
+        "produced_by": "toolu_read",
+        "media_type": "text/plain",
+        "source": "tool",
+        "ext": {
+          "fb": "f"
+        }
+      }
+    },
+    {
+      "id": "blk_full_reasoning",
+      "kind": "reasoning",
+      "seq": 7,
+      "ts": "2026-06-13T12:00:00Z",
+      "role": "assistant",
+      "stop_reason": "end_turn",
+      "provenance": {
+        "producer": "anthropic-adapter",
+        "request_id": "req_1",
+        "response_id": "resp_1",
+        "turn_id": "turn_1",
+        "derived_from": [
+          "blk_a",
+          "blk_b"
+        ],
+        "ext": {
+          "prov_x": "y"
+        }
+      },
+      "provider": {
+        "vendor": "anthropic",
+        "surface": "messages",
+        "model": "claude-opus-4-8",
+        "native_type": "text",
+        "native_id": "msg_123",
+        "ext": {
+          "raw": {
+            "k": 1
+          }
+        }
+      },
+      "thread": {
+        "thread_id": "t_1",
+        "parent_block_id": "blk_parent",
+        "parent_thread_id": "t_root",
+        "agent_id": "agent_7",
+        "is_sidechain": true,
+        "ext": {
+          "th": true
+        }
+      },
+      "attribution": {
+        "skill": "deep-research",
+        "mcp_server": "github",
+        "mcp_tool": "list_issues",
+        "tool": "Grep",
+        "hook": "PostToolUse",
+        "ext": {
+          "a": 1
+        }
+      },
+      "tokens": {
+        "input": 100,
+        "output": 0,
+        "cache_read": 20,
+        "cache_write": 30,
+        "reasoning": 5,
+        "cache_write_5m": 11,
+        "cache_write_1h": 22,
+        "iterations": [
+          {
+            "input": 50,
+            "output": 60
+          }
+        ],
+        "ext": {
+          "tk": "v"
+        }
+      },
+      "cost_usd": 0.0123,
+      "usage_meta": {
+        "service_tier": "standard",
+        "speed": "fast",
+        "server_tool_use": {
+          "web_search_requests": 2
+        }
+      },
+      "cache": {
+        "mode": "explicit",
+        "breakpoints": [
+          {
+            "block_id": "blk_bp",
+            "ttl": "5m"
+          }
+        ],
+        "ttl": "5m"
+      },
+      "excluded_by": [
+        "evt_1"
+      ],
+      "ext": {
+        "env_x": {
+          "nested": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "reasoning": {
+        "text": "thinking...",
+        "summary": [
+          "step 1",
+          "step 2"
+        ],
+        "encrypted": "OPAQUE==",
+        "signature": "sig_abc",
+        "redacted": true,
+        "replay_scope": "same_model_only",
+        "ext": {
+          "rsb": "q"
+        }
+      }
+    }
+  ],
+  "ext": {
+    "doc_x": 1
+  }
+}
