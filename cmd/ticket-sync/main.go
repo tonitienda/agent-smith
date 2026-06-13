@@ -151,37 +151,29 @@ func selectChangedSince(since time.Duration) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	cutoff := time.Now().Add(-since)
-	var out []string
-	for _, f := range matches {
-		recent, err := committedAfter(f, cutoff)
-		if err != nil {
-			return nil, err
-		}
-		if recent || !isLinked(f) {
-			out = append(out, f)
-		}
-	}
-	sort.Strings(out)
-	return out, nil
-}
 
-// committedAfter reports whether the most recent commit touching path is at or
-// after cutoff. A file with no commit history (newly added, not yet committed)
-// counts as recent.
-func committedAfter(path string, cutoff time.Time) (bool, error) {
-	out, err := git("log", "-1", "--format=%ct", "--", path)
+	// One git log over the whole tickets dir, rather than one per file, so the
+	// cost is a single process no matter how many tickets exist.
+	cutoff := time.Now().Add(-since).Format(time.RFC3339)
+	out, err := git("log", "--name-only", "--format=", "--since="+cutoff, "--", ticketsDir)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if out == "" {
-		return true, nil
+	recent := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if p := strings.TrimSpace(line); p != "" {
+			recent[filepath.Clean(p)] = true
+		}
 	}
-	secs, err := strconv.ParseInt(out, 10, 64)
-	if err != nil {
-		return false, fmt.Errorf("parsing commit time for %s: %w", path, err)
+
+	var selected []string
+	for _, f := range matches {
+		if recent[filepath.Clean(f)] || !isLinked(f) {
+			selected = append(selected, f)
+		}
 	}
-	return !time.Unix(secs, 0).Before(cutoff), nil
+	sort.Strings(selected)
+	return selected, nil
 }
 
 // isLinked reports whether the file already records a numeric github_issue.
