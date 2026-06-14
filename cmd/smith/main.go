@@ -43,7 +43,13 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
 	}
 
-	return printUsage(out)
+	// No flags: launch the interactive chat face when attached to a terminal.
+	// Off a TTY (scripts, CI, `make test`) fall back to usage so the binary stays
+	// well-behaved in non-interactive contexts.
+	if !interactiveTerminal() {
+		return printUsage(out)
+	}
+	return startChat()
 }
 
 func printUsage(out io.Writer) error {
@@ -51,9 +57,11 @@ func printUsage(out io.Writer) error {
 		"Agent Smith is a provider-agnostic coding agent harness.",
 		"",
 		"Usage:",
-		"  smith [--version]",
+		"  smith            start an interactive chat session (requires a terminal)",
+		"  smith --version  print version and exit",
+		"  smith --help     print this help and exit",
 		"",
-		"Implementation status: scaffold only; agent runtime lands in later tickets.",
+		"Set ANTHROPIC_API_KEY to talk to the Anthropic provider.",
 	}
 	for _, line := range lines {
 		if _, err := fmt.Fprintln(out, line); err != nil {
