@@ -29,7 +29,7 @@ func (f *fakeRunner) Run(_ context.Context, text string) (loop.Result, error) {
 func newTestModel(t *testing.T, runner Runner) model {
 	t.Helper()
 	m := newModel(runner, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123"},
-		make(chan loop.UIEvent), nil)
+		make(chan loop.UIEvent), nil, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
 

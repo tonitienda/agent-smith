@@ -19,7 +19,8 @@ const (
 	segAssistant
 	segReasoning
 	segTool
-	segNotice // a cancellation/info line
+	segCommand // inline slash-command output
+	segNotice  // a cancellation/info line
 	segError
 )
 
@@ -180,6 +181,14 @@ func (m *model) renderSegment(s *segment) string {
 		}
 		return style.Render(fmt.Sprintf("%s %s", icon, name))
 
+	case segCommand:
+		body := strings.TrimRight(s.text, "\n")
+		header := commandLabelStyle.Render("/" + s.toolName)
+		if body == "" {
+			return header
+		}
+		return header + "\n" + body
+
 	case segNotice:
 		return dimStyle.Render("— " + s.text + " —")
 
@@ -197,6 +206,7 @@ var (
 	assistantLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
 	reasoningLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8"))
 	toolLabelStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
+	commandLabelStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
 	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	dimStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	statusBarStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8"))

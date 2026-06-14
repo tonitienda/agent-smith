@@ -42,7 +42,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-019](AS-019-parallel-tool-execution.md) | Parallel tool execution | loop | done | 018 |
 | [AS-020](AS-020-cost-accounting.md) | Token & cost accounting + `/cost` | cost | ready | 009, 010, 022 |
 | [AS-021](AS-021-tui-skeleton.md) | TUI skeleton (streaming chat) | tui | done | 018 |
-| [AS-022](AS-022-slash-command-framework.md) | Slash-command framework + palette | commands | ready | 021 |
+| [AS-022](AS-022-slash-command-framework.md) | Slash-command framework + palette | commands | done | 021 |
 | [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | ready | 007, 008, 022 |
 | [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | ready | 006, 020, 021 |
