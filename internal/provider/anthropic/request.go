@@ -101,7 +101,7 @@ type wireThinking struct {
 // grouped into role-alternating messages. Cache breakpoints (req.Cache) attach
 // cache_control to the matching block by its schema ID.
 func buildWireRequest(req provider.Request, defaultMaxTokens int) (*wireRequest, error) {
-	breakpoints := breakpointSet(req.Cache)
+	breakpoints := breakpointSet(req.Cache, req.Context)
 
 	maxTokens := req.Params.MaxTokens
 	if maxTokens <= 0 {
@@ -363,17 +363,66 @@ func buildTools(defs []provider.ToolDef) ([]wireTool, error) {
 
 // breakpointSet indexes the request's cache breakpoints by block ID, mapping to
 // the breakpoint's TTL (possibly ""). It returns nil when there are none.
-func breakpointSet(hints provider.CacheHints) map[string]string {
-	if len(hints.Breakpoints) == 0 {
+//
+// Placement follows the CacheHints contract (cache-aware assembly, AS-011):
+// caching is on by default. Explicit Breakpoints take over placement; otherwise
+// the adapter auto-places sensible breakpoints over ctx (autoBreakpoints);
+// hints.Disabled opts out entirely.
+func breakpointSet(hints provider.CacheHints, ctx []schema.Block) map[string]string {
+	if hints.Disabled {
 		return nil
 	}
-	m := make(map[string]string, len(hints.Breakpoints))
-	for _, bp := range hints.Breakpoints {
+	bps := hints.Breakpoints
+	if len(bps) == 0 {
+		bps = autoBreakpoints(ctx)
+	}
+	if len(bps) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(bps))
+	for _, bp := range bps {
 		if bp.BlockID != "" {
 			m[bp.BlockID] = bp.TTL
 		}
 	}
 	return m
+}
+
+// autoBreakpoints chooses sensible default cache breakpoints for ctx when the
+// caller supplies none. Anthropic caches the prefix up to and including each
+// breakpoint (in tools → system → messages order), so two breakpoints cover the
+// two prefixes that recur turn to turn:
+//
+//   - the last system block, which caches the stable tools + system prefix; and
+//   - the last block overall, which caches the whole conversation prefix.
+//
+// Because the log is append-only and the projection preserves block order
+// (prefix stability, see internal/projection), the breakpoint placed on this
+// turn's final block makes that exact prefix a cache read on the next turn,
+// while the new tail is written — the standard incremental-conversation pattern.
+// Anthropic ignores cache_control on a prefix shorter than its minimum cacheable
+// size, so a tiny context simply no-ops. Returns nil when ctx has no block that
+// can carry a breakpoint.
+func autoBreakpoints(ctx []schema.Block) []schema.CacheBreakpoint {
+	lastSystem, lastBlock := "", ""
+	for i := range ctx {
+		id := ctx[i].ID
+		if id == "" {
+			continue
+		}
+		lastBlock = id
+		if ctx[i].Role == schema.RoleSystem {
+			lastSystem = id
+		}
+	}
+	var bps []schema.CacheBreakpoint
+	if lastSystem != "" {
+		bps = append(bps, schema.CacheBreakpoint{BlockID: lastSystem})
+	}
+	if lastBlock != "" && lastBlock != lastSystem {
+		bps = append(bps, schema.CacheBreakpoint{BlockID: lastBlock})
+	}
+	return bps
 }
 
 // cacheControlFor returns the cache_control marker for a block when a breakpoint

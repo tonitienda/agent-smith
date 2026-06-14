@@ -73,6 +73,61 @@ func TestNoEditEqualsRawConversation(t *testing.T) {
 	}
 }
 
+// blockJSON serializes b for byte-level prefix comparisons.
+func blockJSON(t *testing.T, b schema.Block) string {
+	t.Helper()
+	out, err := json.Marshal(b)
+	if err != nil {
+		t.Fatalf("marshal %s: %v", b.ID, err)
+	}
+	return string(out)
+}
+
+// TestLivePrefixStableAcrossAppend is the AS-011 prefix-stability invariant:
+// appending a turn leaves every earlier live block byte-identical, so an
+// unchanged prefix keeps hitting the provider cache.
+func TestLivePrefixStableAcrossAppend(t *testing.T) {
+	l := eventlog.New()
+	for _, b := range []schema.Block{text("a", "1"), text("b", "2")} {
+		mustAppend(t, l, b)
+	}
+	before := Project(l.Events(), Options{}).Live()
+
+	mustAppend(t, l, text("c", "3"))
+	after := Project(l.Events(), Options{}).Live()
+
+	if len(after) <= len(before) {
+		t.Fatalf("append did not grow the projection: before=%d after=%d", len(before), len(after))
+	}
+	for i := range before {
+		if blockJSON(t, before[i]) != blockJSON(t, after[i]) {
+			t.Errorf("live block %d changed after append; prefix not stable", i)
+		}
+	}
+}
+
+// TestLivePrefixStableBeforeExclusion: a mid-session exclusion drops one block
+// but leaves the blocks before it byte-identical, so the cache is invalidated
+// only from the first changed block onward, never the whole prefix (AC #3).
+func TestLivePrefixStableBeforeExclusion(t *testing.T) {
+	l := eventlog.New()
+	for _, b := range []schema.Block{text("a", "1"), text("b", "2"), text("c", "3")} {
+		mustAppend(t, l, b)
+	}
+	before := Project(l.Events(), Options{}).Live()
+
+	mustAppend(t, l, eventlog.NewExclusion("/clean", "b"))
+	after := Project(l.Events(), Options{}).Live()
+
+	if ids := liveIDs(Project(l.Events(), Options{})); !eq(ids, []string{"a", "c"}) {
+		t.Fatalf("after exclusion live = %v, want [a c]", ids)
+	}
+	// "a" precedes the excluded "b": it must be untouched in both content and order.
+	if blockJSON(t, before[0]) != blockJSON(t, after[0]) {
+		t.Error("block before the excluded one changed; cache prefix should be intact")
+	}
+}
+
 // TestExclusionRemovesFromProjectionOnly: excluding a block drops it from the
 // projection but leaves the log untouched (AC #2).
 func TestExclusionRemovesFromProjectionOnly(t *testing.T) {

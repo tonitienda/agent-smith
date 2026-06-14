@@ -129,11 +129,22 @@ type ReasoningOpts struct {
 // CacheHints tells the cache-aware assembler (AS-011) how to cache this request
 // (union §9). Explicit-breakpoint providers (Anthropic) place breakpoints at the
 // named blocks; automatic-cache providers (OpenAI, Grok) ignore breakpoints and
-// simply observe cached-token counts in usage. The zero value defers to the
-// adapter's default for its vendor.
+// simply observe cached-token counts in usage.
+//
+// The zero value defers to the adapter's default for its vendor: an
+// explicit-breakpoint adapter places sensible breakpoints itself (the stable
+// system/tools prefix and the conversation prefix) so caching is on by default
+// without the caller computing breakpoints per turn. Provide Breakpoints to take
+// over that placement, or set Disabled to opt out of caching entirely.
 type CacheHints struct {
 	Mode        string                   `json:"mode,omitempty"` // schema.CacheModeExplicit|CacheModeAutomatic
 	Breakpoints []schema.CacheBreakpoint `json:"breakpoints,omitempty"`
+
+	// Disabled turns prompt caching off for the request. The zero value (false)
+	// leaves caching on: the adapter applies its vendor default placement unless
+	// Breakpoints overrides it. Set it when caching is undesirable (e.g. a
+	// one-shot turn whose prefix will never recur).
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // Stream is a normalized, forward-only stream of Events for one model turn. It

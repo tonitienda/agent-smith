@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,5 +97,62 @@ func TestLiveAgenticTurn(t *testing.T) {
 	t.Logf("turn 2: stop=%s blocks=%d", turn2.stopReason, len(turn2.blocks))
 	if turn2.stopReason != provider.StopEndTurn {
 		t.Errorf("turn 2 stop = %q, want end_turn", turn2.stopReason)
+	}
+}
+
+// TestLiveCacheHits is the AS-011 cache smoke test against the real Anthropic
+// API. It sends the same large, stable prefix on two turns with default cache
+// hints (the adapter auto-places breakpoints); turn 1 should write the cache and
+// turn 2 should read it back. Gated on SMITH_LIVE_ANTHROPIC like the turn test.
+//
+//	SMITH_LIVE_ANTHROPIC=1 ANTHROPIC_API_KEY=sk-... \
+//	  go test ./internal/provider/anthropic -run TestLiveCacheHits -v
+func TestLiveCacheHits(t *testing.T) {
+	if os.Getenv("SMITH_LIVE_ANTHROPIC") != "1" {
+		t.Skip("set SMITH_LIVE_ANTHROPIC=1 (and ANTHROPIC_API_KEY) to run the live cache smoke test")
+	}
+	if os.Getenv("ANTHROPIC_API_KEY") == "" {
+		t.Skip("ANTHROPIC_API_KEY not set")
+	}
+
+	model := os.Getenv("SMITH_LIVE_ANTHROPIC_MODEL")
+	if model == "" {
+		model = "claude-haiku-4-5-20251001"
+	}
+	p := New("")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// A system prefix large enough to clear Anthropic's minimum cacheable size
+	// (Haiku needs ~2048 tokens), so the breakpoint is honored rather than ignored.
+	bigSystem := "You are a careful assistant. " + strings.Repeat(
+		"Always answer concisely and cite the relevant guideline number. ", 400)
+	prefix := []schema.Block{
+		{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: bigSystem}},
+		{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "Say hi in one word."}},
+	}
+	mk := func() provider.Request {
+		return provider.Request{Model: model, Params: provider.SamplingParams{MaxTokens: 64}, Context: prefix}
+	}
+
+	s1, err := p.Stream(ctx, mk())
+	if err != nil {
+		t.Fatalf("turn 1 Stream: %v", err)
+	}
+	turn1 := assemble(t, s1)
+	t.Logf("turn 1: cache_write=%v cache_read=%v", turn1.usage.CacheWrite, turn1.usage.CacheRead)
+	if turn1.usage.CacheWrite == nil || *turn1.usage.CacheWrite == 0 {
+		t.Error("turn 1 wrote nothing to cache; auto-placed breakpoint may have been ignored")
+	}
+
+	s2, err := p.Stream(ctx, mk())
+	if err != nil {
+		t.Fatalf("turn 2 Stream: %v", err)
+	}
+	turn2 := assemble(t, s2)
+	t.Logf("turn 2: cache_write=%v cache_read=%v", turn2.usage.CacheWrite, turn2.usage.CacheRead)
+	if turn2.usage.CacheRead == nil || *turn2.usage.CacheRead == 0 {
+		t.Error("turn 2 reported no cache read; the unchanged prefix did not hit the cache")
 	}
 }

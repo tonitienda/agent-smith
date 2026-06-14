@@ -194,6 +194,18 @@ func droppedByReplay(b schema.Block, opts Options) bool {
 // Live returns the ordered, model-facing context: a copy of each live block in
 // append order, ready for provider request assembly. The slice is freshly
 // allocated; the blocks share the log's pointer fields and are read-only.
+//
+// Prefix-stability invariant (AS-011): live blocks are emitted in append order
+// and blocks are immutable once logged, so for two projections of the same
+// growing session the live sequence of one is a prefix of the other up to the
+// first divergence. An exclusion drops a block but never reorders or mutates the
+// blocks before it, so everything ahead of the first changed block is byte-for-byte
+// identical across turns. This is what makes provider prompt caching pay off:
+// adapters serialize this order deterministically, so an unchanged prefix stays
+// byte-identical turn to turn and keeps hitting the cache, and a mid-session edit
+// only invalidates the cache from the first changed block onward — never the
+// whole prefix. Anything that consumes Live() for a cached request must preserve
+// that ordering and serialize deterministically.
 func (p *Projection) Live() []schema.Block {
 	out := make([]schema.Block, 0, p.liveLen)
 	for _, b := range p.blocks {
