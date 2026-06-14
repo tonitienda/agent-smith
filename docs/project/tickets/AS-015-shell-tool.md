@@ -1,7 +1,7 @@
 ---
 id: AS-015
 title: Shell tool (command execution, gated by permissions)
-status: ready-to-implement
+status: done
 github_issue: 15
 depends_on: [AS-013, AS-016]
 area: tools
@@ -11,7 +11,7 @@ source: PRD.md §7.2, D9
 
 # AS-015 · Shell tool
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -25,10 +25,10 @@ Shell execution for the agentic loop (§7.2). Per D9, V1 ships **no OS-level san
 
 ## Acceptance criteria
 
-- [ ] Commands run, stream/capture output, and append `tool_result` blocks with exit codes.
-- [ ] A command exceeding the timeout is killed and reported as such to the model.
-- [ ] In `ask` mode, nothing executes before user approval; denial is reported to the model as feedback, not an error crash.
-- [ ] Output beyond the cap is truncated with an explicit marker.
+- [x] Commands run, stream/capture output, and append `tool_result` blocks with exit codes.
+- [x] A command exceeding the timeout is killed and reported as such to the model.
+- [x] In `ask` mode, nothing executes before user approval; denial is reported to the model as feedback, not an error crash.
+- [x] Output beyond the cap is truncated with an explicit marker.
 
 ## Dependencies
 
