@@ -34,7 +34,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-011](AS-011-prompt-caching.md) | Prompt caching + cache-aware assembly | provider | ready | 009, 010, 006 |
 | [AS-012](AS-012-provider-conformance-suite.md) | Provider conformance test suite | provider | ready | 009, 010 |
 | [AS-013](AS-013-tool-runtime.md) | Tool runtime framework | tools | done | 005 |
-| [AS-014](AS-014-file-and-search-tools.md) | File & search tools (read/write/edit/glob/grep) | tools | ready | 013 |
+| [AS-014](AS-014-file-and-search-tools.md) | File & search tools (read/write/edit/glob/grep) | tools | done | 013 |
 | [AS-015](AS-015-shell-tool.md) | Shell tool | tools | ready | 013, 016 |
 | [AS-016](AS-016-permission-model.md) | Permission model + security posture doc | security | ready | 013 |
 | [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | **needs clarification** | 001 |

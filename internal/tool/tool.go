@@ -79,10 +79,20 @@ func (d Def) ProviderDef() provider.ToolDef {
 // when Parts is non-empty it is used and Text is ignored. IsError marks a
 // domain-level failure the model should see (e.g. "file not found"), as opposed
 // to an infrastructure error returned from Run.
+//
+// FileRead, when set, asks the Runtime to also append a dedicated file_read
+// block (schema §6.4) carrying the read content, ahead of the tool_result. This
+// is how the read tool (AS-014) records file content as a first-class file_read
+// block — the block type exists so /context can attribute window cost to files
+// and dedupe re-reads (PRD D3) — while the tool_result it is paired with stays a
+// minimal loop-closer for the providers that require one per tool call. The
+// Runtime fills in the block's provenance, attribution, ProducedBy, and Source;
+// a tool need only supply the path, range, content, and hash.
 type Output struct {
-	Text    string
-	Parts   []schema.Part
-	IsError bool
+	Text     string
+	Parts    []schema.Part
+	IsError  bool
+	FileRead *schema.FileReadBody
 }
 
 // parts returns the effective result content: Parts when set, otherwise a single

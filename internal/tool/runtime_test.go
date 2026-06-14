@@ -392,6 +392,65 @@ func TestExecuteIdempotentWithPreloggedCall(t *testing.T) {
 	}
 }
 
+// fileReadTool returns a fixed file_read body, exercising the Runtime's
+// file_read emission path independently of the concrete read tool (AS-014).
+func fileReadTool(name, content string) Tool {
+	return Func{
+		Spec: Def{Name: name},
+		Fn: func(context.Context, json.RawMessage) (Output, error) {
+			return Output{FileRead: &schema.FileReadBody{Path: "a.txt", Content: content}}, nil
+		},
+	}
+}
+
+func TestExecuteEmitsFileReadBlock(t *testing.T) {
+	rt, log := newTestRuntime(t, fileReadTool("read", "hello"))
+	call := callBlock("read", `{}`)
+	if _, err := rt.Execute(context.Background(), call); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	var fr *schema.Block
+	results := 0
+	for i, b := range log.Events() {
+		switch b.Kind {
+		case schema.KindFileRead:
+			fr = &log.Events()[i]
+		case schema.KindToolResult:
+			results++
+		}
+	}
+	if fr == nil {
+		t.Fatal("no file_read block recorded")
+	}
+	if results != 1 {
+		t.Fatalf("want 1 tool_result loop-closer, got %d", results)
+	}
+	if fr.FileRead.Content != "hello" || fr.FileRead.ProducedBy != "tu_read" || fr.FileRead.Source != "tool" {
+		t.Fatalf("file_read body = %+v", fr.FileRead)
+	}
+	if fr.Provenance == nil || len(fr.Provenance.DerivedFrom) != 1 || fr.Provenance.DerivedFrom[0] != call.ID {
+		t.Fatalf("file_read not linked to its call: %+v", fr.Provenance)
+	}
+}
+
+func TestExecuteTruncatesFileReadContent(t *testing.T) {
+	rt, log := newTestRuntime(t, fileReadTool("read", strings.Repeat("x", 1000)))
+	rt.maxBytes = 100
+	if _, err := rt.Execute(context.Background(), callBlock("read", `{}`)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	for _, b := range log.Events() {
+		if b.Kind == schema.KindFileRead {
+			if !strings.Contains(b.FileRead.Content, "[output truncated") {
+				t.Fatalf("file_read content not truncated: %q", b.FileRead.Content)
+			}
+			return
+		}
+	}
+	t.Fatal("no file_read block recorded")
+}
+
 var errBoom = boomError{}
 
 type boomError struct{}

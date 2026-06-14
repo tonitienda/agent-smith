@@ -1,7 +1,7 @@
 ---
 id: AS-014
 title: "Core tools: file read / write / edit, glob, grep"
-status: ready-to-implement
+status: done
 github_issue: 14
 depends_on: [AS-013]
 area: tools
@@ -11,7 +11,13 @@ source: PRD.md §7.2, D6
 
 # AS-014 · Core tools: file read/write/edit, glob, grep
 
-**Status: ready to implement**
+**Status: done** — implemented in `internal/tool/builtin` (`builtin.NewFS(root).Tools()`).
+`grep` is pure Go (`regexp` + a filesystem walk), no ripgrep dependency, keeping the
+binary self-contained (stdlib-only, per repo conventions). `read` records its content as a
+`file_read` block via a new `tool.Output.FileRead` field that the runtime turns into a
+first-class `file_read` block ahead of the loop-closing `tool_result` (PRD D3). Path
+escapes are rejected lexically; symlink traversal out of the root is a documented V1 limit
+deferred to AS-016's security posture doc.
 
 ## Description
 
@@ -26,10 +32,10 @@ The minimum tool set for a credible coding agent (§7.2, D6 "file/shell tools").
 
 ## Acceptance criteria
 
-- [ ] Each tool has unit tests covering success, not-found, and permission-denied paths.
-- [ ] `edit` fails loudly on ambiguous (non-unique) matches.
-- [ ] Re-reading the same file produces a new `file_read` block (duplicate reads must stay visible — `/context` highlights them later, §7.11).
-- [ ] Reads of huge files truncate with an explicit marker instead of flooding the window.
+- [x] Each tool has unit tests covering success, not-found, and permission-denied paths.
+- [x] `edit` fails loudly on ambiguous (non-unique) matches.
+- [x] Re-reading the same file produces a new `file_read` block (duplicate reads must stay visible — `/context` highlights them later, §7.11).
+- [x] Reads of huge files truncate with an explicit marker instead of flooding the window.
 
 ## Dependencies
 
