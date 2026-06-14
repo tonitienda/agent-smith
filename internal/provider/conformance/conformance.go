@@ -295,6 +295,9 @@ func Check(t *testing.T, p provider.Provider, c Case) {
 
 	if c.WantErr.Kind != "" {
 		if err == nil {
+			if s == nil {
+				t.Fatalf("provider returned (nil, nil); want a *provider.Error of kind %q", c.WantErr.Kind)
+			}
 			// Some adapters surface the failure mid-stream rather than at open;
 			// drain to reach the terminating error.
 			_, err = provider.Collect(s)

@@ -70,7 +70,9 @@ func RecordingTransport(next http.RoundTripper, path string) http.RoundTripper {
 // recordedHeaders are the response headers preserved in a fixture. Only the
 // fields that affect normalization are kept (content type, and the retry timing
 // the error taxonomy reads); everything else (auth echoes, request ids, cookies)
-// is dropped so fixtures stay small and carry no secrets.
+// is dropped so fixtures stay small and carry no secrets. Date is kept only for
+// error responses (it backs skew-immune Retry-After date parsing); on a success
+// response it is pure noise that would churn the fixture on every re-record.
 var recordedHeaders = []string{"Content-Type", "Retry-After", "Date"}
 
 // writeFixture serializes a captured response to a raw HTTP/1.1 fixture: the
@@ -84,6 +86,9 @@ func writeFixture(path string, resp *http.Response, body []byte) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "HTTP/1.1 %d %s\r\n", resp.StatusCode, http.StatusText(resp.StatusCode))
 	for _, h := range recordedHeaders {
+		if h == "Date" && resp.StatusCode/100 == 2 {
+			continue // Date is noise on a success response; only kept for error retry timing.
+		}
 		if v := resp.Header.Get(h); v != "" {
 			fmt.Fprintf(&buf, "%s: %s\r\n", h, v)
 		}
