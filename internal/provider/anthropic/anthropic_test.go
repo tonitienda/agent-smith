@@ -155,6 +155,162 @@ func TestBuildWireRequestCacheBreakpointOnImagePart(t *testing.T) {
 	}
 }
 
+func TestBuildWireRequestAutoCacheBreakpoints(t *testing.T) {
+	// No explicit breakpoints: the adapter auto-places them on the last system
+	// block (caches tools+system) and the last context block (caches the
+	// conversation prefix), leaving interior blocks unmarked.
+	req := provider.Request{
+		Model: "m",
+		Context: []schema.Block{
+			{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "be terse"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}},
+			{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "hello"}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	if len(w.System) != 1 || w.System[0].CacheControl == nil || w.System[0].CacheControl.Type != "ephemeral" {
+		t.Errorf("system cache_control = %+v, want ephemeral on last system block", w.System)
+	}
+	// u1 is interior — no breakpoint.
+	if u1 := w.Messages[0].Content[0].(wireText); u1.CacheControl != nil {
+		t.Errorf("interior user block cache_control = %+v, want nil", u1.CacheControl)
+	}
+	// a1 is the last block — breakpoint.
+	if a1 := w.Messages[1].Content[0].(wireText); a1.CacheControl == nil {
+		t.Errorf("last block cache_control = nil, want ephemeral")
+	}
+}
+
+func TestBuildWireRequestAutoCacheAnchorsPreviousTurn(t *testing.T) {
+	// A second turn (trailing user message after a completed assistant turn):
+	// the adapter anchors the previous turn's boundary (last assistant block) so
+	// the conversation prefix is a cache read, plus the system and trailing-block
+	// breakpoints. The interior user block u1 stays unmarked.
+	req := provider.Request{
+		Model: "m",
+		Context: []schema.Block{
+			{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "be terse"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}},
+			{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "hello"}},
+			{ID: "u2", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "more"}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	if w.System[0].CacheControl == nil {
+		t.Error("system cache_control = nil, want ephemeral")
+	}
+	// Messages: user(hi), assistant(hello), user(more).
+	if u1 := w.Messages[0].Content[0].(wireText); u1.CacheControl != nil {
+		t.Errorf("interior user u1 cache_control = %+v, want nil", u1.CacheControl)
+	}
+	if a1 := w.Messages[1].Content[0].(wireText); a1.CacheControl == nil {
+		t.Error("last assistant block a1 cache_control = nil, want ephemeral (previous-turn anchor)")
+	}
+	if u2 := w.Messages[2].Content[0].(wireText); u2.CacheControl == nil {
+		t.Error("trailing block u2 cache_control = nil, want ephemeral")
+	}
+}
+
+func TestBuildWireRequestAutoCacheSkipsNonCacheableBlocks(t *testing.T) {
+	// The last assistant block and the trailing block are both reasoning blocks,
+	// which render without cache_control. Anchoring must fall back to the last
+	// cacheable block (the assistant text a1), not the reasoning blocks.
+	req := provider.Request{
+		Model: "m",
+		Context: []schema.Block{
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "q"}},
+			{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "answer"}},
+			{ID: "r1", Kind: schema.KindReasoning, Role: schema.RoleAssistant, Reasoning: &schema.ReasoningBody{Text: "thinking"}},
+		},
+	}
+	bps := autoBreakpoints(req.Context)
+	if len(bps) != 1 || bps[0].BlockID != "a1" {
+		t.Fatalf("autoBreakpoints = %+v, want a single breakpoint on a1 (reasoning blocks skipped)", bps)
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	// Assistant message merges a1 (text) and r1 (thinking); only a1 carries cc.
+	asst := w.Messages[1].Content
+	if a1 := asst[0].(wireText); a1.CacheControl == nil {
+		t.Error("assistant text a1 cache_control = nil, want ephemeral")
+	}
+}
+
+func TestBuildWireRequestCacheDisabled(t *testing.T) {
+	req := provider.Request{
+		Model: "m",
+		Cache: provider.CacheHints{Disabled: true},
+		Context: []schema.Block{
+			{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "be terse"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	if w.System[0].CacheControl != nil {
+		t.Errorf("system cache_control = %+v, want nil when caching disabled", w.System[0].CacheControl)
+	}
+	if u1 := w.Messages[0].Content[0].(wireText); u1.CacheControl != nil {
+		t.Errorf("user cache_control = %+v, want nil when caching disabled", u1.CacheControl)
+	}
+}
+
+// TestBuildWireRequestPrefixStableAcrossTurns is the AS-011 prefix-stability
+// check at the wire layer: appending a block to an unchanged context leaves the
+// serialized content of the earlier messages byte-identical, so an unchanged
+// prefix keeps hitting the cache. Caching is disabled here to compare pure
+// content (the moving auto-breakpoint marker is the cache strategy, not content).
+func TestBuildWireRequestPrefixStableAcrossTurns(t *testing.T) {
+	turn1 := []schema.Block{
+		{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "be terse"}},
+		{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}},
+		{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "hello"}},
+	}
+	turn2 := append(append([]schema.Block{}, turn1...),
+		schema.Block{ID: "u2", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "bye"}})
+
+	w1 := mustBuild(t, provider.Request{Model: "m", Cache: provider.CacheHints{Disabled: true}, Context: turn1})
+	w2 := mustBuild(t, provider.Request{Model: "m", Cache: provider.CacheHints{Disabled: true}, Context: turn2})
+
+	if string(mustJSON(t, w1.System)) != string(mustJSON(t, w2.System)) {
+		t.Error("system prefix changed across turns, breaks cache reuse")
+	}
+	// turn2 adds a trailing user message; the shared leading messages must match.
+	for i := range w1.Messages {
+		if string(mustJSON(t, w1.Messages[i])) != string(mustJSON(t, w2.Messages[i])) {
+			t.Errorf("message[%d] changed across turns, breaks cache reuse", i)
+		}
+	}
+}
+
+func mustBuild(t *testing.T, req provider.Request) *wireRequest {
+	t.Helper()
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	return w
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return b
+}
+
 func TestBuildWireRequestReasoningRoundTrip(t *testing.T) {
 	req := provider.Request{
 		Model: "m",

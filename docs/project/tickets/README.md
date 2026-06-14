@@ -31,7 +31,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-008](AS-008-provider-interface.md) | Provider abstraction interface | provider | done | 002, 003 |
 | [AS-009](AS-009-anthropic-provider.md) | Anthropic provider | provider | done | 008 |
 | [AS-010](AS-010-openai-provider.md) | OpenAI provider (+ compatible endpoints) | provider | done | 008 |
-| [AS-011](AS-011-prompt-caching.md) | Prompt caching + cache-aware assembly | provider | ready | 009, 010, 006 |
+| [AS-011](AS-011-prompt-caching.md) | Prompt caching + cache-aware assembly | provider | done | 009, 010, 006 |
 | [AS-012](AS-012-provider-conformance-suite.md) | Provider conformance test suite | provider | done | 009, 010 |
 | [AS-013](AS-013-tool-runtime.md) | Tool runtime framework | tools | done | 005 |
 | [AS-014](AS-014-file-and-search-tools.md) | File & search tools (read/write/edit/glob/grep) | tools | done | 013 |

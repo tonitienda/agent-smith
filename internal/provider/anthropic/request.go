@@ -101,7 +101,7 @@ type wireThinking struct {
 // grouped into role-alternating messages. Cache breakpoints (req.Cache) attach
 // cache_control to the matching block by its schema ID.
 func buildWireRequest(req provider.Request, defaultMaxTokens int) (*wireRequest, error) {
-	breakpoints := breakpointSet(req.Cache)
+	breakpoints := breakpointSet(req.Cache, req.Context)
 
 	maxTokens := req.Params.MaxTokens
 	if maxTokens <= 0 {
@@ -363,17 +363,105 @@ func buildTools(defs []provider.ToolDef) ([]wireTool, error) {
 
 // breakpointSet indexes the request's cache breakpoints by block ID, mapping to
 // the breakpoint's TTL (possibly ""). It returns nil when there are none.
-func breakpointSet(hints provider.CacheHints) map[string]string {
-	if len(hints.Breakpoints) == 0 {
+//
+// Placement follows the CacheHints contract (cache-aware assembly, AS-011):
+// caching is on by default. Explicit Breakpoints take over placement; otherwise
+// the adapter auto-places sensible breakpoints over ctx (autoBreakpoints);
+// hints.Disabled opts out entirely.
+func breakpointSet(hints provider.CacheHints, ctx []schema.Block) map[string]string {
+	if hints.Disabled {
 		return nil
 	}
-	m := make(map[string]string, len(hints.Breakpoints))
-	for _, bp := range hints.Breakpoints {
+	bps := hints.Breakpoints
+	if len(bps) == 0 {
+		bps = autoBreakpoints(ctx)
+	}
+	if len(bps) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(bps))
+	for _, bp := range bps {
 		if bp.BlockID != "" {
 			m[bp.BlockID] = bp.TTL
 		}
 	}
 	return m
+}
+
+// autoBreakpoints chooses sensible default cache breakpoints for ctx when the
+// caller supplies none. Anthropic caches the prefix up to and including each
+// breakpoint (in tools → system → messages order) and reads a prior cache only
+// where a breakpoint lands on the same position, so we mark the three prefixes
+// that recur turn to turn (well under Anthropic's limit of 4):
+//
+//   - the last system block, which caches the stable tools + system prefix;
+//   - the last assistant block, which anchors the previous turn's boundary; and
+//   - the last block overall, which caches the whole conversation prefix.
+//
+// The last-assistant anchor is what makes incremental multi-turn caching
+// reliable: turn N+1 appends new blocks, so its trailing breakpoint moves to the
+// new last block, but the previous turn ended at the last assistant block — a
+// stable interior position this turn. Marking it guarantees a cache read of the
+// conversation history rather than relying on Anthropic's limited look-back from
+// the trailing breakpoint. The append-only log and order-preserving projection
+// (prefix stability, see internal/projection) keep that prefix byte-identical,
+// so this turn's tail is written and next turn reads it. Anthropic ignores
+// cache_control on a prefix shorter than its minimum cacheable size, so a tiny
+// context simply no-ops. Returns nil when ctx has no block that can carry a
+// breakpoint.
+//
+// Only blocks that actually render with a cache_control marker in this adapter
+// are considered (canCacheControl): a reasoning or derived block renders without
+// one, so anchoring on it would silently lose the breakpoint — the selection
+// falls back to the last cacheable block instead.
+func autoBreakpoints(ctx []schema.Block) []schema.CacheBreakpoint {
+	lastSystem, lastAssistant, lastBlock := "", "", ""
+	for i := range ctx {
+		b := &ctx[i]
+		if b.ID == "" || !canCacheControl(b) {
+			continue
+		}
+		lastBlock = b.ID
+		switch b.Role {
+		case schema.RoleSystem:
+			lastSystem = b.ID
+		case schema.RoleAssistant:
+			lastAssistant = b.ID
+		}
+	}
+	var bps []schema.CacheBreakpoint
+	seen := map[string]bool{}
+	add := func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		bps = append(bps, schema.CacheBreakpoint{BlockID: id})
+	}
+	// Dedup by ID so the trailing block still gets a breakpoint when it coincides
+	// with the last assistant block (a turn ending in assistant text), rather than
+	// being skipped by both guards.
+	add(lastSystem)
+	add(lastAssistant)
+	add(lastBlock)
+	return bps
+}
+
+// canCacheControl reports whether a block will render with a cache_control
+// marker in this adapter, mirroring contentFor / the system-block path: system
+// blocks always do, and among the rest only text, tool_call, tool_result, and
+// file_read carry the marker. Reasoning blocks and unknown/derived kinds render
+// without one, so they cannot anchor a cache breakpoint.
+func canCacheControl(b *schema.Block) bool {
+	if b.Role == schema.RoleSystem {
+		return true
+	}
+	switch b.Kind {
+	case schema.KindText, schema.KindToolCall, schema.KindToolResult, schema.KindFileRead:
+		return true
+	default:
+		return false
+	}
 }
 
 // cacheControlFor returns the cache_control marker for a block when a breakpoint
