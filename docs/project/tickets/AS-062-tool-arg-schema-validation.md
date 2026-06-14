@@ -2,7 +2,7 @@
 id: AS-062
 title: Fuller JSON-Schema validation for tool arguments
 status: ready-to-implement
-github_issue: null
+github_issue: 84
 depends_on: [AS-013]
 area: tools
 priority: P2
