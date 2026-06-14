@@ -1,7 +1,7 @@
 ---
 id: AS-018
 title: Agentic loop orchestrator
-status: ready-to-implement
+status: done
 github_issue: 18
 depends_on: [AS-006, AS-008, AS-013]
 area: loop
@@ -11,7 +11,8 @@ source: PRD.md §7.2, D6
 
 # AS-018 · Agentic loop orchestrator
 
-**Status: ready to implement**
+**Status: done** — implemented in `internal/loop` (`Engine`, the turn loop, and
+face-agnostic `UIEvent`s).
 
 ## Description
 
@@ -25,10 +26,10 @@ The core turn loop tying everything together: user message → projection → pr
 
 ## Acceptance criteria
 
-- [ ] End-to-end session works with the mock provider in tests: multi-turn, multi-tool, streaming.
-- [ ] Cancellation mid-stream and mid-tool leaves the log consistent (no orphaned call without a result or cancellation marker).
-- [ ] The loop package has zero TUI imports.
-- [ ] Max-iteration guard prevents runaway tool loops, surfaced as a clear stop reason.
+- [x] End-to-end session works with the mock provider in tests: multi-turn, multi-tool, streaming (`TestRunMultiTurnMultiTool`).
+- [x] Cancellation mid-stream and mid-tool leaves the log consistent (no orphaned call without a result or cancellation marker) (`TestCancelMidStreamLeavesConsistentLog`, `TestCancelMidToolLeavesConsistentLog`).
+- [x] The loop package has zero TUI imports (`TestLoopHasNoTUIImports` guard).
+- [x] Max-iteration guard prevents runaway tool loops, surfaced as a clear stop reason (`TestMaxIterationGuard`, `StopMaxIterations`).
 
 ## Dependencies
 

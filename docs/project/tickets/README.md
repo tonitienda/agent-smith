@@ -38,7 +38,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-015](AS-015-shell-tool.md) | Shell tool | tools | ready | 013, 016 |
 | [AS-016](AS-016-permission-model.md) | Permission model + security posture doc | security | done | 013 |
 | [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | **needs clarification** | 001 |
-| [AS-018](AS-018-agentic-loop.md) | Agentic loop orchestrator | loop | ready | 006, 008, 013 |
+| [AS-018](AS-018-agentic-loop.md) | Agentic loop orchestrator | loop | done | 006, 008, 013 |
 | [AS-019](AS-019-parallel-tool-execution.md) | Parallel tool execution | loop | ready | 018 |
 | [AS-020](AS-020-cost-accounting.md) | Token & cost accounting + `/cost` | cost | ready | 009, 010, 022 |
 | [AS-021](AS-021-tui-skeleton.md) | TUI skeleton (streaming chat) | tui | ready | 018 |
