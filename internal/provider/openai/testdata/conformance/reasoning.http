@@ -1,0 +1,20 @@
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+
+data: {"type":"response.created","response":{"id":"resp_reason","model":"gpt-5"}}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning"}}
+
+data: {"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"thinking "}
+
+data: {"type":"response.reasoning_summary_text.delta","output_index":0,"delta":"hard"}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","encrypted_content":"ENC"}}
+
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"message","role":"assistant"}}
+
+data: {"type":"response.output_text.delta","output_index":1,"delta":"4"}
+
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"message"}}
+
+data: {"type":"response.completed","response":{"id":"resp_reason","status":"completed","usage":{"input_tokens":3,"output_tokens":5}}}

@@ -12,7 +12,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT_BIN ?= .cache/tools/golangci-lint/$(GOLANGCI_LINT_VERSION)/golangci-lint
 
-.PHONY: build test vet lint lint-install fmt verify clean schema-guard schema-baseline
+.PHONY: build test vet lint lint-install fmt verify clean schema-guard schema-baseline record-fixtures
 
 build:
 	CGO_ENABLED=0 $(GO) build $(GOFLAGS) -trimpath -ldflags '$(LDFLAGS) -X github.com/tonitienda/agent-smith/internal/version.Version=$(VERSION) -X github.com/tonitienda/agent-smith/internal/version.Commit=$(COMMIT)' -o $(BINARY) ./cmd/smith
@@ -48,6 +48,16 @@ schema-guard:
 # change. See docs/schema/EVOLUTION.md.
 schema-baseline:
 	$(GO) run ./cmd/schema-guard -update
+
+# record-fixtures regenerates the provider conformance fixtures (AS-012) from
+# live API calls. It needs API keys and network, so it is never part of `make
+# test`/CI — the committed fixtures are what CI replays offline. After recording,
+# review the fixture diffs and reconcile any wire-format change with the
+# conformance.Want expectations. See internal/provider/conformance.
+#   ANTHROPIC_API_KEY=sk-... OPENAI_API_KEY=sk-... make record-fixtures
+record-fixtures:
+	SMITH_RECORD=1 $(GO) test $(GOFLAGS) -count=1 -run TestRecordConformance \
+		./internal/provider/anthropic/... ./internal/provider/openai/...
 
 clean:
 	rm -f $(BINARY) ticket-sync

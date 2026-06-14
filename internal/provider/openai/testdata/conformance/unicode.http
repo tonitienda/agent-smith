@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+
+data: {"type":"response.created","response":{"id":"resp_uni","model":"gpt-5"}}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant"}}
+
+data: {"type":"response.output_text.delta","output_index":0,"delta":"café "}
+
+data: {"type":"response.output_text.delta","output_index":0,"delta":"☕ "}
+
+data: {"type":"response.output_text.delta","output_index":0,"delta":"日本語 "}
+
+data: {"type":"response.output_text.delta","output_index":0,"delta":"😀"}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message"}}
+
+data: {"type":"response.completed","response":{"id":"resp_uni","status":"completed","usage":{"input_tokens":4,"output_tokens":6}}}
