@@ -482,9 +482,12 @@ func errorOutput(format string, args ...any) Output {
 }
 
 // BatchHooks observes an ExecuteBatch run's progress. Both fields are optional; a
-// nil hook is skipped. Started fires as each call begins execution and Finished
-// as each call's result is recorded — both in call order, regardless of which
-// tool finished first — so a face can report tool progress deterministically.
+// nil hook is skipped. Started fires for every call in call order once gating is
+// done and the batch is about to run its approved tools — before the concurrent
+// execution begins, and including a call that was denied or failed validation
+// (whose terminal result is still reported through Finished). Finished fires as
+// each call's result is recorded, also in call order and regardless of which tool
+// finished first, so a face can report tool progress deterministically.
 type BatchHooks struct {
 	Started  func(index int, call schema.Block)
 	Finished func(index int, call schema.Block, result *schema.ToolResultBody)
