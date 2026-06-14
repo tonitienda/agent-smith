@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -72,16 +73,13 @@ func (t *readTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 		return errResult("%s is a directory, not a file", t.fs.rel(abs)), nil
 	}
 
-	data, err := os.ReadFile(abs)
+	content, rng, truncated, binary, err := readWindow(abs, in.Offset, in.Limit, t.fs.maxReadBytes)
 	if err != nil {
 		return errResult("cannot read %s: %v", t.fs.rel(abs), err), nil
 	}
-	if bytes.IndexByte(data, 0) >= 0 {
+	if binary {
 		return errResult("%s looks like a binary file; the read tool only handles UTF-8 text", t.fs.rel(abs)), nil
 	}
-
-	content, rng := windowLines(string(data), in.Offset, in.Limit)
-	content, truncated := capBytes(content, t.fs.maxReadBytes)
 	if truncated {
 		content += fmt.Sprintf("\n\n[read truncated at %d bytes]", t.fs.maxReadBytes)
 	}
@@ -101,12 +99,48 @@ func (t *readTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 	}, nil
 }
 
+// readWindow reads at most maxBytes of the file at abs through an io.LimitReader,
+// so an arbitrarily large file is never loaded fully into memory, then selects
+// the requested line window. It reports whether the content was byte-truncated
+// (the file exceeded the cap) and whether the file looked binary. A non-positive
+// maxBytes reads the whole file.
+func readWindow(abs string, offset, limit, maxBytes int) (content string, rng *schema.LineRange, truncated, binary bool, err error) {
+	f, err := os.Open(abs)
+	if err != nil {
+		return "", nil, false, false, err
+	}
+	defer func() { _ = f.Close() }()
+
+	var r io.Reader = f
+	if maxBytes > 0 {
+		r = io.LimitReader(f, int64(maxBytes)+1) // +1 byte so we can tell the file exceeded the cap
+	}
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return "", nil, false, false, err
+	}
+	if maxBytes > 0 && len(raw) > maxBytes {
+		truncated = true
+		raw = raw[:maxBytes]
+	}
+	if bytes.IndexByte(raw, 0) >= 0 {
+		return "", nil, false, true, nil
+	}
+
+	text := string(raw)
+	if truncated {
+		text = strings.ToValidUTF8(text, "") // the byte cap may have cut a multi-byte rune
+	}
+	content, rng = windowLines(text, offset, limit, truncated)
+	return content, rng, truncated, false, nil
+}
+
 // windowLines selects the [offset, offset+limit) line window (1-based offset)
 // from content and reports the range it returned. A non-positive offset starts
 // at line 1; a non-positive limit uses defaultReadLimit. The returned range is
-// nil when the whole file was read, so the file_read block does not claim a
-// partial window it did not take.
-func windowLines(content string, offset, limit int) (string, *schema.LineRange) {
+// nil only when the whole file was returned; partial is set by the caller when
+// the content was byte-truncated, so a capped read never claims to be whole.
+func windowLines(content string, offset, limit int, partial bool) (string, *schema.LineRange) {
 	if content == "" {
 		return "", nil
 	}
@@ -133,7 +167,7 @@ func windowLines(content string, offset, limit int) (string, *schema.LineRange) 
 		end = total
 	}
 
-	whole := start == 1 && end == total
+	whole := !partial && start == 1 && end == total
 	if start > end {
 		return "", lineRange(start, end)
 	}
@@ -198,7 +232,7 @@ func (t *writeTool) Run(_ context.Context, args json.RawMessage) (tool.Output, e
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return errResult("cannot create directory for %s: %v", t.fs.rel(abs), err), nil
 	}
-	if err := os.WriteFile(abs, []byte(in.Content), 0o644); err != nil {
+	if err := atomicWrite(abs, []byte(in.Content), 0o644); err != nil {
 		return errResult("cannot write %s: %v", t.fs.rel(abs), err), nil
 	}
 	t.fs.reads.mark(abs) // we now know the file's contents
@@ -275,29 +309,41 @@ func (t *editTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 	} else {
 		content = strings.Replace(content, in.OldString, in.NewString, 1)
 	}
-	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+	mode := os.FileMode(0o644)
+	if info, statErr := os.Stat(abs); statErr == nil {
+		mode = info.Mode().Perm() // preserve the existing file's permissions
+	}
+	if err := atomicWrite(abs, []byte(content), mode); err != nil {
 		return errResult("cannot write %s: %v", t.fs.rel(abs), err), nil
 	}
 
 	return tool.Output{Text: fmt.Sprintf("Replaced %d occurrence(s) in %s", count, t.fs.rel(abs))}, nil
 }
 
-// capBytes truncates s to at most n bytes on a UTF-8 rune boundary, reporting
-// whether it cut anything. A non-positive n disables the cap.
-func capBytes(s string, n int) (string, bool) {
-	if n <= 0 || len(s) <= n {
-		return s, false
+// atomicWrite writes data to abs atomically: it writes a sibling temporary file
+// and renames it into place, so an interrupted or failed write (disk full,
+// crash) leaves abs untouched rather than half-written and corrupt. The rename
+// is atomic because the temp file lives in the same directory as abs.
+func atomicWrite(abs string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".smith-write-*")
+	if err != nil {
+		return err
 	}
-	cut := n
-	for cut > 0 && !utf8RuneStart(s[cut]) {
-		cut--
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // a no-op once the rename succeeds
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
 	}
-	return s[:cut], true
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, abs)
 }
-
-// utf8RuneStart reports whether b is the first byte of a UTF-8 rune (i.e. not a
-// continuation byte).
-func utf8RuneStart(b byte) bool { return b&0xC0 != 0x80 }
 
 // errResult builds a model-readable error Output: a single text part with the
 // error flag set, so the Runtime records it as an error tool_result the model

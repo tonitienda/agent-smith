@@ -37,6 +37,19 @@ type FS struct {
 	reads        *readSet
 }
 
+// ignoredDirs are directory names the glob and grep walks skip by default:
+// heavy VCS/dependency trees that are essentially never the search target and
+// would otherwise dominate a walk in a real project (a .git or node_modules can
+// hold orders of magnitude more files than the source itself). This is a fixed
+// default for V1; making the ignore set configurable and gitignore-aware is a
+// planned follow-up. The root directory of a search is never skipped even if it
+// shares one of these names, so an explicit search inside one still works.
+var ignoredDirs = map[string]bool{
+	".git":         true,
+	"node_modules": true,
+	".venv":        true,
+}
+
 // DefaultMaxReadBytes caps the bytes the read tool returns for a single read
 // before it truncates with an explicit marker, so a huge file cannot flood the
 // context window. The Runtime applies a second, independent cap to the recorded

@@ -65,8 +65,14 @@ func (t *globTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 
 	var matches []string
 	walkErr := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return skipUnreadableDir(d, err)
+		}
+		if d.IsDir() {
+			if p != base && ignoredDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		name := t.fs.rel(p)
 		candidate := name
@@ -147,8 +153,14 @@ func (t *grepTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 	var matches []string
 	capped := false
 	walkErr := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return skipUnreadableDir(d, err)
+		}
+		if d.IsDir() {
+			if p != base && ignoredDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if in.Include != "" {
 			ok, mErr := path.Match(in.Include, filepath.Base(p))

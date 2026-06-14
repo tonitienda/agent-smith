@@ -315,6 +315,53 @@ func TestGrepInvalidRegex(t *testing.T) {
 	}
 }
 
+func TestGlobSkipsIgnoredDirs(t *testing.T) {
+	f := newFS(t, map[string]string{
+		"src/a.go":            "",
+		".git/hooks/pre.go":   "",
+		"node_modules/dep.go": "",
+		".venv/lib/mod.go":    "",
+	})
+	out := run(t, f, "glob", `{"pattern":"**/*.go"}`)
+	if out.Text != "src/a.go" {
+		t.Fatalf("glob should skip .git/node_modules/.venv, got %q", out.Text)
+	}
+}
+
+func TestGrepSkipsIgnoredDirs(t *testing.T) {
+	f := newFS(t, map[string]string{
+		"src/a.go":          "needle\n",
+		".git/config":       "needle\n",
+		"node_modules/x.js": "needle\n",
+	})
+	out := run(t, f, "grep", `{"pattern":"needle"}`)
+	if !strings.Contains(out.Text, "src/a.go:1:") {
+		t.Fatalf("grep should match source: %q", out.Text)
+	}
+	if strings.Contains(out.Text, ".git") || strings.Contains(out.Text, "node_modules") {
+		t.Fatalf("grep should skip ignored dirs: %q", out.Text)
+	}
+}
+
+func TestEditPreservesFileMode(t *testing.T) {
+	f := newFS(t, map[string]string{"a.txt": "foo bar"})
+	abs := filepath.Join(f.root, "a.txt")
+	if err := os.Chmod(abs, 0o600); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	out := run(t, f, "edit", `{"path":"a.txt","old_string":"bar","new_string":"baz"}`)
+	if out.IsError {
+		t.Fatalf("unexpected error: %s", out.Text)
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode after edit = %o, want 600", info.Mode().Perm())
+	}
+}
+
 // --- Runtime integration: file_read emission and the permission gate. ---
 
 func runtimeFor(t *testing.T, f *FS, perm tool.PermissionFunc) (*tool.Runtime, *eventlog.Log) {
