@@ -98,6 +98,35 @@ func TestToolEventsTrackLifecycle(t *testing.T) {
 	}
 }
 
+func TestPendingToolFinalizedOnCancel(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.busy = true
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UIToolStarted, Tool: &loop.ToolEvent{Name: "shell", ToolUseID: "t9"}})
+	if m.segs[0].toolDone {
+		t.Fatal("tool marked done before any result")
+	}
+
+	// The loop reconciles orphaned calls without a UIToolFinished, so the turn
+	// ends (cancelled) with the tool still pending.
+	m = update(t, m, turnDoneMsg{err: context.Canceled})
+
+	tool := m.segs[0]
+	if !tool.toolDone || !tool.toolError {
+		t.Fatalf("pending tool not finalized on cancel: %+v", tool)
+	}
+	if tool.toolSettled {
+		t.Fatal("interrupted tool should stay unsettled so a late result can correct it")
+	}
+
+	// A late authoritative finish (success) still wins over the interrupted guess.
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UIToolFinished, Tool: &loop.ToolEvent{
+		Name: "shell", ToolUseID: "t9", Result: &schema.ToolResultBody{IsError: false},
+	}})
+	if got := m.segs[0]; !got.toolSettled || got.toolError {
+		t.Fatalf("late finish did not correct interrupted tool: %+v", got)
+	}
+}
+
 func TestTextAfterToolStartsNewSegment(t *testing.T) {
 	m := newTestModel(t, &fakeRunner{})
 	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnStart})

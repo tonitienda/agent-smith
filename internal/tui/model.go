@@ -233,8 +233,10 @@ func (m model) finishTurn(msg turnDoneMsg) model {
 
 	switch {
 	case msg.err != nil && errors.Is(msg.err, context.Canceled):
+		m.markPendingToolsInterrupted()
 		m.segs = append(m.segs, segment{kind: segNotice, text: "turn cancelled", done: true})
 	case msg.err != nil:
+		m.markPendingToolsInterrupted()
 		m.segs = append(m.segs, segment{kind: segError, text: msg.err.Error(), done: true})
 	}
 	m.refresh()

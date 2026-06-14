@@ -34,6 +34,10 @@ type segment struct {
 	toolID    string
 	toolError bool
 	toolDone  bool
+	// toolSettled marks that the loop reported a definitive result for this call
+	// (a UIToolFinished). A tool finalized only because its turn was interrupted
+	// is done-but-not-settled, so a late authoritative result can still correct it.
+	toolSettled bool
 
 	// done marks a text run finalized, so the assistant body renders as markdown.
 	done bool
@@ -73,11 +77,12 @@ func (m *model) apply(ev loop.UIEvent) {
 		_, id := toolIdentity(ev)
 		for i := range m.segs {
 			s := &m.segs[i]
-			if s.kind == segTool && s.toolID == id && !s.toolDone {
+			// The loop's result is authoritative: apply it even if the segment was
+			// already finalized as interrupted (done but not settled).
+			if s.kind == segTool && s.toolID == id && !s.toolSettled {
 				s.toolDone = true
-				if ev.Tool != nil && ev.Tool.Result != nil {
-					s.toolError = ev.Tool.Result.IsError
-				}
+				s.toolSettled = true
+				s.toolError = ev.Tool != nil && ev.Tool.Result != nil && ev.Tool.Result.IsError
 				break
 			}
 		}
@@ -94,6 +99,21 @@ func toolIdentity(ev loop.UIEvent) (name, id string) {
 		return "", ""
 	}
 	return ev.Tool.Name, ev.Tool.ToolUseID
+}
+
+// markPendingToolsInterrupted finalizes any tool segment still awaiting a result
+// when a turn ends abnormally. The loop reconciles orphaned tool calls on the log
+// without emitting UIToolFinished, so without this they would display as pending
+// (⋯) forever after an Esc cancel or a surfaced error. They are left unsettled, so
+// a late authoritative UIToolFinished can still correct the outcome.
+func (m *model) markPendingToolsInterrupted() {
+	for i := range m.segs {
+		s := &m.segs[i]
+		if s.kind == segTool && !s.toolDone {
+			s.toolDone = true
+			s.toolError = true
+		}
+	}
 }
 
 // finalizeText marks the current assistant and reasoning runs complete so they
