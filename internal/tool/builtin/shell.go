@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -253,13 +254,21 @@ func roundDuration(d time.Duration) time.Duration {
 // beyond it was dropped. It always reports a full write so the child process is
 // never short-write-failed (which on a pipe would surface as SIGPIPE); the excess
 // is simply discarded and flagged. A non-positive limit buffers everything.
+//
+// In this tool stdout and stderr are the same writer value, so os/exec shares a
+// single pipe and one copier goroutine — writes never overlap. The mutex makes
+// that safety explicit and keeps the writer correct even if it is later handed a
+// pair of distinct streams that would be copied concurrently.
 type cappedWriter struct {
+	mu        sync.Mutex
 	buf       bytes.Buffer
 	limit     int
 	truncated bool
 }
 
 func (w *cappedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if w.limit <= 0 {
 		w.buf.Write(p)
 		return len(p), nil
@@ -279,8 +288,11 @@ func (w *cappedWriter) Write(p []byte) (int, error) {
 
 // string returns the buffered output, trimming a trailing partial UTF-8 rune
 // when a write was cut mid-rune at the cap so the result is always valid UTF-8
-// (avoiding JSON-encode or TUI-render errors downstream).
+// (avoiding JSON-encode or TUI-render errors downstream). Callers invoke it after
+// the command has exited, when no writes remain in flight.
 func (w *cappedWriter) string() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	s := w.buf.String()
 	if !w.truncated {
 		return s

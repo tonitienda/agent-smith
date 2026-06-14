@@ -15,7 +15,10 @@ import (
 func configureProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
-		if cmd.Process == nil {
+		// Guard the PID: syscall.Kill(-pid, ...) with pid <= 0 would signal our own
+		// process group (kill(0, …) / kill(-1, …)) and take Agent Smith down with
+		// the command. A successfully started child always has Pid > 0.
+		if cmd.Process == nil || cmd.Process.Pid <= 0 {
 			return nil
 		}
 		// Negative PID signals the whole process group led by the child.
