@@ -164,6 +164,45 @@ func TestRunMultiTurnMultiTool(t *testing.T) {
 	}
 }
 
+// TestMalformedToolArgsDoesNotCorruptLog verifies that when the model streams
+// invalid JSON for a tool call, the assembled block is still serializable: the
+// verbatim string is preserved in ArgumentsRaw while Arguments is left unset, so
+// the append-only log never holds a block that fails to marshal.
+func TestMalformedToolArgsDoesNotCorruptLog(t *testing.T) {
+	p := &provider.Mock{ScriptFn: func(_ context.Context, _ provider.Request) ([]provider.Event, error) {
+		return provider.ToolCallTurn("toolu_bad", "echo", json.RawMessage(`{"msg":`)), nil
+	}}
+	h := newHarness(t, p, []tool.Tool{echoTool()}, loop.WithMaxIterations(2))
+
+	if _, err := h.engine.Run(context.Background(), "send bad args"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	var call *schema.Block
+	for _, b := range h.log.Events() {
+		b := b
+		if b.Kind == schema.KindToolCall {
+			call = &b
+		}
+		// Every block on the log must marshal cleanly — the corruption the guard
+		// prevents would surface here (and on any disk-backed persist).
+		if _, err := json.Marshal(b); err != nil {
+			t.Fatalf("block %s failed to marshal: %v", b.ID, err)
+		}
+	}
+	if call == nil || call.ToolCall == nil {
+		t.Fatal("no tool_call recorded")
+	}
+	if call.ToolCall.ArgumentsRaw != `{"msg":` {
+		t.Errorf("ArgumentsRaw = %q, want verbatim malformed string", call.ToolCall.ArgumentsRaw)
+	}
+	if len(call.ToolCall.Arguments) != 0 {
+		t.Errorf("Arguments = %q, want unset for malformed JSON", call.ToolCall.Arguments)
+	}
+	// The malformed call must still be answered (an error result), not orphaned.
+	assertNoOrphanCalls(t, h.log)
+}
+
 func contextHasResult(ctx []schema.Block, toolUseID string) bool {
 	for _, b := range ctx {
 		if b.Kind == schema.KindToolResult && b.ToolResult != nil && b.ToolResult.ToolUseID == toolUseID {

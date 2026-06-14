@@ -280,12 +280,23 @@ func (e *Engine) dispatch(ctx context.Context, iter int, calls []schema.Block) e
 // tool_call without a matching result (the consistency guarantee of AS-018). It
 // is idempotent and best-effort: a call already answered is skipped, and a
 // failed marker append is ignored because the turn is already being abandoned.
+//
+// The set of already-answered tool_use IDs is built once from a single log
+// snapshot — keeping the cost O(N + M) for a turn with M calls over an N-event
+// log rather than re-scanning the log per call — and is updated as markers are
+// appended so a duplicated call in calls is not answered twice.
 func (e *Engine) reconcile(calls []schema.Block) {
-	for _, call := range calls {
-		if call.ToolCall == nil {
-			continue
+	if len(calls) == 0 {
+		return
+	}
+	answered := make(map[string]bool)
+	for _, b := range e.log.Events() {
+		if b.Kind == schema.KindToolResult && b.ToolResult != nil {
+			answered[b.ToolResult.ToolUseID] = true
 		}
-		if e.hasResult(call.ToolCall.ToolUseID) {
+	}
+	for _, call := range calls {
+		if call.ToolCall == nil || answered[call.ToolCall.ToolUseID] {
 			continue
 		}
 		marker := schema.Block{
@@ -303,18 +314,10 @@ func (e *Engine) reconcile(calls []schema.Block) {
 				IsError:   true,
 			},
 		}
-		_, _ = e.log.Append(marker) //nolint:errcheck // best-effort on an abandoned turn
-	}
-}
-
-// hasResult reports whether a tool_result for toolUseID is already on the log.
-func (e *Engine) hasResult(toolUseID string) bool {
-	for _, b := range e.log.Events() {
-		if b.Kind == schema.KindToolResult && b.ToolResult != nil && b.ToolResult.ToolUseID == toolUseID {
-			return true
+		if _, err := e.log.Append(marker); err == nil {
+			answered[call.ToolCall.ToolUseID] = true
 		}
 	}
-	return false
 }
 
 // emit forwards ev to the observer.

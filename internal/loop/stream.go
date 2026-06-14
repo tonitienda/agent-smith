@@ -181,6 +181,15 @@ func newBlock(h *provider.BlockHeader) *schema.Block {
 // finalizeToolArgs records a tool call's accumulated argument string as both the
 // verbatim ArgumentsRaw (signatures/caching depend on exact bytes) and the
 // structured Arguments the runtime validates and the tool reads.
+//
+// The structured Arguments is set only when the streamed string is valid JSON:
+// an invalid json.RawMessage makes json.Marshal of the whole block fail, which
+// would abort the disk-backed append and corrupt any later marshal of an
+// in-memory block. When the model streams malformed arguments we leave
+// Arguments unset (omitted) while preserving the raw bytes in ArgumentsRaw, so
+// the block is always serializable and the runtime's schema validation rejects
+// the empty-argument call gracefully (a model-readable error) rather than the
+// log failing to persist.
 func finalizeToolArgs(b *schema.Block, raw *strings.Builder) {
 	if raw == nil {
 		return
@@ -190,7 +199,9 @@ func finalizeToolArgs(b *schema.Block, raw *strings.Builder) {
 		return
 	}
 	b.ToolCall.ArgumentsRaw = s
-	b.ToolCall.Arguments = json.RawMessage(s)
+	if json.Valid([]byte(s)) {
+		b.ToolCall.Arguments = json.RawMessage(s)
+	}
 }
 
 // appendAssistant stamps provider provenance/identity on an assembled block and
