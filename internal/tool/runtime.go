@@ -179,9 +179,19 @@ func (r *Runtime) ensureLogged(call schema.Block) (schema.Block, error) {
 	return stored, nil
 }
 
-// record builds the tool_result for out, truncates oversized text content,
-// appends it to the log linked to its call, and returns the stored block.
+// record records the result of a tool execution onto the log. When out carries
+// a file_read body (the read tool, AS-014), a dedicated file_read block is
+// appended first so the content lives in a block /context can attribute and
+// dedupe (PRD D3); the tool_result that follows is then the loop-closer the
+// providers require. It truncates oversized text content, appends the
+// tool_result linked to its call, and returns the stored tool_result block.
 func (r *Runtime) record(call schema.Block, out Output) (schema.Block, error) {
+	if out.FileRead != nil {
+		if err := r.recordFileRead(call, out.FileRead); err != nil {
+			return schema.Block{}, err
+		}
+	}
+
 	parts, truncated := r.truncate(out.parts())
 	result := schema.Block{
 		ID:   schema.NewID(),
@@ -204,6 +214,48 @@ func (r *Runtime) record(call schema.Block, out Output) (schema.Block, error) {
 		return schema.Block{}, fmt.Errorf("tool: log tool_result: %w", err)
 	}
 	return stored, nil
+}
+
+// recordFileRead appends a file_read block (schema §6.4) for a read tool's
+// output, linked to its call by provenance and ProducedBy. The Runtime owns the
+// block's envelope — provenance, attribution, the read call's tool_use_id, and a
+// default Source — so the tool only supplies path, range, content, and hash. The
+// content is bounded by the same byte budget as tool_result text, so a huge file
+// cannot flood the window even if the tool failed to cap it itself.
+func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody) error {
+	fr := *body
+	fr.Content = r.truncateText(fr.Content)
+	if fr.ProducedBy == "" {
+		fr.ProducedBy = call.ToolCall.ToolUseID
+	}
+	if fr.Source == "" {
+		fr.Source = "tool"
+	}
+	block := schema.Block{
+		ID:   schema.NewID(),
+		Kind: schema.KindFileRead,
+		Role: schema.RoleTool,
+		Provenance: &schema.Provenance{
+			Producer:    producer,
+			DerivedFrom: []string{call.ID},
+		},
+		Attribution: &schema.Attribution{Tool: call.ToolCall.Name},
+		FileRead:    &fr,
+	}
+	if _, err := r.log.Append(block); err != nil {
+		return fmt.Errorf("tool: log file_read: %w", err)
+	}
+	return nil
+}
+
+// truncateText bounds a single string at r.maxBytes on a UTF-8 rune boundary,
+// appending the same explicit marker truncate uses for parts. A non-positive
+// budget disables truncation.
+func (r *Runtime) truncateText(s string) string {
+	if r.maxBytes <= 0 || len(s) <= r.maxBytes {
+		return s
+	}
+	return truncateUTF8(s, r.maxBytes) + fmt.Sprintf("\n\n[output truncated: showing %d of %d bytes]", r.maxBytes, len(s))
 }
 
 // truncate bounds the total bytes of text parts at r.maxBytes, cutting the
