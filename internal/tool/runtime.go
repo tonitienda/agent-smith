@@ -286,13 +286,21 @@ func (r *Runtime) runConcurrent(ctx context.Context, plans []plan, outs []Output
 		if plans[i].tool == nil {
 			continue // a denied/invalid call has no tool to run
 		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			outs[i], errs[i] = r.run(ctx, plans[i].tool, plans[i].call.ToolCall.Arguments)
-		}(i)
+		// Acquire a worker slot, but stop launching new work the moment the turn
+		// is cancelled: a not-yet-started call is marked cancelled (so phase 3
+		// propagates the abandonment rather than recording an empty result)
+		// instead of spawning a goroutine that would only run a doomed tool.
+		select {
+		case sem <- struct{}{}:
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				outs[i], errs[i] = r.run(ctx, plans[i].tool, plans[i].call.ToolCall.Arguments)
+			}(i)
+		case <-ctx.Done():
+			errs[i] = ctx.Err()
+		}
 	}
 	wg.Wait()
 }
