@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
 )
 
@@ -50,6 +51,7 @@ type model struct {
 	events   <-chan loop.UIEvent
 	newRend  rendererFactory
 	renderer markdownRenderer
+	commands *command.Registry
 
 	textarea textarea.Model
 	viewport viewport.Model
@@ -63,6 +65,13 @@ type model struct {
 	histIdx int
 	draft   string
 
+	// palette is the filterable slash-command list shown while typing a command.
+	palette palette
+	// panel holds a full-screen command output (e.g. /help) until dismissed.
+	panel viewport.Model
+	// panelTitle labels the open full-screen panel; empty means no panel.
+	panelTitle string
+
 	busy   bool
 	cancel context.CancelFunc
 
@@ -72,8 +81,9 @@ type model struct {
 }
 
 // newModel builds the chat model. newRend may be nil to disable markdown
-// rendering (the transcript then shows raw text).
-func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rendererFactory) model {
+// rendering (the transcript then shows raw text); commands may be nil to run
+// without any slash commands.
+func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
 	ta.Prompt = "┃ "
@@ -92,6 +102,7 @@ func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rend
 		meta:         meta,
 		events:       events,
 		newRend:      newRend,
+		commands:     commands,
 		textarea:     ta,
 		spinner:      sp,
 		curAssistant: -1,
@@ -142,6 +153,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case turnDoneMsg:
 		return m.finishTurn(msg), nil
 
+	case commandDoneMsg:
+		return m.finishCommand(msg), nil
+
 	case spinner.TickMsg:
 		if !m.busy {
 			return m, nil
@@ -157,8 +171,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// handleKey routes key presses: control keys first, then input vs. scrollback.
+// handleKey routes key presses: control keys first, then the full-screen panel,
+// command palette, and finally input vs. scrollback.
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// A full-screen command panel captures navigation until dismissed.
+	if m.panelOpen() {
+		return m.handlePanelKey(msg)
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		if m.cancel != nil {
@@ -167,16 +187,35 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "esc":
-		// Cancel the in-flight turn; the session stays usable.
+		// Abort an open palette first, then cancel an in-flight turn; either way
+		// the session stays usable.
+		if m.palette.open {
+			m.resetInput()
+			m.relayout()
+			return m, nil
+		}
 		if m.busy && m.cancel != nil {
 			m.cancel()
 		}
 		return m, nil
 
 	case "enter":
+		if strings.HasPrefix(strings.TrimSpace(m.textarea.Value()), "/") && m.commands != nil {
+			return m.dispatchCommand()
+		}
 		return m.submit()
 
+	case "tab":
+		if m.palette.open {
+			m.completeFromPalette()
+			return m, nil
+		}
+
 	case "up", "down":
+		if m.palette.open {
+			m.palette.move(msg.String() == "up")
+			return m, nil
+		}
 		// History navigation while the draft is a single line; otherwise the key
 		// moves the cursor within the multi-line editor.
 		if !strings.Contains(m.textarea.Value(), "\n") {
@@ -192,6 +231,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.textarea, cmd = m.textarea.Update(msg)
+	// Typing may have changed the command being entered; refresh the palette.
+	m.syncPalette()
+	m.relayout()
 	return m, cmd
 }
 
@@ -208,8 +250,7 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 
 	m.history = append(m.history, text)
 	m.histIdx = len(m.history)
-	m.draft = ""
-	m.textarea.Reset()
+	m.resetInput()
 
 	m.segs = append(m.segs, segment{kind: segUser, text: text, done: true})
 	m.curAssistant, m.curReasoning = -1, -1
@@ -275,19 +316,14 @@ func (m model) resize(width, height int) model {
 	m.width, m.height = width, height
 	m.ready = true
 
-	// View joins the viewport, status line, and input with single newlines and no
-	// trailing padding, so the three heights sum to the full terminal height.
-	vpHeight := height - inputHeight - statusHeight
-	if vpHeight < 1 {
-		vpHeight = 1
-	}
 	if m.viewport.Width == 0 {
-		m.viewport = viewport.New(width, vpHeight)
-	} else {
-		m.viewport.Width = width
-		m.viewport.Height = vpHeight
+		m.viewport = viewport.New(width, 1)
+		m.panel = viewport.New(width, 1)
 	}
+	m.viewport.Width = width
+	m.panel.Width = width
 	m.textarea.SetWidth(width)
+	m.relayout()
 
 	if m.newRend != nil {
 		m.renderer = m.newRend(width)
@@ -297,6 +333,27 @@ func (m model) resize(width, height int) model {
 	}
 	m.refresh()
 	return m
+}
+
+// relayout sizes the transcript viewport for the current chrome. The view joins
+// the viewport, optional palette, status line, and input with single newlines,
+// so their heights must sum to the terminal height. The full-screen panel, when
+// open, takes the whole screen bar one footer row.
+func (m *model) relayout() {
+	if !m.ready {
+		return
+	}
+	vpHeight := m.height - inputHeight - statusHeight - m.paletteHeight()
+	if vpHeight < 1 {
+		vpHeight = 1
+	}
+	m.viewport.Height = vpHeight
+
+	panelHeight := m.height - statusHeight
+	if panelHeight < 1 {
+		panelHeight = 1
+	}
+	m.panel.Height = panelHeight
 }
 
 // refresh re-renders the transcript into the viewport, keeping the view pinned
@@ -309,15 +366,27 @@ func (m *model) refresh() {
 	}
 }
 
+// resetInput clears the editor draft and any open palette, returning the input
+// to an empty ready state. History is left untouched.
+func (m *model) resetInput() {
+	m.textarea.Reset()
+	m.draft = ""
+	m.palette = palette{}
+}
+
 func (m model) View() string {
 	if !m.ready {
 		return "starting…"
 	}
-	return strings.Join([]string{
-		m.viewport.View(),
-		m.statusLine(),
-		m.textarea.View(),
-	}, "\n")
+	if m.panelOpen() {
+		return m.panel.View() + "\n" + m.panelFooter()
+	}
+	sections := []string{m.viewport.View()}
+	if m.palette.open {
+		sections = append(sections, m.paletteView())
+	}
+	sections = append(sections, m.statusLine(), m.textarea.View())
+	return strings.Join(sections, "\n")
 }
 
 // statusLine renders provider · model · session and the working/ready state.

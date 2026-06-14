@@ -1,18 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 
 	"golang.org/x/term"
 
+	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
+	"github.com/tonitienda/agent-smith/internal/version"
 )
 
 // defaultModel is the model issued for interactive turns until model selection
@@ -70,13 +73,43 @@ func startChat() error {
 		Provider: prov.Name(),
 		Model:    model,
 		Session:  shortID(sess.ID),
-	})
+	}, chatCommands())
 	engine, err := loop.New(prov, sess.Log, runtime, reg, model, loop.WithObserver(app.Observer()))
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
 
 	return app.Run(engine)
+}
+
+// chatCommands builds the slash-command registry for the chat face. The
+// substantive commands (/cost, /context, /clean, /model, /resume, /clear) arrive
+// in their own tickets (AS-020, AS-023, AS-026, AS-028); for now the framework
+// (AS-022) ships with /help — a full-screen list of every registered command —
+// and /version, an inline command, which together exercise both render modes.
+func chatCommands() *command.Registry {
+	reg := command.NewRegistry()
+	// HelpCommand reads the registry lazily, so it lists commands registered after
+	// it too; registering it first is fine.
+	mustRegisterCommand(reg, command.HelpCommand(reg))
+	mustRegisterCommand(reg, command.Command{
+		Name:    "version",
+		Summary: "Show the Agent Smith version",
+		Mode:    command.Inline,
+		Run: func(context.Context, []string) (command.Output, error) {
+			return command.Output{Text: version.String()}, nil
+		},
+	})
+	return reg
+}
+
+// mustRegisterCommand registers a built-in command, panicking on error. The
+// built-ins are static, so a registration failure is a programming bug that
+// should surface immediately at startup, not be silently dropped.
+func mustRegisterCommand(reg *command.Registry, c command.Command) {
+	if err := reg.Register(c); err != nil {
+		panic(fmt.Sprintf("register built-in command %q: %v", c.Name, err))
+	}
 }
 
 // chatModel returns the model ID for interactive turns, honoring SMITH_MODEL.

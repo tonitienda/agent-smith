@@ -11,6 +11,12 @@
 // tool execution stay behind their interfaces (PRD §5, §9). A test
 // (no_business_imports_test.go) enforces that boundary.
 //
+// Slash commands (AS-022) plug in through internal/command: typing "/" opens a
+// filterable palette over the registry handed to New, and dispatched commands
+// render either inline (a transcript segment) or full-screen (a scrollable
+// panel). The command framework is itself face-agnostic, so this face only
+// renders the palette and routes keys — see palette.go.
+//
 // Event flow: the loop calls its Observer inline on the goroutine driving a
 // turn. App.Observer returns a loop.Observer that forwards each event onto a
 // buffered channel; a long-lived tea.Cmd drains that channel into the Update
@@ -23,6 +29,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
 )
 
@@ -51,17 +58,20 @@ type Meta struct {
 // App owns the Bubble Tea program and the bridge that carries loop events into
 // it. Build it with New, hand Observer to the loop engine, then call Run.
 type App struct {
-	meta   Meta
-	events chan loop.UIEvent
+	meta     Meta
+	events   chan loop.UIEvent
+	commands *command.Registry
 }
 
-// New builds an App for the given session metadata. The returned App's Observer
-// is usable immediately (so it can be wired into the engine before Run starts);
-// events emitted before Run are simply buffered.
-func New(meta Meta) *App {
+// New builds an App for the given session metadata and slash-command registry
+// (commands may be nil to run without slash commands). The returned App's
+// Observer is usable immediately (so it can be wired into the engine before Run
+// starts); events emitted before Run are simply buffered.
+func New(meta Meta, commands *command.Registry) *App {
 	return &App{
-		meta:   meta,
-		events: make(chan loop.UIEvent, eventBuffer),
+		meta:     meta,
+		events:   make(chan loop.UIEvent, eventBuffer),
+		commands: commands,
 	}
 }
 
@@ -79,7 +89,7 @@ func (a *App) Observer() loop.Observer {
 // until the user quits. It uses the alternate screen and mouse support so
 // scrollback and resize behave like a full-screen app.
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err
