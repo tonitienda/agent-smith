@@ -233,6 +233,33 @@ func TestSlashInputDoesNotStartTurn(t *testing.T) {
 	}
 }
 
+func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
+	reg := command.NewRegistry()
+	for _, n := range []string{"cmd1", "cmd2", "cmd3", "cmd4", "cmd5", "cmd6"} {
+		if err := reg.Register(command.Command{Name: n, Run: nopHandler}); err != nil {
+			t.Fatalf("register %q: %v", n, err)
+		}
+	}
+	m := newModel(&fakeRunner{}, Meta{}, make(chan loop.UIEvent), nil, reg)
+	// A short window: only a couple of rows beyond the input + status chrome.
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 8})
+	m = typeString(t, m, "/cmd") // matches all six
+
+	maxRows := 8 - inputHeight - statusHeight - 1 // one transcript row reserved
+	if h := m.paletteHeight(); h > maxRows || h < 1 {
+		t.Fatalf("paletteHeight() = %d, want within [1,%d]", h, maxRows)
+	}
+	// The rendered palette must not exceed the budgeted height.
+	rows := strings.Count(m.paletteView(), "\n") + 1
+	if rows > m.paletteHeight() {
+		t.Fatalf("paletteView rendered %d rows, want <= %d", rows, m.paletteHeight())
+	}
+	// And the transcript viewport keeps at least one row.
+	if m.viewport.Height < 1 {
+		t.Fatalf("viewport height = %d, want >= 1", m.viewport.Height)
+	}
+}
+
 // nopHandler is a do-nothing command handler for palette/registry tests.
 func nopHandler(context.Context, []string) (command.Output, error) {
 	return command.Output{}, nil

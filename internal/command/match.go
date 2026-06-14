@@ -1,6 +1,9 @@
 package command
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // fuzzyScore reports whether query is a subsequence of name (case-folded by the
 // caller) and, if so, a relevance score — higher is better. The score rewards
@@ -54,8 +57,9 @@ func nearest(name string, candidates []string) (string, bool) {
 		return "", false
 	}
 	// Accept only reasonably close matches: at most a third of the longer name's
-	// length (rounded up), and never more than 3 edits.
-	limit := (max(len(name), len(best)) + 2) / 3
+	// length (rounded up), and never more than 3 edits. Count runes so the bound
+	// matches levenshtein's rune-based distance for non-ASCII names.
+	limit := (max(utf8.RuneCountInString(name), utf8.RuneCountInString(best)) + 2) / 3
 	if limit > 3 {
 		limit = 3
 	}
@@ -65,32 +69,35 @@ func nearest(name string, candidates []string) (string, bool) {
 	return best, true
 }
 
-// levenshtein returns the edit distance between a and b (single-row DP).
+// levenshtein returns the edit distance between a and b (single-row DP). It
+// works in runes, not bytes, so a multi-byte character counts as one edit and
+// distances stay correct for non-ASCII command names.
 func levenshtein(a, b string) int {
 	if a == b {
 		return 0
 	}
-	if len(a) == 0 {
-		return len(b)
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) == 0 {
+		return len(rb)
 	}
-	if len(b) == 0 {
-		return len(a)
+	if len(rb) == 0 {
+		return len(ra)
 	}
-	prev := make([]int, len(b)+1)
+	prev := make([]int, len(rb)+1)
 	for j := range prev {
 		prev[j] = j
 	}
-	for i := 1; i <= len(a); i++ {
-		cur := make([]int, len(b)+1)
+	for i := 1; i <= len(ra); i++ {
+		cur := make([]int, len(rb)+1)
 		cur[0] = i
-		for j := 1; j <= len(b); j++ {
+		for j := 1; j <= len(rb); j++ {
 			cost := 1
-			if a[i-1] == b[j-1] {
+			if ra[i-1] == rb[j-1] {
 				cost = 0
 			}
 			cur[j] = min(prev[j]+1, min(cur[j-1]+1, prev[j-1]+cost))
 		}
 		prev = cur
 	}
-	return prev[len(b)]
+	return prev[len(rb)]
 }

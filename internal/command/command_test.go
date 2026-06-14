@@ -123,6 +123,7 @@ func TestParseQuotedArguments(t *testing.T) {
 		{`/model claude-opus-4-8`, "model", []string{"claude-opus-4-8"}},
 		{`/clean "a b" c`, "clean", []string{"a b", "c"}},
 		{`/say "with \"quotes\""`, "say", []string{`with "quotes"`}},
+		{`/clean "café münchen"`, "clean", []string{"café münchen"}}, // multi-byte runes survive
 		{`/clean   spaced   args `, "clean", []string{"spaced", "args"}},
 		{`/empty ""`, "empty", []string{""}},
 	}

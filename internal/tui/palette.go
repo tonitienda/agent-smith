@@ -59,7 +59,10 @@ func (m *model) syncPalette() {
 }
 
 // paletteHeight is the number of rows the palette occupies in the layout (zero
-// when closed), so relayout can shrink the transcript to fit it.
+// when closed), so relayout can shrink the transcript to fit it. It is the cap
+// (paletteMaxRows) and the match count, further clamped to the terminal so a
+// short window can't push the palette past the input/status chrome. At least one
+// transcript row is always reserved.
 func (m *model) paletteHeight() int {
 	if !m.palette.open {
 		return 0
@@ -67,6 +70,13 @@ func (m *model) paletteHeight() int {
 	n := len(m.palette.matches)
 	if n > paletteMaxRows {
 		n = paletteMaxRows
+	}
+	maxRows := m.height - inputHeight - statusHeight - 1
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	if n > maxRows {
+		n = maxRows
 	}
 	return n
 }
@@ -91,11 +101,17 @@ func (m *model) paletteView() string {
 	if len(matches) == 0 {
 		return ""
 	}
-	start := 0
-	if m.palette.sel >= paletteMaxRows {
-		start = m.palette.sel - paletteMaxRows + 1
+	// Use the same (possibly terminal-clamped) row budget as the layout, so the
+	// rendered window never exceeds the height relayout reserved for it.
+	limit := m.paletteHeight()
+	if limit < 1 {
+		limit = 1
 	}
-	end := start + paletteMaxRows
+	start := 0
+	if m.palette.sel >= limit {
+		start = m.palette.sel - limit + 1
+	}
+	end := start + limit
 	if end > len(matches) {
 		end = len(matches)
 	}

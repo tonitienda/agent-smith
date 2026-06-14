@@ -29,6 +29,9 @@ func Parse(line string) (name string, args []string, err error) {
 }
 
 // tokenize splits s on whitespace, honoring double quotes and backslash escapes.
+// It iterates over runes, not bytes, so multi-byte characters inside a quoted
+// argument (e.g. a `/clean "<topic>"` phrase) survive intact and a backslash
+// escape always consumes a whole character.
 func tokenize(s string) ([]string, error) {
 	var (
 		tokens  []string
@@ -43,21 +46,22 @@ func tokenize(s string) ([]string, error) {
 			inToken = false
 		}
 	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
 		switch {
-		case c == '\\' && i+1 < len(s):
-			// Escape: keep the next byte verbatim (lets a quote or space be literal).
+		case r == '\\' && i+1 < len(runes):
+			// Escape: keep the next rune verbatim (lets a quote or space be literal).
 			i++
-			cur.WriteByte(s[i])
+			cur.WriteRune(runes[i])
 			inToken = true
-		case c == '"':
+		case r == '"':
 			inQuote = !inQuote
 			inToken = true // an empty "" is still a (empty) token
-		case !inQuote && (c == ' ' || c == '\t' || c == '\n'):
+		case !inQuote && (r == ' ' || r == '\t' || r == '\n'):
 			flush()
 		default:
-			cur.WriteByte(c)
+			cur.WriteRune(r)
 			inToken = true
 		}
 	}
