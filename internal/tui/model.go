@@ -108,7 +108,12 @@ func (m model) Init() tea.Cmd {
 // progress streams into the Update loop for the life of the program.
 func waitForEvent(ch <-chan loop.UIEvent) tea.Cmd {
 	return func() tea.Msg {
-		return uiEventMsg(<-ch)
+		ev, ok := <-ch
+		if !ok {
+			// Channel closed: stop draining rather than spin on zero values.
+			return nil
+		}
+		return uiEventMsg(ev)
 	}
 }
 
@@ -268,7 +273,9 @@ func (m model) resize(width, height int) model {
 	m.width, m.height = width, height
 	m.ready = true
 
-	vpHeight := height - inputHeight - statusHeight - 1
+	// View joins the viewport, status line, and input with single newlines and no
+	// trailing padding, so the three heights sum to the full terminal height.
+	vpHeight := height - inputHeight - statusHeight
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
