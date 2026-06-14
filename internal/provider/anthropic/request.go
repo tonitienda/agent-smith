@@ -409,19 +409,24 @@ func breakpointSet(hints provider.CacheHints, ctx []schema.Block) map[string]str
 // cache_control on a prefix shorter than its minimum cacheable size, so a tiny
 // context simply no-ops. Returns nil when ctx has no block that can carry a
 // breakpoint.
+//
+// Only blocks that actually render with a cache_control marker in this adapter
+// are considered (canCacheControl): a reasoning or derived block renders without
+// one, so anchoring on it would silently lose the breakpoint — the selection
+// falls back to the last cacheable block instead.
 func autoBreakpoints(ctx []schema.Block) []schema.CacheBreakpoint {
 	lastSystem, lastAssistant, lastBlock := "", "", ""
 	for i := range ctx {
-		id := ctx[i].ID
-		if id == "" {
+		b := &ctx[i]
+		if b.ID == "" || !canCacheControl(b) {
 			continue
 		}
-		lastBlock = id
-		switch ctx[i].Role {
+		lastBlock = b.ID
+		switch b.Role {
 		case schema.RoleSystem:
-			lastSystem = id
+			lastSystem = b.ID
 		case schema.RoleAssistant:
-			lastAssistant = id
+			lastAssistant = b.ID
 		}
 	}
 	var bps []schema.CacheBreakpoint
@@ -440,6 +445,23 @@ func autoBreakpoints(ctx []schema.Block) []schema.CacheBreakpoint {
 	add(lastAssistant)
 	add(lastBlock)
 	return bps
+}
+
+// canCacheControl reports whether a block will render with a cache_control
+// marker in this adapter, mirroring contentFor / the system-block path: system
+// blocks always do, and among the rest only text, tool_call, tool_result, and
+// file_read carry the marker. Reasoning blocks and unknown/derived kinds render
+// without one, so they cannot anchor a cache breakpoint.
+func canCacheControl(b *schema.Block) bool {
+	if b.Role == schema.RoleSystem {
+		return true
+	}
+	switch b.Kind {
+	case schema.KindText, schema.KindToolCall, schema.KindToolResult, schema.KindFileRead:
+		return true
+	default:
+		return false
+	}
 }
 
 // cacheControlFor returns the cache_control marker for a block when a breakpoint

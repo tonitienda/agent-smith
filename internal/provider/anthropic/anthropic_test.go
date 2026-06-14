@@ -217,6 +217,33 @@ func TestBuildWireRequestAutoCacheAnchorsPreviousTurn(t *testing.T) {
 	}
 }
 
+func TestBuildWireRequestAutoCacheSkipsNonCacheableBlocks(t *testing.T) {
+	// The last assistant block and the trailing block are both reasoning blocks,
+	// which render without cache_control. Anchoring must fall back to the last
+	// cacheable block (the assistant text a1), not the reasoning blocks.
+	req := provider.Request{
+		Model: "m",
+		Context: []schema.Block{
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "q"}},
+			{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "answer"}},
+			{ID: "r1", Kind: schema.KindReasoning, Role: schema.RoleAssistant, Reasoning: &schema.ReasoningBody{Text: "thinking"}},
+		},
+	}
+	bps := autoBreakpoints(req.Context)
+	if len(bps) != 1 || bps[0].BlockID != "a1" {
+		t.Fatalf("autoBreakpoints = %+v, want a single breakpoint on a1 (reasoning blocks skipped)", bps)
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	// Assistant message merges a1 (text) and r1 (thinking); only a1 carries cc.
+	asst := w.Messages[1].Content
+	if a1 := asst[0].(wireText); a1.CacheControl == nil {
+		t.Error("assistant text a1 cache_control = nil, want ephemeral")
+	}
+}
+
 func TestBuildWireRequestCacheDisabled(t *testing.T) {
 	req := provider.Request{
 		Model: "m",
