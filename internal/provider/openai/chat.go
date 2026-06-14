@@ -291,7 +291,8 @@ func (s *chatStream) Next() bool {
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// Flush a deferred turn stop on a clean end (an endpoint that
-				// closes without a [DONE] sentinel).
+				// closes without a [DONE] sentinel). The body is exhausted, so mark
+				// the stream done now to avoid a redundant read on the next Next().
 				if ev, ok := s.flushStop(); ok {
 					s.pending = append(s.pending, ev)
 					s.done = true
