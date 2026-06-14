@@ -1,0 +1,340 @@
+// Package loop is the agentic turn loop that ties the substrate together
+// (AS-018, PRD §7.2, D6): a user message is projected into model-facing context
+// (AS-006), streamed to a provider (AS-008), the model's tool calls are
+// dispatched through the runtime (AS-013) and their results fed back, and the
+// turn repeats until the model stops or a guard fires.
+//
+// The loop owns no model state and imports no face: the context is re-projected
+// from the append-only log every turn (never cached), the model is selected per
+// request, and progress is reported through face-agnostic UIEvents (event.go) so
+// the TUI (AS-021), a headless face (AS-051), and an ACP server (AS-052) reuse
+// the same engine (§5). Every block — user, assistant text, reasoning, tool
+// call, tool result — is appended to the log as the turn streams, so the log is
+// the single live record and a crash or cancellation leaves a consistent,
+// replayable history.
+//
+// Stop conditions are uniform: the model ending its turn, the user cancelling
+// via ctx, a max-iteration safety valve against runaway tool loops, or a
+// provider error surviving the retry/backoff policy. Cancellation mid-stream or
+// mid-tool never leaves a tool_call without a result: any call appended in the
+// abandoned turn is reconciled with a cancellation-marker tool_result before the
+// loop returns.
+package loop
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/projection"
+	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/tool"
+	"github.com/tonitienda/agent-smith/schema"
+)
+
+// producer is stamped on blocks the loop itself appends (assistant blocks
+// assembled from the stream, cancellation markers) so their origin is
+// self-describing on the log.
+const producer = "agent-loop"
+
+// StopMaxIterations is the stop reason surfaced when the max-iteration safety
+// valve fires: the model kept requesting tools past the configured budget, so
+// the loop halts a potential runaway rather than continuing forever.
+const StopMaxIterations = "max_iterations"
+
+// Defaults for the engine's guards and retry policy.
+const (
+	// DefaultMaxIterations bounds how many provider turns one Run may drive
+	// before the safety valve fires. Generous enough for real multi-tool work,
+	// finite enough to stop a runaway loop.
+	DefaultMaxIterations = 50
+	// DefaultMaxAttempts is how many times a single turn's request is attempted
+	// before a retryable provider error is surfaced (1 try + retries).
+	DefaultMaxAttempts = 3
+	// DefaultBackoffBase is the base delay for exponential backoff between retry
+	// attempts; attempt n waits base*2^(n-1), capped at DefaultBackoffMax.
+	DefaultBackoffBase = 500 * time.Millisecond
+	// DefaultBackoffMax caps a single backoff wait.
+	DefaultBackoffMax = 30 * time.Second
+)
+
+// Engine drives turns for one session against one provider. It is constructed
+// once and reused across turns; it holds no mutable state of its own, so the
+// log and the projection are the session's single source of truth.
+type Engine struct {
+	provider provider.Provider
+	log      *eventlog.Log
+	runtime  *tool.Runtime
+	registry *tool.Registry
+	model    string
+
+	observer    Observer
+	params      provider.SamplingParams
+	cache       provider.CacheHints
+	projectOpts projection.Options
+
+	maxIterations int
+	maxAttempts   int
+	backoffBase   time.Duration
+	backoffMax    time.Duration
+}
+
+// Option configures an Engine.
+type Option func(*Engine)
+
+// WithObserver sets the sink for face-agnostic UIEvents. A nil observer is
+// ignored (the default no-op stands).
+func WithObserver(o Observer) Option {
+	return func(e *Engine) {
+		if o != nil {
+			e.observer = o
+		}
+	}
+}
+
+// WithMaxIterations sets the max-iteration safety valve. A non-positive n is
+// ignored, keeping the default.
+func WithMaxIterations(n int) Option {
+	return func(e *Engine) {
+		if n > 0 {
+			e.maxIterations = n
+		}
+	}
+}
+
+// WithRetry sets the per-turn retry policy: maxAttempts total attempts (1 means
+// no retry) and the exponential backoff base. Non-positive values are ignored.
+func WithRetry(maxAttempts int, backoffBase time.Duration) Option {
+	return func(e *Engine) {
+		if maxAttempts > 0 {
+			e.maxAttempts = maxAttempts
+		}
+		if backoffBase > 0 {
+			e.backoffBase = backoffBase
+		}
+	}
+}
+
+// WithSamplingParams sets the sampling knobs sent on every turn's request.
+func WithSamplingParams(p provider.SamplingParams) Option {
+	return func(e *Engine) { e.params = p }
+}
+
+// WithCacheHints sets the cache hints sent on every turn's request (AS-011).
+func WithCacheHints(c provider.CacheHints) Option {
+	return func(e *Engine) { e.cache = c }
+}
+
+// New builds an Engine over the given provider, log, tool runtime, and registry,
+// issuing every turn against model. It returns an error if any required
+// dependency is missing, so misconfiguration fails at construction rather than
+// mid-turn.
+func New(p provider.Provider, log *eventlog.Log, rt *tool.Runtime, reg *tool.Registry, model string, opts ...Option) (*Engine, error) {
+	switch {
+	case p == nil:
+		return nil, errors.New("loop: provider is required")
+	case log == nil:
+		return nil, errors.New("loop: event log is required")
+	case rt == nil:
+		return nil, errors.New("loop: tool runtime is required")
+	case reg == nil:
+		return nil, errors.New("loop: tool registry is required")
+	case model == "":
+		return nil, errors.New("loop: model is required")
+	}
+	e := &Engine{
+		provider:      p,
+		log:           log,
+		runtime:       rt,
+		registry:      reg,
+		model:         model,
+		observer:      func(UIEvent) {},
+		projectOpts:   projection.Options{TargetModel: model},
+		maxIterations: DefaultMaxIterations,
+		maxAttempts:   DefaultMaxAttempts,
+		backoffBase:   DefaultBackoffBase,
+		backoffMax:    DefaultBackoffMax,
+	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e, nil
+}
+
+// Result reports how a Run ended. StopReason is the provider's terminal stop
+// reason (e.g. end_turn, max_tokens) or a loop-defined one (StopMaxIterations);
+// Iterations counts the provider turns driven; FinalText concatenates the
+// visible assistant text of the final turn.
+type Result struct {
+	StopReason string
+	Iterations int
+	FinalText  string
+}
+
+// Run records userText as a user message and drives the turn loop to a stop
+// condition, returning how it ended. It appends the user block, then repeatedly
+// projects the log, streams a turn, and dispatches the model's client tool calls
+// until the model stops, a guard fires, or an error/cancellation ends the run.
+//
+// On cancellation (ctx) it returns the context error alongside a Result marking
+// the cancellation, having reconciled any tool_call appended in the abandoned
+// turn with a cancellation-marker result so the log stays consistent. A
+// surfaced provider error (after retries) is returned with the partial Result.
+func (e *Engine) Run(ctx context.Context, userText string) (Result, error) {
+	user := schema.Block{
+		ID:   schema.NewID(),
+		Kind: schema.KindText,
+		Role: schema.RoleUser,
+		Text: &schema.TextBody{Text: userText, Subtype: schema.TextSubtypeNormal},
+	}
+	if _, err := e.log.Append(user); err != nil {
+		return Result{}, fmt.Errorf("loop: append user message: %w", err)
+	}
+	return e.drive(ctx)
+}
+
+// drive runs the turn loop over the current log until a stop condition.
+func (e *Engine) drive(ctx context.Context) (Result, error) {
+	res := Result{}
+	for iter := 0; ; iter++ {
+		if err := ctx.Err(); err != nil {
+			res.StopReason = StopCanceled
+			return res, err
+		}
+		if iter >= e.maxIterations {
+			res.StopReason = StopMaxIterations
+			return res, nil
+		}
+
+		req := e.request()
+		turn, err := e.streamTurn(ctx, iter, req)
+		res.Iterations = iter + 1
+		res.StopReason = turn.stopReason
+		res.FinalText = turn.text
+		if err != nil {
+			// The turn was abandoned (cancelled or a surfaced provider error):
+			// reconcile any tool_call appended this turn so none is orphaned.
+			e.reconcile(turn.clientCalls)
+			if ctx.Err() != nil {
+				res.StopReason = StopCanceled
+			}
+			return res, err
+		}
+
+		if !needsToolDispatch(turn) {
+			return res, nil
+		}
+		if err := e.dispatch(ctx, iter, turn.clientCalls); err != nil {
+			if ctx.Err() != nil {
+				res.StopReason = StopCanceled
+			}
+			return res, err
+		}
+	}
+}
+
+// request builds the provider request for the next turn: the live projection of
+// the log as model-facing context, the registered tools, and the engine's
+// per-turn sampling and cache settings. Context is always re-projected — never
+// cached state (PRD D3).
+func (e *Engine) request() provider.Request {
+	proj := projection.Project(e.log.Events(), e.projectOpts)
+	return provider.Request{
+		Model:   e.model,
+		Context: proj.Live(),
+		Tools:   e.registry.ProviderDefs(),
+		Params:  e.params,
+		Cache:   e.cache,
+	}
+}
+
+// needsToolDispatch reports whether the turn ended asking for client tools the
+// loop must run before continuing. A tool_use stop with no client calls (e.g. a
+// server-tool turn) is terminal here: there is nothing for the loop to dispatch.
+func needsToolDispatch(t turnResult) bool {
+	return t.stopReason == provider.StopToolUse && len(t.clientCalls) > 0
+}
+
+// dispatch runs each client tool call through the runtime, appending its result
+// to the log and emitting UIToolStarted/UIToolFinished. On cancellation or an
+// infrastructure failure the runtime records no result; dispatch then reconciles
+// that call and every remaining undispatched call with a cancellation marker and
+// returns the error, so the log never carries an orphaned tool_call.
+func (e *Engine) dispatch(ctx context.Context, iter int, calls []schema.Block) error {
+	for i, call := range calls {
+		e.emit(UIEvent{Kind: UIToolStarted, Iteration: iter, Tool: toolEvent(call, nil)})
+		res, err := e.runtime.Execute(ctx, call)
+		if err != nil {
+			e.reconcile(calls[i:])
+			return err
+		}
+		e.emit(UIEvent{Kind: UIToolFinished, Iteration: iter, Tool: toolEvent(call, res.ToolResult)})
+	}
+	return nil
+}
+
+// reconcile appends a cancellation-marker tool_result for every call that has
+// not already been answered on the log, so an abandoned turn never leaves a
+// tool_call without a matching result (the consistency guarantee of AS-018). It
+// is idempotent and best-effort: a call already answered is skipped, and a
+// failed marker append is ignored because the turn is already being abandoned.
+func (e *Engine) reconcile(calls []schema.Block) {
+	for _, call := range calls {
+		if call.ToolCall == nil {
+			continue
+		}
+		if e.hasResult(call.ToolCall.ToolUseID) {
+			continue
+		}
+		marker := schema.Block{
+			ID:   schema.NewID(),
+			Kind: schema.KindToolResult,
+			Role: schema.RoleTool,
+			Provenance: &schema.Provenance{
+				Producer:    producer,
+				DerivedFrom: []string{call.ID},
+			},
+			Attribution: &schema.Attribution{Tool: call.ToolCall.Name},
+			ToolResult: &schema.ToolResultBody{
+				ToolUseID: call.ToolCall.ToolUseID,
+				Content:   []schema.Part{{Type: "text", Text: "tool call canceled before completion"}},
+				IsError:   true,
+			},
+		}
+		_, _ = e.log.Append(marker) //nolint:errcheck // best-effort on an abandoned turn
+	}
+}
+
+// hasResult reports whether a tool_result for toolUseID is already on the log.
+func (e *Engine) hasResult(toolUseID string) bool {
+	for _, b := range e.log.Events() {
+		if b.Kind == schema.KindToolResult && b.ToolResult != nil && b.ToolResult.ToolUseID == toolUseID {
+			return true
+		}
+	}
+	return false
+}
+
+// emit forwards ev to the observer.
+func (e *Engine) emit(ev UIEvent) { e.observer(ev) }
+
+// toolEvent builds the UI payload for a tool call, optionally with its result.
+func toolEvent(call schema.Block, result *schema.ToolResultBody) *ToolEvent {
+	te := &ToolEvent{Result: result}
+	if call.ToolCall != nil {
+		te.ToolUseID = call.ToolCall.ToolUseID
+		te.Name = call.ToolCall.Name
+		te.Arguments = call.ToolCall.Arguments
+	}
+	return te
+}
+
+// firstNonZero returns a when non-empty, else b.
+func firstNonZero(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}

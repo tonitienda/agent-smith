@@ -90,6 +90,7 @@ internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
 internal/session/          project-scoped disk persistence for append-only session logs
 internal/provider/         provider abstraction: normalized request/stream interface + taxonomy
+internal/loop/             agentic turn loop: projection → stream → tool dispatch, face-agnostic UI events
 .github/workflows/         CI for build, vet, lint, tests, and merged-ticket issue sync
 scripts/agent-quality-gate.sh  shared deterministic pre-submit gate for humans and agents
 ```
