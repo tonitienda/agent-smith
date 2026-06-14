@@ -390,38 +390,55 @@ func breakpointSet(hints provider.CacheHints, ctx []schema.Block) map[string]str
 
 // autoBreakpoints chooses sensible default cache breakpoints for ctx when the
 // caller supplies none. Anthropic caches the prefix up to and including each
-// breakpoint (in tools → system → messages order), so two breakpoints cover the
-// two prefixes that recur turn to turn:
+// breakpoint (in tools → system → messages order) and reads a prior cache only
+// where a breakpoint lands on the same position, so we mark the three prefixes
+// that recur turn to turn (well under Anthropic's limit of 4):
 //
-//   - the last system block, which caches the stable tools + system prefix; and
+//   - the last system block, which caches the stable tools + system prefix;
+//   - the last assistant block, which anchors the previous turn's boundary; and
 //   - the last block overall, which caches the whole conversation prefix.
 //
-// Because the log is append-only and the projection preserves block order
-// (prefix stability, see internal/projection), the breakpoint placed on this
-// turn's final block makes that exact prefix a cache read on the next turn,
-// while the new tail is written — the standard incremental-conversation pattern.
-// Anthropic ignores cache_control on a prefix shorter than its minimum cacheable
-// size, so a tiny context simply no-ops. Returns nil when ctx has no block that
-// can carry a breakpoint.
+// The last-assistant anchor is what makes incremental multi-turn caching
+// reliable: turn N+1 appends new blocks, so its trailing breakpoint moves to the
+// new last block, but the previous turn ended at the last assistant block — a
+// stable interior position this turn. Marking it guarantees a cache read of the
+// conversation history rather than relying on Anthropic's limited look-back from
+// the trailing breakpoint. The append-only log and order-preserving projection
+// (prefix stability, see internal/projection) keep that prefix byte-identical,
+// so this turn's tail is written and next turn reads it. Anthropic ignores
+// cache_control on a prefix shorter than its minimum cacheable size, so a tiny
+// context simply no-ops. Returns nil when ctx has no block that can carry a
+// breakpoint.
 func autoBreakpoints(ctx []schema.Block) []schema.CacheBreakpoint {
-	lastSystem, lastBlock := "", ""
+	lastSystem, lastAssistant, lastBlock := "", "", ""
 	for i := range ctx {
 		id := ctx[i].ID
 		if id == "" {
 			continue
 		}
 		lastBlock = id
-		if ctx[i].Role == schema.RoleSystem {
+		switch ctx[i].Role {
+		case schema.RoleSystem:
 			lastSystem = id
+		case schema.RoleAssistant:
+			lastAssistant = id
 		}
 	}
 	var bps []schema.CacheBreakpoint
-	if lastSystem != "" {
-		bps = append(bps, schema.CacheBreakpoint{BlockID: lastSystem})
+	seen := map[string]bool{}
+	add := func(id string) {
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		bps = append(bps, schema.CacheBreakpoint{BlockID: id})
 	}
-	if lastBlock != "" && lastBlock != lastSystem {
-		bps = append(bps, schema.CacheBreakpoint{BlockID: lastBlock})
-	}
+	// Dedup by ID so the trailing block still gets a breakpoint when it coincides
+	// with the last assistant block (a turn ending in assistant text), rather than
+	// being skipped by both guards.
+	add(lastSystem)
+	add(lastAssistant)
+	add(lastBlock)
 	return bps
 }
 

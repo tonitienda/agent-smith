@@ -30,7 +30,7 @@ Use prompt caching wherever the provider supports it (§7.1) — this is foundat
 
 ## Implementation notes
 
-- **Cache-aware assembly lives in the vendor adapter.** Per the `provider.CacheHints` contract, the zero value defers to the adapter's default placement. The Anthropic adapter auto-places breakpoints (last system block → caches tools+system; last context block → caches the conversation prefix) so caching is on by default without the caller computing breakpoints each turn. Callers can still pass explicit `Breakpoints`, or set the new `CacheHints.Disabled` to opt out.
+- **Cache-aware assembly lives in the vendor adapter.** Per the `provider.CacheHints` contract, the zero value defers to the adapter's default placement. The Anthropic adapter auto-places up to three breakpoints (last system block → caches tools+system; last assistant block → anchors the previous turn's boundary so multi-turn history is a cache read; last context block → caches the whole conversation prefix) so caching is on by default without the caller computing breakpoints each turn. Callers can still pass explicit `Breakpoints`, or set the new `CacheHints.Disabled` to opt out.
 - **Prefix stability is the projection's job.** `projection.Live` emits live blocks in append order over an immutable, append-only log, so an unchanged prefix serializes byte-identically turn to turn — the precondition for cache hits. Documented as an invariant on `Live` and covered by `TestLivePrefixStableAcrossAppend`.
 
 ## Dependencies

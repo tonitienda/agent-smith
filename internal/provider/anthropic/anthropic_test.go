@@ -184,6 +184,39 @@ func TestBuildWireRequestAutoCacheBreakpoints(t *testing.T) {
 	}
 }
 
+func TestBuildWireRequestAutoCacheAnchorsPreviousTurn(t *testing.T) {
+	// A second turn (trailing user message after a completed assistant turn):
+	// the adapter anchors the previous turn's boundary (last assistant block) so
+	// the conversation prefix is a cache read, plus the system and trailing-block
+	// breakpoints. The interior user block u1 stays unmarked.
+	req := provider.Request{
+		Model: "m",
+		Context: []schema.Block{
+			{ID: "s1", Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "be terse"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}},
+			{ID: "a1", Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: "hello"}},
+			{ID: "u2", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "more"}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	if w.System[0].CacheControl == nil {
+		t.Error("system cache_control = nil, want ephemeral")
+	}
+	// Messages: user(hi), assistant(hello), user(more).
+	if u1 := w.Messages[0].Content[0].(wireText); u1.CacheControl != nil {
+		t.Errorf("interior user u1 cache_control = %+v, want nil", u1.CacheControl)
+	}
+	if a1 := w.Messages[1].Content[0].(wireText); a1.CacheControl == nil {
+		t.Error("last assistant block a1 cache_control = nil, want ephemeral (previous-turn anchor)")
+	}
+	if u2 := w.Messages[2].Content[0].(wireText); u2.CacheControl == nil {
+		t.Error("trailing block u2 cache_control = nil, want ephemeral")
+	}
+}
+
 func TestBuildWireRequestCacheDisabled(t *testing.T) {
 	req := provider.Request{
 		Model: "m",
