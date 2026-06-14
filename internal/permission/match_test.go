@@ -47,6 +47,10 @@ func TestGlobMatch(t *testing.T) {
 		{"src/**/test_?.go", "src/a/b/test_x.go", true},
 		{"exact", "exact", true},
 		{"exact", "other", false},
+		// ? matches one multi-byte rune, not one byte, for unicode filenames.
+		{"caf?.txt", "café.txt", true},
+		{"r?sum?", "résumé", true},
+		{"*.md", "naïve.md", true},
 	}
 	for _, c := range cases {
 		if got := globMatch(c.pattern, c.name); got != c.want {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Rule is one allow-list entry: a tool name plus an optional pattern matched
@@ -164,12 +165,21 @@ func FilePersister(path string) Persister {
 	return func(r Rule) error { return AppendRule(path, r) }
 }
 
+// appendMu serializes AppendRule's read-modify-write of the config file within
+// the process, so concurrent "always allow" approvals from parallel tool calls
+// (AS-019) cannot lose each other's rules. Cross-process coordination is out of
+// scope (a documented limit): the last writer wins at the file level.
+var appendMu sync.Mutex
+
 // AppendRule adds r to the allow-list of the config file at path, creating the
 // file (and its directory) if absent and leaving other fields untouched. A rule
 // already present is a no-op, so repeated "always allow" of the same action does
 // not duplicate it. The write is atomic (temp file + rename) so a crash cannot
-// corrupt the config.
+// corrupt the config. It is safe for concurrent use.
 func AppendRule(path string, r Rule) error {
+	appendMu.Lock()
+	defer appendMu.Unlock()
+
 	cfg, err := Load(path)
 	if err != nil {
 		return err

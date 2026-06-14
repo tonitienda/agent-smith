@@ -147,17 +147,21 @@ func matchSegments(pat, name []string) bool {
 }
 
 // segMatch matches a single path segment against a glob segment where * matches
-// any run of characters and ? matches one. It uses backtracking on *, which is
-// linear in practice for these short segments.
+// any run of characters and ? matches one. It compares runes, not bytes, so ?
+// matches a single multi-byte character (a unicode filename) rather than one
+// byte of it. It uses backtracking on *, which is linear in practice for these
+// short segments.
 func segMatch(pat, s string) bool {
+	p := []rune(pat)
+	str := []rune(s)
 	var pi, si, star, mark int
 	star = -1
-	for si < len(s) {
+	for si < len(str) {
 		switch {
-		case pi < len(pat) && (pat[pi] == '?' || pat[pi] == s[si]):
+		case pi < len(p) && (p[pi] == '?' || p[pi] == str[si]):
 			pi++
 			si++
-		case pi < len(pat) && pat[pi] == '*':
+		case pi < len(p) && p[pi] == '*':
 			star = pi
 			mark = si
 			pi++
@@ -169,8 +173,8 @@ func segMatch(pat, s string) bool {
 			return false
 		}
 	}
-	for pi < len(pat) && pat[pi] == '*' {
+	for pi < len(p) && p[pi] == '*' {
 		pi++
 	}
-	return pi == len(pat)
+	return pi == len(p)
 }

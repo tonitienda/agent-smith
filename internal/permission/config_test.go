@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -88,6 +90,30 @@ func TestAppendRuleCreatesAndDedupes(t *testing.T) {
 	}
 	if len(cfg.Allow) != 2 {
 		t.Fatalf("Allow = %+v, want 2 (no duplicate)", cfg.Allow)
+	}
+}
+
+func TestAppendRuleConcurrent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "permissions.json")
+	const n = 16
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			if err := AppendRule(path, Rule{Tool: "shell", Pattern: "cmd" + strconv.Itoa(i)}); err != nil {
+				t.Errorf("AppendRule: %v", err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Allow) != n {
+		t.Fatalf("Allow has %d rules, want %d (concurrent writes lost updates)", len(cfg.Allow), n)
 	}
 }
 
