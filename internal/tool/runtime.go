@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -24,18 +25,26 @@ const DefaultTimeout = 60 * time.Second
 // source (PRD §2), so the runtime bounds it by default.
 const DefaultMaxResultBytes = 32 * 1024
 
+// DefaultMaxParallel bounds how many of one turn's independent tool calls
+// ExecuteBatch runs at once (AS-019). It caps fan-out so a turn that emits many
+// calls cannot spawn an unbounded number of goroutines — and with them an
+// unbounded number of subprocesses or open files — at the same instant.
+const DefaultMaxParallel = 8
+
 // Runtime executes a model's tool calls: it validates arguments against the
 // tool's schema, gates execution through the permission hook (AS-016), runs the
 // tool under cancellation and a per-tool timeout, truncates oversized output, and
 // records a tool_result block onto the log (AS-005) linked to its call. It holds
-// no mutable state after construction, so Execute is safe to call concurrently
-// for the independent calls of a parallel-tool turn (AS-019).
+// no mutable state after construction; ExecuteBatch builds on that to run a
+// turn's independent calls concurrently while keeping the log deterministic
+// (AS-019).
 type Runtime struct {
-	registry   *Registry
-	log        *eventlog.Log
-	permission PermissionFunc
-	timeout    time.Duration
-	maxBytes   int
+	registry    *Registry
+	log         *eventlog.Log
+	permission  PermissionFunc
+	timeout     time.Duration
+	maxBytes    int
+	maxParallel int
 }
 
 // Option configures a Runtime.
@@ -67,17 +76,28 @@ func WithMaxResultBytes(n int) Option {
 	return func(r *Runtime) { r.maxBytes = n }
 }
 
+// WithMaxParallel sets how many of one turn's independent tool calls ExecuteBatch
+// runs concurrently (AS-019). A non-positive n is ignored, keeping the default.
+func WithMaxParallel(n int) Option {
+	return func(r *Runtime) {
+		if n > 0 {
+			r.maxParallel = n
+		}
+	}
+}
+
 // NewRuntime builds a Runtime over registry and log. The log receives every
 // tool_result (and, as a safety net, any tool_call not already on it). Without
 // WithPermission the runtime permits every call (AllowAll); AS-016 injects the
 // real policy.
 func NewRuntime(registry *Registry, log *eventlog.Log, opts ...Option) *Runtime {
 	r := &Runtime{
-		registry:   registry,
-		log:        log,
-		permission: AllowAll,
-		timeout:    DefaultTimeout,
-		maxBytes:   DefaultMaxResultBytes,
+		registry:    registry,
+		log:         log,
+		permission:  AllowAll,
+		timeout:     DefaultTimeout,
+		maxBytes:    DefaultMaxResultBytes,
+		maxParallel: DefaultMaxParallel,
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -103,45 +123,186 @@ func (r *Runtime) Execute(ctx context.Context, call schema.Block) (schema.Block,
 		return schema.Block{}, fmt.Errorf("tool: Execute requires a %s block, got %q", schema.KindToolCall, call.Kind)
 	}
 
-	logged, err := r.ensureLogged(call)
+	p, err := r.prepare(ctx, call)
 	if err != nil {
 		return schema.Block{}, err
+	}
+	if p.deny != nil {
+		return r.record(p.call, *p.deny)
+	}
+
+	out, runErr := r.run(ctx, p.tool, p.call.ToolCall.Arguments)
+	return r.finishCall(ctx, p, out, runErr)
+}
+
+// plan is one call's state after the serial gating phase (prepare): the on-log
+// tool_call, and exactly one of tool (the call is approved and runnable) or deny
+// (the call resolved to a terminal result during gating — unknown tool, invalid
+// arguments, or denied permission — that is recorded as-is without running).
+type plan struct {
+	call schema.Block
+	tool Tool
+	deny *Output
+}
+
+// prepare runs the serial gating phase for one call: it ensures the tool_call is
+// on the log, then checks cancellation, resolves the tool, validates arguments,
+// and asks the permission hook. A non-nil error means the surrounding turn was
+// abandoned (cancelled) or the log rejected the call — no work should start and
+// nothing is recorded. Otherwise it returns a plan that either carries a runnable
+// tool or a terminal deny Output for the caller to record.
+func (r *Runtime) prepare(ctx context.Context, call schema.Block) (plan, error) {
+	logged, err := r.ensureLogged(call)
+	if err != nil {
+		return plan{}, err
 	}
 	tc := logged.ToolCall
 
 	// An already-cancelled turn should not start new work.
 	if err := ctx.Err(); err != nil {
-		return schema.Block{}, err
+		return plan{}, err
 	}
 
-	tool, ok := r.registry.Get(tc.Name)
+	t, ok := r.registry.Get(tc.Name)
 	if !ok {
-		return r.record(logged, errorOutput("unknown tool %q", tc.Name))
+		return r.denyPlan(logged, "unknown tool %q", tc.Name), nil
 	}
-
-	if err := validateArgs(tool.Def().InputSchema, tc.Arguments); err != nil {
-		return r.record(logged, errorOutput("invalid arguments for tool %q: %v", tc.Name, err))
+	if err := validateArgs(t.Def().InputSchema, tc.Arguments); err != nil {
+		return r.denyPlan(logged, "invalid arguments for tool %q: %v", tc.Name, err), nil
 	}
 
 	gate := Call{ToolUseID: tc.ToolUseID, Name: tc.Name, Arguments: tc.Arguments}
 	if d := r.permission(ctx, gate); !d.Allow {
-		return r.record(logged, errorOutput("permission denied for tool %q: %s", tc.Name, d.Reason))
+		return r.denyPlan(logged, "permission denied for tool %q: %s", tc.Name, d.Reason), nil
+	}
+	return plan{call: logged, tool: t}, nil
+}
+
+// denyPlan builds a terminal plan whose deny Output records a model-readable
+// error for a call that did not pass gating.
+func (r *Runtime) denyPlan(call schema.Block, format string, args ...any) plan {
+	out := errorOutput(format, args...)
+	return plan{call: call, deny: &out}
+}
+
+// finishCall turns a runnable plan's execution outcome into a recorded
+// tool_result. A nil runErr records the tool's Output. On a non-nil runErr it
+// distinguishes abandonment of the whole turn (ctx cancelled: propagate the error
+// and record nothing, because the turn is being abandoned) from a per-tool
+// timeout or a tool failure (record a model-readable error so the model can
+// react). ctx is the surrounding turn's context, not the per-tool budget.
+func (r *Runtime) finishCall(ctx context.Context, p plan, out Output, runErr error) (schema.Block, error) {
+	if runErr == nil {
+		return r.record(p.call, out)
+	}
+	if ctx.Err() != nil {
+		return schema.Block{}, ctx.Err()
+	}
+	name := p.call.ToolCall.Name
+	if errors.Is(runErr, context.DeadlineExceeded) {
+		return r.record(p.call, errorOutput("tool %q timed out after %s", name, r.budget(p.tool)))
+	}
+	return r.record(p.call, errorOutput("tool %q failed: %v", name, runErr))
+}
+
+// ExecuteBatch runs one assistant turn's client tool calls, executing the
+// independent ones concurrently while keeping the log deterministic (AS-019):
+//
+//   - Gating (cancellation check, argument validation, and the permission hook)
+//     runs serially in call order, so in ask mode permission prompts happen one
+//     at a time and in a predictable order — a denial never cancels a sibling
+//     already approved.
+//   - Approved tools then run concurrently under a bounded worker pool; a failing
+//     or timing-out tool records its own error result and does not cancel its
+//     siblings.
+//   - Results are appended to the log in the original call order regardless of
+//     which tool finished first, so the recorded history is reproducible.
+//
+// hooks, when set, are notified as each call starts and finishes, in call order,
+// so a face can show progress. The returned blocks are the recorded tool_results
+// aligned with calls. A non-nil error means the turn was abandoned (ctx cancelled)
+// or the log rejected a write; the caller is responsible for reconciling any call
+// left unanswered (results already appended are skipped, since they are answered).
+func (r *Runtime) ExecuteBatch(ctx context.Context, calls []schema.Block, hooks BatchHooks) ([]schema.Block, error) {
+	// Phase 1 — gate every call serially, in call order.
+	plans := make([]plan, len(calls))
+	for i, call := range calls {
+		if call.Kind != schema.KindToolCall || call.ToolCall == nil {
+			return nil, fmt.Errorf("tool: ExecuteBatch requires %s blocks, got %q at index %d", schema.KindToolCall, call.Kind, i)
+		}
+		p, err := r.prepare(ctx, call)
+		if err != nil {
+			return nil, err
+		}
+		plans[i] = p
 	}
 
-	out, runErr := r.run(ctx, tool, tc.Arguments)
-	if runErr != nil {
-		// Distinguish abandonment of the whole turn (propagate, record nothing)
-		// from a per-tool timeout or a tool failure (record a model-readable
-		// result so the model can react).
-		if ctx.Err() != nil {
-			return schema.Block{}, ctx.Err()
-		}
-		if errors.Is(runErr, context.DeadlineExceeded) {
-			return r.record(logged, errorOutput("tool %q timed out after %s", tc.Name, r.budget(tool)))
-		}
-		return r.record(logged, errorOutput("tool %q failed: %v", tc.Name, runErr))
+	// Phase 2 — run the approved tools concurrently under a bounded pool. Each
+	// goroutine touches only its own slot, so the slices need no extra locking;
+	// the log is untouched here, so concurrency cannot reorder it.
+	outs := make([]Output, len(plans))
+	runErrs := make([]error, len(plans))
+	for i := range plans {
+		hooks.start(i, plans[i].call)
 	}
-	return r.record(logged, out)
+	r.runConcurrent(ctx, plans, outs, runErrs)
+
+	// Phase 3 — record results in call order, so the log is reproducible.
+	results := make([]schema.Block, len(plans))
+	for i, p := range plans {
+		var (
+			res schema.Block
+			err error
+		)
+		if p.deny != nil {
+			res, err = r.record(p.call, *p.deny)
+		} else {
+			res, err = r.finishCall(ctx, p, outs[i], runErrs[i])
+		}
+		if err != nil {
+			// The turn was abandoned (cancellation) or the log rejected a write:
+			// stop recording and let the caller reconcile the rest. Calls already
+			// recorded above stay answered.
+			return results[:i], err
+		}
+		results[i] = res
+		hooks.finish(i, p.call, res.ToolResult)
+	}
+	return results, nil
+}
+
+// runConcurrent runs the runnable plans' tools concurrently, bounded by
+// r.maxParallel, writing each call's Output and error into its slot of outs and
+// errs. Non-runnable plans (a terminal deny) are skipped. It returns once every
+// launched tool has finished or been cancelled.
+func (r *Runtime) runConcurrent(ctx context.Context, plans []plan, outs []Output, errs []error) {
+	limit := r.maxParallel
+	if limit <= 0 {
+		limit = DefaultMaxParallel
+	}
+	sem := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for i := range plans {
+		if plans[i].tool == nil {
+			continue // a denied/invalid call has no tool to run
+		}
+		// Acquire a worker slot, but stop launching new work the moment the turn
+		// is cancelled: a not-yet-started call is marked cancelled (so phase 3
+		// propagates the abandonment rather than recording an empty result)
+		// instead of spawning a goroutine that would only run a doomed tool.
+		select {
+		case sem <- struct{}{}:
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				outs[i], errs[i] = r.run(ctx, plans[i].tool, plans[i].call.ToolCall.Arguments)
+			}(i)
+		case <-ctx.Done():
+			errs[i] = ctx.Err()
+		}
+	}
+	wg.Wait()
 }
 
 // run executes the tool under a child context bounded by the tool's budget, so
@@ -318,4 +479,28 @@ func truncateUTF8(s string, n int) string {
 // errorOutput builds a model-readable error result with a single text part.
 func errorOutput(format string, args ...any) Output {
 	return Output{Text: fmt.Sprintf(format, args...), IsError: true}
+}
+
+// BatchHooks observes an ExecuteBatch run's progress. Both fields are optional; a
+// nil hook is skipped. Started fires for every call in call order once gating is
+// done and the batch is about to run its approved tools — before the concurrent
+// execution begins, and including a call that was denied or failed validation
+// (whose terminal result is still reported through Finished). Finished fires as
+// each call's result is recorded, also in call order and regardless of which tool
+// finished first, so a face can report tool progress deterministically.
+type BatchHooks struct {
+	Started  func(index int, call schema.Block)
+	Finished func(index int, call schema.Block, result *schema.ToolResultBody)
+}
+
+func (h BatchHooks) start(i int, call schema.Block) {
+	if h.Started != nil {
+		h.Started(i, call)
+	}
+}
+
+func (h BatchHooks) finish(i int, call schema.Block, result *schema.ToolResultBody) {
+	if h.Finished != nil {
+		h.Finished(i, call, result)
+	}
 }

@@ -27,8 +27,11 @@ func Denied(reason string) Decision { return Decision{Allow: false, Reason: reas
 // PermissionFunc, so the gate is never bypassed.
 //
 // call describes the tool being invoked (name, validated arguments, tool_use
-// id). Implementations must be safe for concurrent use: parallel tool calls
-// (AS-019) check permission concurrently.
+// id). Implementations must still be safe for concurrent use — separate turns or
+// engines can drive the runtime at the same time — but within a single turn's
+// batch of calls the runtime serializes the permission checks and runs them in
+// call order (AS-019), so an interactive ask-mode hook is prompted one call at a
+// time rather than for several calls of one turn at once.
 type PermissionFunc func(ctx context.Context, call Call) Decision
 
 // Call is the in-flight tool invocation handed to the permission hook and used

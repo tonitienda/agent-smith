@@ -257,20 +257,24 @@ func needsToolDispatch(t turnResult) bool {
 	return t.stopReason == provider.StopToolUse && len(t.clientCalls) > 0
 }
 
-// dispatch runs each client tool call through the runtime, appending its result
-// to the log and emitting UIToolStarted/UIToolFinished. On cancellation or an
-// infrastructure failure the runtime records no result; dispatch then reconciles
-// that call and every remaining undispatched call with a cancellation marker and
-// returns the error, so the log never carries an orphaned tool_call.
+// dispatch runs a turn's client tool calls through the runtime, which executes
+// the independent ones concurrently while recording their results on the log in
+// call order (AS-019). It emits UIToolStarted/UIToolFinished per call in that
+// order. On cancellation or an infrastructure failure the runtime stops recording
+// and returns the error; dispatch then reconciles every call not already answered
+// with a cancellation marker, so the log never carries an orphaned tool_call.
 func (e *Engine) dispatch(ctx context.Context, iter int, calls []schema.Block) error {
-	for i, call := range calls {
-		e.emit(UIEvent{Kind: UIToolStarted, Iteration: iter, Tool: toolEvent(call, nil)})
-		res, err := e.runtime.Execute(ctx, call)
-		if err != nil {
-			e.reconcile(calls[i:])
-			return err
-		}
-		e.emit(UIEvent{Kind: UIToolFinished, Iteration: iter, Tool: toolEvent(call, res.ToolResult)})
+	hooks := tool.BatchHooks{
+		Started: func(_ int, call schema.Block) {
+			e.emit(UIEvent{Kind: UIToolStarted, Iteration: iter, Tool: toolEvent(call, nil)})
+		},
+		Finished: func(_ int, call schema.Block, result *schema.ToolResultBody) {
+			e.emit(UIEvent{Kind: UIToolFinished, Iteration: iter, Tool: toolEvent(call, result)})
+		},
+	}
+	if _, err := e.runtime.ExecuteBatch(ctx, calls, hooks); err != nil {
+		e.reconcile(calls)
+		return err
 	}
 	return nil
 }
