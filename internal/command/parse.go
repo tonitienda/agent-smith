@@ -9,7 +9,8 @@ import (
 // may start with a slash (`/clean "old api"`) or not. Arguments are whitespace
 // separated, except that double-quoted spans are kept intact with the quotes
 // stripped — needed for `/clean "<topic>"` (AS-029) and any later command that
-// takes a phrase. A backslash inside quotes escapes the next character.
+// takes a phrase. A backslash escapes the next character anywhere in the line,
+// so a literal quote or space can appear in an argument (`a\ b`, `\"`).
 //
 // It returns the name without the leading slash and the positional arguments.
 // An empty or slash-only line, or an unterminated quote, is an error.

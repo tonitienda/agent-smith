@@ -152,8 +152,13 @@ func (m model) dispatchCommand() (tea.Model, tea.Cmd) {
 		name string
 		args []string
 	)
+	// histLine is what up-arrow will recall. For a palette selection it is the
+	// resolved invocation (e.g. "/cost"), not the typed prefix ("/co"), so recall
+	// re-runs the same command rather than a misleading partial.
+	histLine := line
 	if m.palette.open && len(m.palette.matches) > 0 && !strings.ContainsAny(line, " \t") {
 		name = m.palette.matches[m.palette.sel].Name
+		histLine = "/" + name
 	} else {
 		n, a, err := command.Parse(line)
 		if err != nil {
@@ -164,7 +169,7 @@ func (m model) dispatchCommand() (tea.Model, tea.Cmd) {
 		name, args = n, a
 	}
 
-	m.history = append(m.history, line)
+	m.history = append(m.history, histLine)
 	m.histIdx = len(m.history)
 	m.resetInput()
 	m.relayout()

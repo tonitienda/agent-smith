@@ -16,18 +16,21 @@ func fuzzyScore(query, name string) (score int, ok bool) {
 	case query == name:
 		return 1000, true
 	case strings.HasPrefix(name, query):
-		// Prefix match: shorter remainders rank higher (closer to exact).
-		return 500 - (len(name) - len(query)), true
+		// Prefix match: shorter remainders rank higher (closer to exact). Count
+		// runes so the bonus is by character, not byte.
+		return 500 - (utf8.RuneCountInString(name) - utf8.RuneCountInString(query)), true
 	case strings.Contains(name, query):
 		return 200 - strings.Index(name, query), true
 	}
 
-	// Subsequence match: every query char appears in order. Reward adjacency so
+	// Subsequence match: every query char appears in order. Compare by rune so a
+	// multi-byte command name isn't matched byte-by-byte. Reward adjacency so
 	// "ct" still finds "context" but ranks below a contiguous hit.
+	nr, qr := []rune(name), []rune(query)
 	qi := 0
 	run := 0
-	for ni := 0; ni < len(name) && qi < len(query); ni++ {
-		if name[ni] == query[qi] {
+	for ni := 0; ni < len(nr) && qi < len(qr); ni++ {
+		if nr[ni] == qr[qi] {
 			qi++
 			run++
 			score += run // contiguous matches compound
@@ -35,7 +38,7 @@ func fuzzyScore(query, name string) (score int, ok bool) {
 			run = 0
 		}
 	}
-	if qi != len(query) {
+	if qi != len(qr) {
 		return 0, false
 	}
 	return score, true

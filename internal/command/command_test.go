@@ -95,6 +95,21 @@ func TestMatchFiltersAndRanks(t *testing.T) {
 	}
 }
 
+func TestMatchNonASCIINames(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r,
+		Command{Name: "café", Run: noop},
+		Command{Name: "naïve", Run: noop},
+	)
+	// A multi-byte subsequence query matches by rune, not byte.
+	if got := names(r.Match("cé")); len(got) != 1 || got[0] != "café" {
+		t.Fatalf("Match(\"cé\") = %v, want [café]", got)
+	}
+	if got := names(r.Match("café")); len(got) != 1 || got[0] != "café" {
+		t.Fatalf("Match(\"café\") = %v, want [café]", got)
+	}
+}
+
 func TestSuggestNearestMatch(t *testing.T) {
 	r := NewRegistry()
 	mustRegister(t, r,

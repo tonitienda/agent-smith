@@ -220,6 +220,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// moves the cursor within the multi-line editor.
 		if !strings.Contains(m.textarea.Value(), "\n") {
 			m.navigateHistory(msg.String() == "up")
+			// A recalled entry may be a "/…" command, so refresh the palette.
+			m.syncPalette()
+			m.relayout()
 			return m, nil
 		}
 

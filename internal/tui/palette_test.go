@@ -233,6 +233,46 @@ func TestSlashInputDoesNotStartTurn(t *testing.T) {
 	}
 }
 
+func TestPaletteSelectionRecordsResolvedInvocation(t *testing.T) {
+	rec := &recorder{}
+	reg := sampleRegistry(t,
+		command.Command{Name: "context", Run: nopHandler},
+		command.Command{Name: "cost", Mode: command.Inline, Run: rec.handler(command.Output{Text: "ok"})},
+	)
+	m := newCommandModel(t, reg)
+	m = typeString(t, m, "/co") // palette: [cost, context], cost highlighted
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+
+	// History recalls the resolved command, not the typed prefix.
+	if len(m.history) != 1 || m.history[0] != "/cost" {
+		t.Fatalf("history = %v, want [/cost]", m.history)
+	}
+}
+
+func TestHistoryRecallReopensPalette(t *testing.T) {
+	reg := sampleRegistry(t,
+		command.Command{Name: "cost", Mode: command.Inline, Run: nopHandler},
+	)
+	m := newCommandModel(t, reg)
+	m = typeString(t, m, "/cost")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	if m.palette.open {
+		t.Fatal("palette should be closed after dispatch")
+	}
+
+	// Up-arrow recalls "/cost"; the palette must re-sync open for it.
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyUp})
+	if m.textarea.Value() != "/cost" {
+		t.Fatalf("recalled value = %q, want /cost", m.textarea.Value())
+	}
+	if !m.palette.open || len(m.palette.matches) != 1 {
+		t.Fatalf("palette not reopened on recall: open=%v matches=%d", m.palette.open, len(m.palette.matches))
+	}
+}
+
 func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
 	reg := command.NewRegistry()
 	for _, n := range []string{"cmd1", "cmd2", "cmd3", "cmd4", "cmd5", "cmd6"} {
