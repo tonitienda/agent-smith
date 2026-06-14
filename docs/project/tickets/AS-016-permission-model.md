@@ -1,7 +1,7 @@
 ---
 id: AS-016
 title: Permission model (ask / allowlist / auto) + documented security posture
-status: ready-to-implement
+status: done
 github_issue: 16
 depends_on: [AS-013]
 area: security
