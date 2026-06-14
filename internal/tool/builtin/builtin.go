@@ -7,8 +7,8 @@
 //
 // All five tools share one FS, which fixes the session working directory they
 // resolve paths against and rejects any path that escapes that root (a lexical
-// check — symlink traversal is a documented V1 limit, see docs/SECURITY.md once
-// AS-016 lands). FS also carries the read-tracking set the write tool consults
+// check — symlink traversal is a documented V1 limit, see docs/SECURITY.md).
+// FS also carries the read-tracking set the write tool consults
 // to honor the "never overwrite a file this session has not read" safety
 // convention.
 //
