@@ -1,0 +1,50 @@
+package openai
+
+import (
+	"net/http"
+	"os"
+	"testing"
+
+	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/provider/conformance"
+)
+
+// conformanceModel is substituted into each conformance request. Replay only
+// needs a non-empty model (the fixture answers regardless); recording uses it as
+// the live model, overridable with SMITH_LIVE_OPENAI_MODEL.
+func conformanceModel() string {
+	if m := os.Getenv("SMITH_LIVE_OPENAI_MODEL"); m != "" {
+		return m
+	}
+	return "gpt-5"
+}
+
+// TestConformance runs the shared provider conformance suite (AS-012) against
+// the OpenAI Responses adapter from recorded fixtures — no network, no API key.
+// It proves this adapter normalizes the Responses wire format to the same Events
+// as every other provider; the identical conformance.Want holds here and for the
+// Anthropic adapter, which is the cross-provider equivalence the suite enforces.
+func TestConformance(t *testing.T) {
+	conformance.Run(t, conformanceModel(), func(t *testing.T, c conformance.Case) provider.Provider {
+		path := conformance.FixturePath(conformance.FixtureDir, c.Name)
+		return New("test-key", WithHTTPClient(&http.Client{Transport: conformance.FileTransport(t, path)}))
+	})
+}
+
+// TestRecordConformance regenerates the conformance fixtures from live calls. It
+// is skipped unless SMITH_RECORD=1 and OPENAI_API_KEY are set, so it never runs
+// in CI; `make record-fixtures` drives it. After recording, reconcile any
+// wire-format change with the conformance.Want expectations.
+func TestRecordConformance(t *testing.T) {
+	if os.Getenv("SMITH_RECORD") != "1" {
+		t.Skip("set SMITH_RECORD=1 (and OPENAI_API_KEY) to re-record fixtures; see make record-fixtures")
+	}
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		t.Skip("OPENAI_API_KEY not set")
+	}
+	conformance.Record(t, conformanceModel(), func(t *testing.T, c conformance.Case) provider.Provider {
+		path := conformance.FixturePath(conformance.FixtureDir, c.Name)
+		rt := conformance.RecordingTransport(http.DefaultTransport, path)
+		return New("", WithHTTPClient(&http.Client{Transport: rt}))
+	})
+}

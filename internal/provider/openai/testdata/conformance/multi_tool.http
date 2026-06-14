@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+
+data: {"type":"response.created","response":{"id":"resp_multi","model":"gpt-5"}}
+
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","call_id":"call_a","name":"read_file"}}
+
+data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"path\":\"a.txt\"}"}
+
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call"}}
+
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_b","name":"read_file"}}
+
+data: {"type":"response.function_call_arguments.delta","output_index":1,"delta":"{\"path\":\"b.txt\"}"}
+
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call"}}
+
+data: {"type":"response.completed","response":{"id":"resp_multi","status":"completed","usage":{"input_tokens":8,"output_tokens":20}}}
