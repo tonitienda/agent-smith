@@ -1,7 +1,7 @@
 ---
 id: AS-019
 title: Parallel tool execution for independent calls
-status: ready-to-implement
+status: done
 github_issue: 19
 depends_on: [AS-018]
 area: loop
@@ -11,7 +11,7 @@ source: PRD.md §7.2
 
 # AS-019 · Parallel tool execution
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -24,10 +24,30 @@ When the model emits multiple tool calls in one assistant turn, execute independ
 
 ## Acceptance criteria
 
-- [ ] Two slow independent tools complete in ~max(t1, t2), not t1 + t2 (timing test with fakes).
-- [ ] Log order of results matches call order in all interleavings (stress test).
-- [ ] Cancellation aborts all in-flight siblings cleanly.
-- [ ] Ask-mode prompting remains coherent (no interleaved prompt garbage).
+- [x] Two slow independent tools complete in ~max(t1, t2), not t1 + t2 (timing test with fakes).
+- [x] Log order of results matches call order in all interleavings (stress test).
+- [x] Cancellation aborts all in-flight siblings cleanly.
+- [x] Ask-mode prompting remains coherent (no interleaved prompt garbage).
+
+## Implementation notes
+
+`tool.Runtime.ExecuteBatch` (internal/tool/runtime.go) runs a turn's client tool
+calls in three phases:
+
+1. **Gate, serially in call order** — cancellation check, argument validation, and
+   the permission hook run one call at a time, so ask-mode prompts never
+   interleave and a denial leaves an already-approved sibling untouched.
+2. **Run, concurrently** — approved tools execute under a bounded worker pool
+   (`WithMaxParallel`, default `DefaultMaxParallel = 8`); a failing or timing-out
+   tool records its own error result and does not cancel its siblings.
+3. **Record, in call order** — results are appended to the log deterministically
+   regardless of which tool finished first.
+
+The loop's `dispatch` (internal/loop/loop.go) calls `ExecuteBatch` with
+`BatchHooks` that emit `UIToolStarted`/`UIToolFinished` per call in order; on
+cancellation it reconciles every still-unanswered call with a cancellation
+marker, preserving the AS-018 no-orphan invariant. `provider.ToolCallsTurn`
+scripts multi-call turns for tests.
 
 ## Dependencies
 

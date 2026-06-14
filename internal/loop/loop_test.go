@@ -203,6 +203,78 @@ func TestMalformedToolArgsDoesNotCorruptLog(t *testing.T) {
 	assertNoOrphanCalls(t, h.log)
 }
 
+// TestParallelToolCallsRecordedInOrder drives a turn whose assistant message
+// emits three independent tool calls. The loop must dispatch them through the
+// runtime (which runs them concurrently), record their results on the log in
+// call order, surface one started/finished UI event per call, and feed every
+// result back into the next turn's context. It is the AS-019 end-to-end check.
+func TestParallelToolCallsRecordedInOrder(t *testing.T) {
+	turns := 0
+	p := &provider.Mock{ScriptFn: func(_ context.Context, _ provider.Request) ([]provider.Event, error) {
+		turns++
+		if turns == 1 {
+			return provider.ToolCallsTurn(
+				provider.ToolCall{ToolUseID: "t1", Name: "echo", Args: json.RawMessage(`{"msg":"one"}`)},
+				provider.ToolCall{ToolUseID: "t2", Name: "echo", Args: json.RawMessage(`{"msg":"two"}`)},
+				provider.ToolCall{ToolUseID: "t3", Name: "echo", Args: json.RawMessage(`{"msg":"three"}`)},
+			), nil
+		}
+		return provider.TextTurn("all done", ""), nil
+	}}
+	h := newHarness(t, p, []tool.Tool{echoTool()})
+
+	res, err := h.engine.Run(context.Background(), "echo three things")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.StopReason != provider.StopEndTurn {
+		t.Errorf("StopReason = %q, want %q", res.StopReason, provider.StopEndTurn)
+	}
+
+	// Results land on the log in call order regardless of completion order.
+	var (
+		order   []string
+		byID    = map[string]string{}
+		results int
+	)
+	for _, b := range h.log.Events() {
+		if b.Kind == schema.KindToolResult && b.ToolResult != nil {
+			order = append(order, b.ToolResult.ToolUseID)
+			byID[b.ToolResult.ToolUseID] = resultText(b.ToolResult)
+			results++
+		}
+	}
+	if results != 3 {
+		t.Fatalf("recorded %d tool_results, want 3", results)
+	}
+	want := []string{"t1", "t2", "t3"}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("tool_result order = %v, want %v", order, want)
+		}
+	}
+	if byID["t1"] != "echo:one" || byID["t2"] != "echo:two" || byID["t3"] != "echo:three" {
+		t.Errorf("tool results = %v, want each call's echo", byID)
+	}
+
+	// One started and one finished UI event per call.
+	if h.kinds(loop.UIToolStarted) != 3 || h.kinds(loop.UIToolFinished) != 3 {
+		t.Errorf("tool UI events: started=%d finished=%d, want 3 each", h.kinds(loop.UIToolStarted), h.kinds(loop.UIToolFinished))
+	}
+
+	// Every result is re-projected into the second turn's context.
+	reqs := p.Requests()
+	if len(reqs) != 2 {
+		t.Fatalf("provider saw %d requests, want 2", len(reqs))
+	}
+	for _, id := range want {
+		if !contextHasResult(reqs[1].Context, id) {
+			t.Errorf("second request context missing tool_result for %s", id)
+		}
+	}
+	assertNoOrphanCalls(t, h.log)
+}
+
 func contextHasResult(ctx []schema.Block, toolUseID string) bool {
 	for _, b := range ctx {
 		if b.Kind == schema.KindToolResult && b.ToolResult != nil && b.ToolResult.ToolUseID == toolUseID {

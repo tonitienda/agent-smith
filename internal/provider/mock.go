@@ -147,3 +147,33 @@ func ToolCallTurn(toolUseID, name string, args json.RawMessage) []Event {
 		{Type: EventTurnStop, StopReason: StopToolUse},
 	}
 }
+
+// ToolCall describes one client tool call in a multi-call assistant turn.
+type ToolCall struct {
+	ToolUseID string
+	Name      string
+	Args      json.RawMessage
+}
+
+// ToolCallsTurn scripts a single assistant turn that emits several client tool
+// calls — each its own content block, indexed in order — before stopping with
+// StopToolUse. It is the fixture for parallel tool-execution tests (AS-019),
+// where the loop must dispatch the independent calls concurrently yet record
+// their results in call order.
+func ToolCallsTurn(calls ...ToolCall) []Event {
+	events := []Event{{Type: EventTurnStart, Turn: &TurnInfo{}}}
+	for i, c := range calls {
+		events = append(events,
+			Event{Type: EventBlockStart, BlockIndex: i, Header: &BlockHeader{
+				Kind:      schema.KindToolCall,
+				Role:      schema.RoleAssistant,
+				ToolUseID: c.ToolUseID,
+				ToolName:  c.Name,
+				ToolKind:  schema.ToolKindClient,
+			}},
+			Event{Type: EventToolCallDelta, BlockIndex: i, ArgumentsDelta: string(c.Args)},
+			Event{Type: EventBlockStop, BlockIndex: i},
+		)
+	}
+	return append(events, Event{Type: EventTurnStop, StopReason: StopToolUse})
+}
