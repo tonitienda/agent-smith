@@ -377,7 +377,10 @@ func compareBlock(i int, want BlockExpect, got ResultBlock) []string {
 		diffs = append(diffs, fmt.Sprintf("block[%d] %s", i, fmt.Sprintf(format, args...)))
 	}
 	if got.Kind != want.Kind {
+		// Field-by-field comparison keyed on the expected kind is meaningless once
+		// the kind itself diverges; report just the kind mismatch.
 		p("kind = %q, want %q", got.Kind, want.Kind)
+		return diffs
 	}
 	if want.Role != "" && got.Role != want.Role {
 		p("role = %q, want %q", got.Role, want.Role)

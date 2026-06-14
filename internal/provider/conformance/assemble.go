@@ -39,6 +39,9 @@ type ResultBlock struct {
 // into the turn it describes. It always Closes s (via provider.Collect) and
 // returns the stream's terminating error, if any.
 func Assemble(s provider.Stream) (Result, error) {
+	if s == nil {
+		return Result{}, fmt.Errorf("stream is nil")
+	}
 	events, err := provider.Collect(s)
 	if err != nil {
 		return Result{}, err
@@ -59,26 +62,32 @@ func Assemble(s provider.Stream) (Result, error) {
 			if ev.Header == nil {
 				return Result{}, fmt.Errorf("block_start at index %d has no header", ev.BlockIndex)
 			}
+			if _, alreadyOpen := open[ev.BlockIndex]; alreadyOpen {
+				return Result{}, fmt.Errorf("block_start for already-open block %d", ev.BlockIndex)
+			}
 			open[ev.BlockIndex] = &ResultBlock{
 				Kind: ev.Header.Kind, Role: ev.Header.Role,
 				ToolUseID: ev.Header.ToolUseID, ToolName: ev.Header.ToolName,
 				ToolKind: ev.Header.ToolKind, ToolSubtype: ev.Header.ToolSubtype,
 			}
 		case provider.EventTextDelta:
-			b, ok := open[ev.BlockIndex]
-			if !ok {
-				return Result{}, fmt.Errorf("text_delta for unopened block %d", ev.BlockIndex)
+			b, err := openBlock(open, ev.BlockIndex, schema.KindText, "text_delta")
+			if err != nil {
+				return Result{}, err
 			}
 			b.Text += ev.TextDelta
 		case provider.EventReasoningDelta:
-			b, ok := open[ev.BlockIndex]
-			if !ok {
-				return Result{}, fmt.Errorf("reasoning_delta for unopened block %d", ev.BlockIndex)
+			b, err := openBlock(open, ev.BlockIndex, schema.KindReasoning, "reasoning_delta")
+			if err != nil {
+				return Result{}, err
 			}
 			b.Text += ev.TextDelta
 			b.Signature += ev.SignatureDelta
 			b.Encrypted += ev.EncryptedDelta
 		case provider.EventToolCallDelta:
+			if _, err := openBlock(open, ev.BlockIndex, schema.KindToolCall, "tool_call_delta"); err != nil {
+				return Result{}, err
+			}
 			rawArgs[ev.BlockIndex] += ev.ArgumentsDelta
 		case provider.EventBlockStop:
 			b, ok := open[ev.BlockIndex]
@@ -87,6 +96,7 @@ func Assemble(s provider.Stream) (Result, error) {
 			}
 			if b.Kind == schema.KindToolCall {
 				b.ArgumentsRaw = rawArgs[ev.BlockIndex]
+				delete(rawArgs, ev.BlockIndex)
 			}
 			r.Blocks = append(r.Blocks, *b)
 			delete(open, ev.BlockIndex)
@@ -106,26 +116,38 @@ func Assemble(s provider.Stream) (Result, error) {
 	return r, nil
 }
 
+// openBlock fetches the open block at index and asserts it is the kind the delta
+// belongs to, so a malformed stream — a delta for an unopened block, or for a
+// block of the wrong kind — is caught rather than silently dropped or corrupting
+// the result. event names the delta for the error message.
+func openBlock(open map[int]*ResultBlock, index int, want schema.Kind, event string) (*ResultBlock, error) {
+	b, ok := open[index]
+	if !ok {
+		return nil, fmt.Errorf("%s for unopened block %d", event, index)
+	}
+	if b.Kind != want {
+		return nil, fmt.Errorf("%s for block %d of kind %q, want %q", event, index, b.Kind, want)
+	}
+	return b, nil
+}
+
 // mergeUsage folds an incremental usage event into the running total, taking the
 // latest non-nil value for each counter (usage may arrive more than once per
-// turn; consumers accumulate — union §8).
+// turn; consumers accumulate — union §8). Each counter is copied rather than
+// aliased so the assembled Result never shares pointers with the source events.
 func mergeUsage(dst *schema.Tokens, u *schema.Tokens) {
 	if u == nil {
 		return
 	}
-	if u.Input != nil {
-		dst.Input = u.Input
+	set := func(dst **int, src *int) {
+		if src != nil {
+			v := *src
+			*dst = &v
+		}
 	}
-	if u.Output != nil {
-		dst.Output = u.Output
-	}
-	if u.CacheRead != nil {
-		dst.CacheRead = u.CacheRead
-	}
-	if u.CacheWrite != nil {
-		dst.CacheWrite = u.CacheWrite
-	}
-	if u.Reasoning != nil {
-		dst.Reasoning = u.Reasoning
-	}
+	set(&dst.Input, u.Input)
+	set(&dst.Output, u.Output)
+	set(&dst.CacheRead, u.CacheRead)
+	set(&dst.CacheWrite, u.CacheWrite)
+	set(&dst.Reasoning, u.Reasoning)
 }
