@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/schema"
@@ -331,6 +332,38 @@ func TestExecuteTruncatesOversizedOutput(t *testing.T) {
 	marker := body[len(body)-1].Text
 	if !strings.Contains(marker, "truncated") || !strings.Contains(marker, "100") {
 		t.Fatalf("truncation marker = %q, want byte counts", marker)
+	}
+}
+
+func TestExecuteTruncationKeepsValidUTF8(t *testing.T) {
+	// Each "世" is 3 bytes; a byte budget that lands mid-rune must back up to a
+	// rune boundary rather than emit invalid UTF-8.
+	multibyte := strings.Repeat("世", 10) // 30 bytes
+	tool := Func{
+		Spec: Def{Name: "uni"},
+		Fn: func(context.Context, json.RawMessage) (Output, error) {
+			return Output{Text: multibyte}, nil
+		},
+	}
+	reg := NewRegistry()
+	if err := reg.Register(tool); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	// Budget of 10 bytes falls in the middle of the 4th rune (bytes 9..11).
+	rt := NewRuntime(reg, eventlog.New(), WithMaxResultBytes(10))
+	result, err := rt.Execute(context.Background(), callBlock("uni", `{}`))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	got := result.ToolResult.Content[0].Text
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncated text is not valid UTF-8: %q", got)
+	}
+	if len(got) > 10 {
+		t.Fatalf("truncated text len = %d, want <= 10", len(got))
+	}
+	if got != strings.Repeat("世", 3) { // 9 bytes, the largest whole-rune prefix
+		t.Fatalf("truncated text = %q, want 3 runes", got)
 	}
 }
 

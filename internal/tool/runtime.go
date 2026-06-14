@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/schema"
@@ -235,7 +236,7 @@ func (r *Runtime) truncate(parts []schema.Part) ([]schema.Part, bool) {
 			continue // budget spent: drop further text parts
 		}
 		if len(p.Text) > budget {
-			p.Text = p.Text[:budget]
+			p.Text = truncateUTF8(p.Text, budget)
 			budget = 0
 		} else {
 			budget -= len(p.Text)
@@ -245,6 +246,21 @@ func (r *Runtime) truncate(parts []schema.Part) ([]schema.Part, bool) {
 	marker := fmt.Sprintf("\n\n[output truncated: showing %d of %d bytes]", r.maxBytes, total)
 	out = append(out, schema.Part{Type: "text", Text: marker})
 	return out, true
+}
+
+// truncateUTF8 returns s limited to at most n bytes without splitting a
+// multi-byte UTF-8 rune: when the byte at the cut point is a continuation byte,
+// the cut backs up to the start of that rune so the result is always valid
+// UTF-8 (avoiding JSON-encode or TUI-render errors downstream).
+func truncateUTF8(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := n
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 // errorOutput builds a model-readable error result with a single text part.
