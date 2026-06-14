@@ -107,6 +107,8 @@ make lint       # installs/runs the pinned golangci-lint version (v2.12.2)
 make verify     # runs fmt, test, vet, and lint in the same order agents use
 ```
 
+Run `./smith` in a terminal to start an interactive chat session (the flagship TUI face, AS-021); set `ANTHROPIC_API_KEY` to talk to the Anthropic provider and `SMITH_MODEL` to override the default model. Off a TTY (scripts, CI) the binary prints usage instead.
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).
