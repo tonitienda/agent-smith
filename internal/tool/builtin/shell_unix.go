@@ -3,6 +3,7 @@
 package builtin
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -22,9 +23,16 @@ func configureProcessGroup(cmd *exec.Cmd) {
 			return nil
 		}
 		// Negative PID signals the whole process group led by the child.
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
-			return cmd.Process.Kill() // group gone already: fall back to the child.
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err == nil || errors.Is(err, syscall.ESRCH) {
+			// Killed, or the group was already gone (the child is its own group
+			// leader, so ESRCH means no descendant survives either).
+			return nil
 		}
-		return nil
+		// A different failure (e.g. EPERM): the group may still be alive, so make a
+		// best-effort attempt on the direct child and surface the original error so
+		// the caller knows teardown might be incomplete.
+		_ = cmd.Process.Kill()
+		return err
 	}
 }

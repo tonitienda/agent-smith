@@ -220,26 +220,25 @@ func (s *Shell) Run(ctx context.Context, args json.RawMessage) (tool.Output, err
 	return tool.Output{Text: s.format(status, body, truncated), IsError: exitCode != 0}, nil
 }
 
-// format renders the model-facing result: a status header line, the combined
-// output, and an explicit marker when the output was capped.
+// format renders the model-facing result: a status header line, the command's
+// combined output verbatim, and an explicit marker when the output was capped.
+// The body is reproduced exactly — including any trailing blank lines, which can
+// be meaningful — so only the formatting newlines this function adds are managed.
 func (s *Shell) format(status, body string, truncated bool) string {
 	var b strings.Builder
-	b.WriteString("[")
-	b.WriteString(status)
-	b.WriteString("]")
-	if body != "" {
-		b.WriteString("\n")
-		b.WriteString(body)
-		if !strings.HasSuffix(body, "\n") {
-			b.WriteString("\n")
-		}
+	fmt.Fprintf(&b, "[%s]\n", status)
+	if body == "" {
+		b.WriteString("(no output)")
 	} else {
-		b.WriteString("\n(no output)\n")
+		b.WriteString(body)
 	}
 	if truncated {
-		fmt.Fprintf(&b, "[output truncated at %d bytes]\n", s.maxOutputBytes)
+		if body != "" && !strings.HasSuffix(body, "\n") {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "[output truncated at %d bytes]", s.maxOutputBytes)
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return b.String()
 }
 
 // roundDuration rounds a duration to a readable precision for the status line.
