@@ -1,6 +1,8 @@
 package cost_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -46,6 +48,54 @@ func TestRenderUnknownModelNote(t *testing.T) {
 	}
 	if !strings.Contains(out, "—") {
 		t.Errorf("expected the unknown mark in the cost column:\n%s", out)
+	}
+}
+
+// TestRenderCacheSavingsLowerBound checks the savings dollar figure is marked a
+// lower bound when the session has an unpriced turn (its cache reads count in
+// tokens but contribute no dollars).
+func TestRenderCacheSavingsLowerBound(t *testing.T) {
+	s := cost.Summarize([]schema.Block{
+		usageBlock("claude-opus-4-8", &schema.Tokens{CacheRead: ptr(5000)}),
+		usageBlock("mystery-9", &schema.Tokens{CacheRead: ptr(9999)}),
+	}, cost.Embedded())
+	out := cost.Render(s)
+	if !strings.Contains(out, "lower bound") {
+		t.Errorf("unpriced session should mark cache savings a lower bound:\n%s", out)
+	}
+	// Token count still reflects every cached read, priced or not.
+	if !strings.Contains(out, "14,999") {
+		t.Errorf("cache-read token total should include unpriced turns:\n%s", out)
+	}
+}
+
+// TestRenderNonUSDCurrency checks amounts use the currency code (not a bare "$")
+// when an override sets a non-USD currency, so the header and figures agree.
+func TestRenderNonUSDCurrency(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "eur.json")
+	eur := `{"version":1,"currency":"EUR","models":[
+		{"model":"claude-opus-4-*","input_per_mtok":10.0,"output_per_mtok":20.0}
+	]}`
+	if err := os.WriteFile(path, []byte(eur), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tbl, err := cost.LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	out := cost.Render(cost.Summarize([]schema.Block{
+		usageBlock("claude-opus-4-8", &schema.Tokens{Input: ptr(1000), Output: ptr(500)}),
+	}, tbl))
+
+	if !strings.Contains(out, "Session cost (EUR)") {
+		t.Errorf("header should name EUR:\n%s", out)
+	}
+	if !strings.Contains(out, "EUR ") {
+		t.Errorf("amounts should be prefixed with the EUR code:\n%s", out)
+	}
+	if strings.Contains(out, "$") {
+		t.Errorf("non-USD render must not use a $ symbol:\n%s", out)
 	}
 }
 

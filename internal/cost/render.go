@@ -16,6 +16,8 @@ func Render(s Summary) string {
 		return "No usage recorded yet — run a turn first."
 	}
 
+	sym := symbol(s.Currency)
+
 	var b strings.Builder
 	fmt.Fprintf(&b, "Session cost (%s)\n\n", s.Currency)
 
@@ -29,20 +31,27 @@ func Render(s Summary) string {
 			t.Index, modelLabel(t.Model),
 			commas(t.Tokens.Input), commas(t.Tokens.Output),
 			commas(t.Tokens.CacheRead), commas(t.Tokens.CacheWrite),
-			dollars(t.TotalUSD, t.Priced))
+			money(t.TotalUSD, t.Priced, sym))
 	}
 	row("  Σ\t\t%s\t%s\t%s\t%s\t%s\t\n",
 		commas(s.Total.Input), commas(s.Total.Output),
 		commas(s.Total.CacheRead), commas(s.Total.CacheWrite),
-		dollars(s.TotalUSD, true))
+		money(s.TotalUSD, true, sym))
 	_ = tw.Flush()
 
+	// The cache-read token count is exact, but the dollar savings only sum the
+	// priced turns — when a turn is unpriced its (possibly cached) reads add no
+	// dollars, so the figure is a lower bound. Mark it so it never reads exact.
+	savings := money(s.CacheSavingsUSD, true, sym)
+	if !s.AllPriced {
+		savings += " (lower bound — unpriced turns excluded)"
+	}
 	fmt.Fprintf(&b, "\nCache savings: %s tokens read from cache · %s\n",
-		commas(s.CacheReadTokens), dollars(s.CacheSavingsUSD, true))
+		commas(s.CacheReadTokens), savings)
 
 	if !s.AllPriced {
 		fmt.Fprintf(&b, "\nNote: some turns ran on a model with no pricing entry (shown as %s);\n"+
-			"their tokens are exact but the dollar total above is a lower bound.\n"+
+			"their tokens are exact but the dollar totals above are a lower bound.\n"+
 			"Add rates via a %s override file to price them.\n", unknownMark, EnvPricingFile)
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -58,12 +67,23 @@ func modelLabel(m string) string {
 	return m
 }
 
-// dollars formats a USD amount, or the unknown mark when the turn is unpriced.
-func dollars(v float64, priced bool) string {
+// symbol returns the money prefix for a currency: "$" for USD (and the empty
+// default), otherwise the ISO code plus a space (e.g. "EUR 1.2345"), so the
+// rendered amounts stay consistent with the currency named in the header.
+func symbol(currency string) string {
+	if currency == "" || currency == "USD" {
+		return "$"
+	}
+	return currency + " "
+}
+
+// money formats an amount with the currency symbol, or the unknown mark when the
+// turn is unpriced.
+func money(v float64, priced bool, sym string) string {
 	if !priced {
 		return unknownMark
 	}
-	return "$" + strconv.FormatFloat(v, 'f', 4, 64)
+	return sym + strconv.FormatFloat(v, 'f', 4, 64)
 }
 
 // commas formats n with thousands separators, e.g. 12000 -> "12,000".
