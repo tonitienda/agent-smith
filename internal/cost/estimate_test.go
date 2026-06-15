@@ -61,6 +61,13 @@ func TestEstimateBlockTokens(t *testing.T) {
 			want: 6,
 		},
 		{
+			name: "tool call prefers verbatim arguments_raw over canonical",
+			block: schema.Block{Kind: schema.KindToolCall, ToolCall: &schema.ToolCallBody{
+				Name: "read", Arguments: args, ArgumentsRaw: `{ "path": "main.go" }`,
+			}}, // "read"(4)+raw(21) = 25 -> 7, not the 18-char canonical
+			want: 7,
+		},
+		{
 			name: "tool result counts stdout and stderr",
 			block: schema.Block{Kind: schema.KindToolResult, ToolResult: &schema.ToolResultBody{
 				Stdout: "1234", Stderr: "5678",
@@ -68,15 +75,39 @@ func TestEstimateBlockTokens(t *testing.T) {
 			want: 2,
 		},
 		{
+			name: "tool result takes parts when present, not stdout too",
+			block: schema.Block{Kind: schema.KindToolResult, ToolResult: &schema.ToolResultBody{
+				Content: []schema.Part{{Type: "text", Text: "abcd"}},
+				Stdout:  "this stdout is ignored when parts are present",
+				// StructuredContent is never sent to the model, so it must not count.
+				StructuredContent: json.RawMessage(`{"big":"ignored payload here"}`),
+			}}, // only "abcd" = 4 -> 1
+			want: 1,
+		},
+		{
 			name:  "file read counts content",
 			block: schema.Block{Kind: schema.KindFileRead, FileRead: &schema.FileReadBody{Content: "abcdefgh"}},
 			want:  2,
+		},
+		{
+			name: "file read includes the path prefix the adapter inserts",
+			block: schema.Block{Kind: schema.KindFileRead, FileRead: &schema.FileReadBody{
+				Path: "ab", Content: "cd",
+			}}, // "ab"(2)+":\n"(2)+"cd"(2) = 6 -> 2
+			want: 2,
 		},
 		{
 			name: "reasoning counts text and summary",
 			block: schema.Block{Kind: schema.KindReasoning, Reasoning: &schema.ReasoningBody{
 				Text: "abcd", Summary: []string{"ef", "gh"},
 			}}, // "abcd"+"ef"+"gh" = 8 -> 2
+			want: 2,
+		},
+		{
+			name: "redacted reasoning counts its encrypted blob with empty text",
+			block: schema.Block{Kind: schema.KindReasoning, Reasoning: &schema.ReasoningBody{
+				Encrypted: "abcdefgh", Redacted: true,
+			}}, // 8 -> 2, not 0
 			want: 2,
 		},
 		{
@@ -107,9 +138,16 @@ func TestEstimateContextTokens(t *testing.T) {
 
 // TestEstimateSanityAgainstReportedInput is the AS-063 reconciliation check: the
 // sum of per-block estimates over a turn's input blocks should land in the same
-// ballpark as the input tokens the provider reported for that turn. The heuristic
-// is approximate, so the bar is a band (within 2x either way), not equality —
-// that is enough to catch an estimator that is wildly off (e.g. zero, or 10x).
+// ballpark as the input tokens a provider would report for that turn. The
+// heuristic is approximate, so the bar is a band (within 2x either way), not
+// equality — that is enough to catch an estimator that is wildly off (e.g. zero,
+// or 10x).
+//
+// The reference is computed *independently* of the chars/4 estimator under test:
+// it uses the unrelated word-count rule of thumb (~0.75 words per token, i.e.
+// ~1.33 tokens per word) over the same content. Deriving the reference from the
+// estimate would make the check tautological — a broken estimator would still
+// pass — so the two heuristics must agree without sharing math.
 func TestEstimateSanityAgainstReportedInput(t *testing.T) {
 	prose := strings.Repeat(
 		"The quick brown fox jumps over the lazy dog while the agent reasons about the next step. ",
@@ -121,14 +159,16 @@ func TestEstimateSanityAgainstReportedInput(t *testing.T) {
 	}
 	est := cost.EstimateContextTokens(input)
 
-	// A real tokenizer on this English prose lands near chars/4; simulate a
-	// provider-reported input count in that neighborhood and assert the estimate
-	// reconciles within a 2x band in both directions.
-	reported := est * 11 / 10 // ~10% above the heuristic, a realistic gap
+	// Independent ground truth: count words across the same content (prose appears
+	// in both blocks) and apply the ~0.75-words-per-token rule. This shares no math
+	// with the chars/4 estimator, so a grossly wrong estimate fails the band.
+	words := 2 * len(strings.Fields(prose))
+	reference := words * 4 / 3 // ~1.33 tokens per word
+
 	if est <= 0 {
 		t.Fatalf("estimate must be positive, got %d", est)
 	}
-	if est*2 < reported || reported*2 < est {
-		t.Errorf("estimate %d not within 2x of reported %d", est, reported)
+	if est*2 < reference || reference*2 < est {
+		t.Errorf("estimate %d not within 2x of independent reference %d", est, reference)
 	}
 }

@@ -70,36 +70,70 @@ func EstimateContextTokens(events []schema.Block) int {
 
 // blockRuneCount counts the runes of the textual payload a block presents to the
 // model, across whichever body matches its Kind, without allocating an
-// intermediate string. It is intentionally inclusive — tool-call arguments and
-// tool-result stdout/stderr are part of the window the model pays for, so they
-// count toward the block's size.
+// intermediate string. It mirrors how the provider adapters actually render each
+// block onto the wire (internal/provider/*/request*.go) so the estimate tracks
+// the window the model really pays for — preferring verbatim tool arguments,
+// taking tool results as parts-or-flattened (not both), prefixing a file read
+// with its path, and counting opaque encrypted reasoning.
 func blockRuneCount(b schema.Block) int {
-	var count int
 	switch {
 	case b.Text != nil:
-		count += utf8.RuneCountInString(b.Text.Text)
-		count += partsRuneCount(b.Text.Parts)
+		return utf8.RuneCountInString(b.Text.Text) + partsRuneCount(b.Text.Parts)
 	case b.ToolCall != nil:
-		count += utf8.RuneCountInString(b.ToolCall.Name)
-		if len(b.ToolCall.Arguments) > 0 {
-			count += utf8.RuneCount(b.ToolCall.Arguments)
-		} else {
-			count += utf8.RuneCountInString(b.ToolCall.ArgumentsRaw)
-		}
+		return utf8.RuneCountInString(b.ToolCall.Name) + toolArgsRuneCount(b.ToolCall)
 	case b.ToolResult != nil:
-		count += utf8.RuneCountInString(b.ToolResult.Stdout)
-		count += utf8.RuneCountInString(b.ToolResult.Stderr)
-		count += utf8.RuneCount(b.ToolResult.StructuredContent)
-		count += partsRuneCount(b.ToolResult.Content)
+		return toolResultRuneCount(b.ToolResult)
 	case b.FileRead != nil:
-		count += utf8.RuneCountInString(b.FileRead.Content)
+		return fileReadRuneCount(b.FileRead)
 	case b.Reasoning != nil:
-		count += utf8.RuneCountInString(b.Reasoning.Text)
-		for _, s := range b.Reasoning.Summary {
-			count += utf8.RuneCountInString(s)
-		}
+		return reasoningRuneCount(b.Reasoning)
 	}
-	return count
+	return 0
+}
+
+// toolArgsRuneCount counts a tool call's arguments the way the adapters send
+// them: the verbatim ArgumentsRaw when present (exact bytes are what is replayed
+// and cached), else the canonical structured Arguments.
+func toolArgsRuneCount(body *schema.ToolCallBody) int {
+	if body.ArgumentsRaw != "" {
+		return utf8.RuneCountInString(body.ArgumentsRaw)
+	}
+	return utf8.RuneCount(body.Arguments)
+}
+
+// toolResultRuneCount counts a tool result as the adapters render it: structured
+// text parts when present, otherwise the flattened stdout+stderr string — never
+// both, and never StructuredContent, which is not sent to the model today.
+func toolResultRuneCount(body *schema.ToolResultBody) int {
+	if len(body.Content) > 0 {
+		return partsRuneCount(body.Content)
+	}
+	return utf8.RuneCountInString(body.Stdout) + utf8.RuneCountInString(body.Stderr)
+}
+
+// fileReadRuneCount counts a file read as the adapters render it: "<path>:\n"
+// prefix plus content when a path is set (the common case), else bare content.
+func fileReadRuneCount(body *schema.FileReadBody) int {
+	n := utf8.RuneCountInString(body.Content)
+	if body.Path != "" {
+		n += utf8.RuneCountInString(body.Path) + 2 // the ":\n" the adapter inserts
+	}
+	return n
+}
+
+// reasoningRuneCount counts a reasoning block as the adapters round-trip it:
+// opaque encrypted/redacted thinking carries its Encrypted blob (model-facing
+// even with no visible Text), while visible thinking carries its Text plus the
+// replay Signature; OpenAI summary parts are counted when present.
+func reasoningRuneCount(body *schema.ReasoningBody) int {
+	if body.Redacted || body.Encrypted != "" {
+		return utf8.RuneCountInString(body.Encrypted)
+	}
+	n := utf8.RuneCountInString(body.Text) + utf8.RuneCountInString(body.Signature)
+	for _, s := range body.Summary {
+		n += utf8.RuneCountInString(s)
+	}
+	return n
 }
 
 // partsRuneCount returns the rune count of the text parts in a multimodal slice.
