@@ -158,6 +158,23 @@ func TestModalEscDeniesByDefault(t *testing.T) {
 	}
 }
 
+// TestModalWrapsLongDetail guards against the layout glitch where a long
+// verbatim command/path overflows a narrow terminal (D-TUI-11).
+func TestModalWrapsLongDetail(t *testing.T) {
+	m := newCommandModel(t, command.NewRegistry())
+	m = update(t, m, tea.WindowSizeMsg{Width: 60, Height: 24})
+	m.openModal(modal{
+		title:   "Run shell command?",
+		detail:  strings.Repeat("rm -rf /very/long/path/segment ", 10),
+		choices: []string{"Deny", "Allow"},
+	})
+	for _, line := range strings.Split(m.View(), "\n") {
+		if w := lipglossWidth(line); w > m.width {
+			t.Fatalf("modal line overflows terminal: width %d > %d:\n%q", w, m.width, line)
+		}
+	}
+}
+
 // TestStartupHeaderRendersAndSuppresses covers AC4: the header shows by default
 // and is hidden when splash is off.
 func TestStartupHeaderRendersAndSuppresses(t *testing.T) {

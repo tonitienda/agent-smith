@@ -90,7 +90,15 @@ func (m model) modalView() string {
 	b.WriteString(modalTitleStyle.Render("⚠  " + md.title))
 	if md.detail != "" {
 		b.WriteString("\n\n")
-		b.WriteString(modalDetailStyle.Render(md.detail))
+		// The detail is unbounded user content (a verbatim command or path), so
+		// wrap it to the box's inner width — otherwise a long line overflows and
+		// glitches a narrow terminal (D-TUI-11). 8 leaves room for the double
+		// border + padding, with a floor so a tiny terminal still wraps sanely.
+		detailWidth := m.width - 8
+		if detailWidth < 20 {
+			detailWidth = 20
+		}
+		b.WriteString(modalDetailStyle.Width(detailWidth).Render(md.detail))
 	}
 	b.WriteString("\n\n")
 	buttons := make([]string, len(md.choices))
