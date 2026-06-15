@@ -135,10 +135,11 @@ func openOrCreate(store *session.Store, resumeID string) (*session.Session, erro
 
 // chatCommands builds the slash-command registry for the chat face. It ships
 // /help (a full-screen list of every registered command), /version (inline),
-// /cost (AS-020, a full-screen token & dollar breakdown), and the parity power
-// commands /clear, /model, and /resume (AS-023). The remaining commands
-// (/context, /clean) arrive in their own tickets (AS-026, AS-028). The handlers
-// close over the chat controller so the command package stays dependency-free.
+// /cost (AS-020, a full-screen token & dollar breakdown), /context (AS-026, the
+// full-screen window-composition view), and the parity power commands /clear,
+// /model, and /resume (AS-023). The remaining wedge command /clean arrives in
+// its own ticket (AS-028). The handlers close over the chat controller so the
+// command package stays dependency-free.
 func chatCommands(ctl *chatSession) *command.Registry {
 	reg := command.NewRegistry()
 	// HelpCommand reads the registry lazily, so it lists commands registered after
@@ -160,6 +161,13 @@ func chatCommands(ctl *chatSession) *command.Registry {
 			summary := cost.Summarize(ctl.events(), ctl.pricing)
 			return command.Output{Text: cost.Render(summary)}, nil
 		},
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "context",
+		Summary: "Show what's filling the window: /context [size|age|type]",
+		Args:    "[size|age|type]",
+		Mode:    command.FullScreen,
+		Run:     ctl.cmdContext,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:    "clear",

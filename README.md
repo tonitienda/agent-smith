@@ -111,6 +111,8 @@ Run `./smith` in a terminal to start an interactive chat session (the flagship T
 
 Inside the chat, type `/` to open the command palette. `/cost` (AS-020) shows the session's token & dollar accounting — a per-turn breakdown by input/output/cache plus how much prompt caching saved. Pricing ships as data; point `SMITH_PRICING` at a JSON file (same shape as [`internal/cost/data/pricing.json`](internal/cost/data/pricing.json)) to override or add model rates without recompiling. Models with no rate still show exact token counts, with the dollar figure marked unknown.
 
+`/context` (AS-026, also `Ctrl+G c`) opens the composition view — what is actually filling the window right now, broken down segment by segment: the top consumers first, a by-type rollup, duplicate file reads flagged with their combined cost, and stale reclaim candidates, each with its token share, dollar cost and age. It opens instantly from projection data (no model call); sort the full list with `/context size|age|type`.
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).

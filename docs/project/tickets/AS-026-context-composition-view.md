@@ -1,7 +1,7 @@
 ---
 id: AS-026
 title: /context — context composition view (flagship wedge, v1 scope)
-status: ready-to-implement
+status: done
 github_issue: 26
 depends_on: [AS-006, AS-020, AS-022]
 area: context-wedge
@@ -25,11 +25,33 @@ The flagship differentiator (§7.11): a full-screen panel showing what is actual
 
 ## Acceptance criteria
 
-- [ ] PRD AC: a user can identify the top 3 things eating their context in under 5 seconds (top consumers are the first thing visible).
-- [ ] Token sum across segments equals the meter/projection total exactly.
-- [ ] Duplicate reads of the same file are visibly flagged with combined cost.
-- [ ] Selection state is exposed for AS-028 to consume.
-- [ ] Panel opens instantly (no model calls; pure projection data).
+- [x] PRD AC: a user can identify the top 3 things eating their context in under 5 seconds (top consumers are the first thing visible).
+- [x] Token sum across segments equals the meter/projection total exactly.
+- [x] Duplicate reads of the same file are visibly flagged with combined cost.
+- [x] Selection state is exposed for AS-028 to consume.
+- [x] Panel opens instantly (no model calls; pure projection data).
+
+## Implementation notes
+
+- `internal/composition` is the pure data model: `Build(proj, table, model, now, sort) Composition`
+  turns the projection's live blocks into ranked, grouped, flagged `Segment`s, and
+  `Render(Composition)` formats the plain-text full-screen panel. Face-agnostic, mirroring
+  the `internal/cost` package shape, so a headless face (AS-051) renders the same view.
+- Wired as the `/context [size|age|type]` full-screen command (`cmd/smith/controller.go`
+  `cmdContext`, registered in `chat.go`). The pre-existing `Ctrl+G c` panel hotkey now
+  resolves to it.
+- **Token total is the per-block estimate sum** (`cost.EstimateContextTokens` over the live
+  blocks, AS-063) — self-consistent by construction. This is the projection total; the
+  always-visible meter (AS-025) uses provider-reported per-turn counts, which are a different
+  (billing-exact) source. Per-block reported counts don't exist, so the panel is estimate-based
+  as AS-063 intends.
+- **Per-segment $** prices each block's estimated tokens at the active model's *input* rate
+  (every live block is input on the next request). Unpriced model degrades to blank `—`.
+- **Selection** is exposed as `Composition.Segments`, each carrying the stable `schema.Block`
+  ID — the key the manual `/clean` view (AS-028) removes by. The *interactive* multi-select UI
+  itself ships with AS-028, the ticket that consumes the selection to drive removal; AS-026
+  ships the read-only composition the selection runs on (the panel framework renders static
+  scrollable text today).
 
 ## Dependencies
 

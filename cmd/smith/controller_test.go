@@ -56,6 +56,29 @@ func appendUserText(t *testing.T, ctl *chatSession, text string) {
 	}
 }
 
+// TestContextComposition covers the /context wiring (AS-026): the command runs
+// over the live session log with no model call and renders the composition panel
+// reflecting what was appended.
+func TestContextComposition(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserText(t, ctl, "what is filling my window")
+
+	out, err := ctl.cmdContext(context.TODO(), nil)
+	if err != nil {
+		t.Fatalf("/context: %v", err)
+	}
+	for _, want := range []string{"Context composition", "Top consumers", "user"} {
+		if !strings.Contains(out.Text, want) {
+			t.Errorf("/context output missing %q:\n%s", want, out.Text)
+		}
+	}
+
+	// An unknown sort argument falls back to the default rather than erroring.
+	if _, err := ctl.cmdContext(context.TODO(), []string{"bogus"}); err != nil {
+		t.Fatalf("/context bogus arg: %v", err)
+	}
+}
+
 // TestClearStartsFreshAndKeepsOld covers AC1: /clear starts a clean context and
 // the previous session remains discoverable via /resume.
 func TestClearStartsFreshAndKeepsOld(t *testing.T) {
