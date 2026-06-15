@@ -66,9 +66,11 @@ func (t *Table) Currency() string {
 
 // Lookup returns the rate for model, consulting this table before its parent. ok
 // is false when no entry matches, so callers can show tokens while marking the
-// dollar figure unknown (AS-020: unknown model degrades gracefully).
+// dollar figure unknown (AS-020: unknown model degrades gracefully). An empty
+// model is unspecified and never priced — without this guard a bare "*" pattern
+// in an override would match it (strings.HasPrefix("", "") is true).
 func (t *Table) Lookup(model string) (Rate, bool) {
-	if t == nil {
+	if t == nil || model == "" {
 		return Rate{}, false
 	}
 	if r, ok := t.lookupLocal(model); ok {
@@ -136,10 +138,19 @@ func Default() (*Table, error) {
 	return override, nil
 }
 
+// supportedVersion is the only pricing-schema version this build understands.
+// The schema is additive-only (PRD D2), so compatible changes keep version 1; a
+// bump would signal a breaking change, which is exactly why parse rejects any
+// other version rather than risk silently mispricing an incompatible file.
+const supportedVersion = 1
+
 func parse(b []byte) (*Table, error) {
 	var w wireTable
 	if err := json.Unmarshal(b, &w); err != nil {
 		return nil, err
+	}
+	if w.Version != supportedVersion {
+		return nil, fmt.Errorf("unsupported pricing table version %d (supported: %d)", w.Version, supportedVersion)
 	}
 	return &Table{rates: w.Models, currency: w.Currency}, nil
 }

@@ -187,6 +187,54 @@ func TestOverrideLayering(t *testing.T) {
 	}
 }
 
+// TestEmptyModelNeverPriced guards that an empty (unspecified) model is not
+// priced even when an override contains a catch-all "*" pattern, which would
+// otherwise match because strings.HasPrefix("", "") is true.
+func TestEmptyModelNeverPriced(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pricing.json")
+	catchAll := `{"version":1,"currency":"USD","models":[
+		{"model":"*","input_per_mtok":1.0,"output_per_mtok":1.0}
+	]}`
+	if err := os.WriteFile(path, []byte(catchAll), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tbl, err := cost.LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	// A real model matches the catch-all...
+	if _, ok := tbl.Lookup("anything"); !ok {
+		t.Error("catch-all should price a named model")
+	}
+	// ...but an empty model is unspecified and must never be priced.
+	if _, ok := tbl.Lookup(""); ok {
+		t.Error("empty model must not match the catch-all pattern")
+	}
+}
+
+// TestUnsupportedVersionRejected ensures an override carrying an unknown schema
+// version is a reported error rather than a silent misparse.
+func TestUnsupportedVersionRejected(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pricing.json")
+	future := `{"version":2,"currency":"USD","models":[]}`
+	if err := os.WriteFile(path, []byte(future), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cost.LoadFile(path); err == nil {
+		t.Error("a version-2 pricing file should be rejected")
+	}
+	// A file with no version field (defaults to 0) is likewise rejected.
+	missing := filepath.Join(dir, "noversion.json")
+	if err := os.WriteFile(missing, []byte(`{"currency":"USD","models":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cost.LoadFile(missing); err == nil {
+		t.Error("a pricing file without a version should be rejected")
+	}
+}
+
 // TestDefaultMissingOverrideErrors ensures a typo'd override path is a reported
 // error, never a silent fall-through that misprices a session.
 func TestDefaultMissingOverrideErrors(t *testing.T) {
