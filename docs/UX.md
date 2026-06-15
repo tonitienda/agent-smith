@@ -134,12 +134,18 @@ The next face after the TUI should be the programmable CLI. This keeps the
 architecture honest by forcing the TUI and headless mode to share events,
 commands, permissions, and output schemas.
 
-Example direction:
+> **The CLI contract is settled in [docs/project/CLI-UX.md](project/CLI-UX.md)**
+> (subcommand-first/noun-grouped, bare `smith` launches the TUI, TTY-aware output,
+> stdout=data/stderr=diagnostics, exit codes, config precedence). It supersedes
+> the flag-driven `smith -p "…"` direction sketched below — `smith run` takes the
+> prompt as a positional arg / stdin / file, and there is no `-p` flag.
+
+Example direction (per CLI-UX.md):
 
 ```sh
-smith -p "fix the failing test" --output plain
-smith -p "summarize context" --output json
-smith -p "run the task" --output stream-json --budget 0.25
+smith run "fix the failing test"                 # plain on a TTY, bare when piped
+echo "summarize context" | smith run --output json
+smith run "run the task" --output stream-json --budget 0.25
 ```
 
 Headless CLI should optimize for pipes, CI, scripts, dashboards, and scheduled
