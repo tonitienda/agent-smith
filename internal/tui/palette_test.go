@@ -29,7 +29,7 @@ func (r *recorder) handler(out command.Output) command.Handler {
 // newCommandModel builds a sized model wired to the given registry.
 func newCommandModel(t *testing.T, reg *command.Registry) model {
 	t.Helper()
-	m := newModel(&fakeRunner{}, Meta{Provider: "anthropic", Model: "m", Session: "s"},
+	m := newModel(&fakeRunner{}, staticMeta(Meta{Provider: "anthropic", Model: "m", Session: "s"}),
 		make(chan loop.UIEvent), nil, reg, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
@@ -145,6 +145,32 @@ func TestEnterDispatchesHighlightedCommand(t *testing.T) {
 	}
 	if len(m.segs) != 1 || m.segs[0].kind != segCommand || !strings.Contains(m.segs[0].text, "$0.01") {
 		t.Fatalf("inline output not rendered: segs = %+v", m.segs)
+	}
+}
+
+// TestCommandBlockedWhileBusy guards the AS-023 race fix: a command must not
+// dispatch while a turn is in flight (it could swap the session and clear the
+// transcript under the still-streaming turn). The handler stays uncalled and the
+// user gets a notice instead.
+func TestCommandBlockedWhileBusy(t *testing.T) {
+	rec := &recorder{}
+	reg := sampleRegistry(t,
+		command.Command{Name: "clear", Summary: "fresh session", Mode: command.Inline, Run: rec.handler(command.Output{Text: "new"})},
+	)
+	m := newCommandModel(t, reg)
+	m.busy = true
+	m = typeString(t, m, "/clear")
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	if cmd != nil {
+		t.Fatal("a command was dispatched while a turn was in flight")
+	}
+	if rec.called {
+		t.Fatal("command handler ran while busy")
+	}
+	if len(m.segs) != 1 || m.segs[0].kind != segNotice {
+		t.Fatalf("expected a single notice segment, got %+v", m.segs)
 	}
 }
 
@@ -280,7 +306,7 @@ func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
 			t.Fatalf("register %q: %v", n, err)
 		}
 	}
-	m := newModel(&fakeRunner{}, Meta{}, make(chan loop.UIEvent), nil, reg, nil)
+	m := newModel(&fakeRunner{}, staticMeta(Meta{}), make(chan loop.UIEvent), nil, reg, nil)
 	// A short window: only a couple of rows beyond the input + status chrome.
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 8})
 	m = typeString(t, m, "/cmd") // matches all six

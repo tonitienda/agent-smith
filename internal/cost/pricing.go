@@ -115,6 +115,28 @@ func (t *Table) lookupLocal(model string) (Rate, bool) {
 	return best, bestLen >= 0
 }
 
+// Models returns the pricing entries the table knows, this table's own rates
+// layered over the parent's so a child entry for the same Model wins. The order
+// is unspecified — callers that display the list should sort it. It lets a face
+// enumerate the configured model families (e.g. the /model command, AS-023)
+// without reaching into the table's internals.
+func (t *Table) Models() []Rate {
+	if t == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var out []Rate
+	for tbl := t; tbl != nil; tbl = tbl.parent {
+		for _, r := range tbl.rates {
+			if !seen[r.Model] {
+				seen[r.Model] = true
+				out = append(out, r)
+			}
+		}
+	}
+	return out
+}
+
 // Embedded returns the built-in pricing table shipped with the binary. It panics
 // on a malformed embed because that is a build-time defect in our own data, not
 // a runtime condition a caller can handle.

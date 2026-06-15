@@ -10,9 +10,9 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
-	"github.com/tonitienda/agent-smith/internal/eventlog"
-	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
+	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
@@ -20,8 +20,9 @@ import (
 	"github.com/tonitienda/agent-smith/internal/version"
 )
 
-// defaultModel is the model issued for interactive turns until model selection
-// (AS-023 /model, AS-042 routing) lands. Override with SMITH_MODEL.
+// defaultModel is the model a fresh session starts on; /model switches it
+// mid-session (AS-023) and routing will pick it per turn later (AS-042). Override
+// the starting model with SMITH_MODEL.
 const defaultModel = "claude-opus-4-8"
 
 // interactiveTerminal reports whether stdin and stdout are both a terminal, so
@@ -30,11 +31,14 @@ func interactiveTerminal() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// startChat wires the substrate — a persisted session log, the Anthropic
-// provider, the built-in file and shell tools, and the agentic loop — behind the
-// TUI face and runs it. The face consumes only the loop's UIEvents, so all of
-// this provider/tool wiring stays here in the command, never in internal/tui.
-func startChat() error {
+// startChat wires the substrate — a persisted session log, the configured
+// providers, the built-in file and shell tools, and the agentic loop — behind
+// the TUI face and runs it. A non-empty resumeID resumes that session instead of
+// starting a fresh one (AS-023 /resume; `smith --resume <id>`). The mutable
+// session state (active provider/model, current log) lives in chatSession, which
+// the TUI drives through the Runner/Meta/Meter seams, so all of this
+// provider/tool wiring stays here in the command, never in internal/tui.
+func startChat(resumeID string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
@@ -44,9 +48,9 @@ func startChat() error {
 	if err != nil {
 		return fmt.Errorf("open session store: %w", err)
 	}
-	sess, err := store.Create("")
+	sess, err := openOrCreate(store, resumeID)
 	if err != nil {
-		return fmt.Errorf("create session: %w", err)
+		return err
 	}
 
 	reg := tool.NewRegistry()
@@ -67,36 +71,61 @@ func startChat() error {
 		return fmt.Errorf("register shell tool: %w", err)
 	}
 
-	runtime := tool.NewRuntime(reg, sess.Log)
-	prov := anthropic.New("")
-	model := chatModel()
-
 	pricing, err := cost.Default()
 	if err != nil {
 		return fmt.Errorf("load pricing table: %w", err)
 	}
 
-	app := tui.New(tui.Meta{
-		Provider: prov.Name(),
-		Model:    model,
-		Session:  shortID(sess.ID),
-	}, chatCommands(sess.Log, pricing), chatMeter(sess.Log, pricing))
-	engine, err := loop.New(prov, sess.Log, runtime, reg, model, loop.WithObserver(app.Observer()))
-	if err != nil {
+	providers := map[string]provider.Provider{
+		"anthropic": anthropic.New(""),
+		"openai":    openai.New(""),
+	}
+	// A resumed session keeps the model it last used so its window/cost meter
+	// matches; otherwise start on the configured default (Anthropic). The model is
+	// adopted only when its provider is configured, so the provider and model never
+	// disagree (a model with no provider would fail at turn time).
+	provName, model := "anthropic", chatModel()
+	if m := lastModel(sess.Log.Events()); m != "" {
+		if r, ok := pricing.Lookup(m); ok && r.Vendor != "" {
+			if _, ok := providers[r.Vendor]; ok {
+				provName, model = r.Vendor, m
+			}
+		}
+	}
+
+	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model)
+	app := tui.New(ctl.Meta, chatCommands(ctl), ctl.Meter)
+	if err := ctl.start(app.Observer()); err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
 
-	return app.Run(engine)
+	return app.Run(ctl)
+}
+
+// openOrCreate resumes the session named by resumeID, or creates a fresh one when
+// resumeID is empty.
+func openOrCreate(store *session.Store, resumeID string) (*session.Session, error) {
+	if resumeID != "" {
+		sess, err := store.Open(resumeID)
+		if err != nil {
+			return nil, fmt.Errorf("resume session %q: %w", resumeID, err)
+		}
+		return sess, nil
+	}
+	sess, err := store.Create("")
+	if err != nil {
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+	return sess, nil
 }
 
 // chatCommands builds the slash-command registry for the chat face. It ships
-// /help (a full-screen list of every registered command), /version (inline), and
-// /cost (AS-020) — a full-screen token & dollar breakdown derived from the
-// session log. The remaining commands (/context, /clean, /model, /resume,
-// /clear) arrive in their own tickets (AS-023, AS-026, AS-028). The cost handler
-// closes over the session log and pricing table so the command package stays
-// dependency-free.
-func chatCommands(log *eventlog.Log, pricing *cost.Table) *command.Registry {
+// /help (a full-screen list of every registered command), /version (inline),
+// /cost (AS-020, a full-screen token & dollar breakdown), and the parity power
+// commands /clear, /model, and /resume (AS-023). The remaining commands
+// (/context, /clean) arrive in their own tickets (AS-026, AS-028). The handlers
+// close over the chat controller so the command package stays dependency-free.
+func chatCommands(ctl *chatSession) *command.Registry {
 	reg := command.NewRegistry()
 	// HelpCommand reads the registry lazily, so it lists commands registered after
 	// it too; registering it first is fine.
@@ -114,57 +143,31 @@ func chatCommands(log *eventlog.Log, pricing *cost.Table) *command.Registry {
 		Summary: "Show token & cost accounting for this session",
 		Mode:    command.FullScreen,
 		Run: func(context.Context, []string) (command.Output, error) {
-			summary := cost.Summarize(log.Events(), pricing)
+			summary := cost.Summarize(ctl.events(), ctl.pricing)
 			return command.Output{Text: cost.Render(summary)}, nil
 		},
 	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "clear",
+		Summary: "Start a fresh session (the old one stays in /resume)",
+		Mode:    command.Inline,
+		Run:     ctl.cmdClear,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "model",
+		Summary: "List models, or switch the active model: /model <id>",
+		Args:    "[id]",
+		Mode:    command.Inline,
+		Run:     ctl.cmdModel,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "resume",
+		Summary: "List recent sessions, or load one: /resume <id>",
+		Args:    "[id]",
+		Mode:    command.Inline,
+		Run:     ctl.cmdResume,
+	})
 	return reg
-}
-
-// chatMeter builds the context-meter snapshot function for the chat status line
-// (AS-025). It closes over the session log and pricing table and takes the active
-// model per call, so the window denominator rescales the moment the model is
-// switched (AS-023 /model) while internal/tui stays decoupled from the accounting
-// engine. It derives live window occupancy and session cost from the same log the
-// /cost command reads — one accounting source, no drift. Window occupancy is the
-// most recent turn's prompt+output tokens (the figure the provider last counted),
-// refined later by per-block estimates (AS-063); the denominator is the model's
-// context window from the pricing table.
-//
-// The TUI calls this on every loop event, including each streamed text delta, but
-// the log only grows between turns — so the result is memoized on the log length
-// and active model and recomputed only when one of them changes, keeping the
-// per-delta cost a single O(1) length check rather than a full re-summarize. The
-// closure is called only from the Bubble Tea goroutine, so its memo state needs
-// no locking.
-func chatMeter(log *eventlog.Log, pricing *cost.Table) tui.MeterFunc {
-	lastLen := -1
-	var lastModel string
-	var cached tui.Meter
-	return func(model string) tui.Meter {
-		if n := log.Len(); n == lastLen && model == lastModel {
-			return cached
-		}
-		events := log.Events()
-		summary := cost.Summarize(events, pricing)
-		used := 0
-		if last, ok := summary.Latest(); ok {
-			used = last.ContextTokens()
-		}
-		window, _ := pricing.Window(model)
-		cached = tui.Meter{
-			Tokens:    used,
-			Window:    window,
-			CostUSD:   summary.TotalUSD,
-			CostKnown: summary.AllPriced,
-			Currency:  cost.Symbol(summary.Currency),
-		}
-		// Key on the snapshot length, not a second log.Len(), so the cache key
-		// always matches the data `cached` was computed from even if an append
-		// races in after the guard above.
-		lastLen, lastModel = len(events), model
-		return cached
-	}
 }
 
 // mustRegisterCommand registers a built-in command, panicking on error. The

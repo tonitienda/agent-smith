@@ -72,6 +72,35 @@ func NewUsage(producer, vendor, model, stopReason string, tokens *schema.Tokens,
 	}
 }
 
+// KindModelSwitch is the event kind for a model-switch event: a control event
+// recording that the user changed the active provider/model mid-session (AS-023
+// /model), so cost attribution and the transcript stay accurate and a resumed
+// session can recover the model it was last using. It is a non-content kind
+// carrying no content body — the switched-to surface lives on Block.Provider and
+// the command that made the switch on Provenance.Producer.
+//
+// Like KindExclusion and KindUsage it lives here rather than in the frozen
+// content-block schema (AS-003) because it is a harness/log control event, not a
+// content block; the schema tolerates non-content kinds (Block.Validate imposes
+// no body constraint on them) and the projection engine (AS-006) never renders
+// it into model-facing context.
+const KindModelSwitch schema.Kind = "model_switch"
+
+// NewModelSwitch builds a model-switch event attributed to producer (the command
+// that switched, e.g. "/model"), recording the vendor and model now in effect.
+//
+// The returned block has a fresh ID; its Seq and append timestamp are assigned
+// when it is appended to a Log.
+func NewModelSwitch(producer, vendor, model string) schema.Block {
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindModelSwitch,
+		Role:       schema.RoleHarness,
+		Provider:   &schema.Provider{Vendor: vendor, Model: model},
+		Provenance: &schema.Provenance{Producer: producer},
+	}
+}
+
 // Derive stamps a caller-built replacement block as a derived-block event:
 // derived from the given source block IDs and attributed to producer. The
 // derived block replaces its sources in the projection — the sources are

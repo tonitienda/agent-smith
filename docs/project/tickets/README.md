@@ -2,7 +2,7 @@
 
 The full backlog derived from [PRD.md](../PRD.md), in two waves:
 
-- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, and **AS-063**, a cost follow-on spun out of AS-020.)
+- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, and **AS-064**, a `/resume` UX follow-on spun out of AS-023.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes.
 
 Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
@@ -43,7 +43,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-020](AS-020-cost-accounting.md) | Token & cost accounting + `/cost` | cost | done | 009, 010, 022 |
 | [AS-021](AS-021-tui-skeleton.md) | TUI skeleton (streaming chat) | tui | done | 018 |
 | [AS-022](AS-022-slash-command-framework.md) | Slash-command framework + palette | commands | done | 021 |
-| [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | ready | 007, 008, 022 |
+| [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | done | 007, 008, 022 |
 | [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | done | 006, 020, 021 |
 | [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | ready | 006, 020, 022 |
@@ -55,6 +55,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-061](AS-061-json-schema-publication.md) | Publish the block schema as JSON Schema (+ Go↔schema divergence guard) | schema | ready | 003, 004, 060 |
 | [AS-062](AS-062-tool-arg-schema-validation.md) | Fuller JSON-Schema validation for tool arguments | tools | ready | 013 |
 | [AS-063](AS-063-per-block-token-estimates.md) | Per-block token estimates for window composition pricing | cost | ready | 020, 006 |
+| [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | ready | 023, 024 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 

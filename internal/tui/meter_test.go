@@ -97,7 +97,7 @@ func TestHumanTokens(t *testing.T) {
 // the window denominator can rescale on a model switch (AS-023 /model).
 func TestMeterReceivesActiveModel(t *testing.T) {
 	var got string
-	m := newModel(&fakeRunner{}, Meta{Model: "claude-opus-4-8"},
+	m := newModel(&fakeRunner{}, staticMeta(Meta{Model: "claude-opus-4-8"}),
 		make(chan loop.UIEvent), nil, nil, func(model string) Meter {
 			got = model
 			return Meter{}
@@ -114,7 +114,7 @@ func TestMeterReceivesActiveModel(t *testing.T) {
 // event (AS-025 acceptance: always visible, updates within one event).
 func TestMeterShownInStatusLineAndUpdates(t *testing.T) {
 	meter := Meter{Tokens: 1000, Window: 200000, CostUSD: 0.5, CostKnown: true}
-	m := newModel(&fakeRunner{}, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s"},
+	m := newModel(&fakeRunner{}, staticMeta(Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s"}),
 		make(chan loop.UIEvent), nil, nil, func(string) Meter { return meter })
 	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
 
