@@ -149,7 +149,7 @@ and view models; the same registry/events feed the headless CLI (CLI-UX.md §4).
 ## 4. How this maps to tickets
 
 - **AS-021 (done)** — already implements D-TUI-1, -2 (partial), -5, -6, -11.
-- **AS-024 (ready)** — tool cards + diff review + permissions; updated for D-TUI-8
+- **AS-024 (done)** — tool cards + diff review + permissions; implements D-TUI-8
   (inline card, modal only for destructive).
 - **AS-026 (ready)** — `/context` is the first inspect panel; renders inside the
   AS-067 panel host.

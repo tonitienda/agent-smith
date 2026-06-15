@@ -90,9 +90,18 @@ type model struct {
 	// modal, when non-nil, is the blocking permission overlay (D-TUI-8); it traps
 	// focus and is rendered instead of the transcript until dismissed.
 	modal *modal
+	// perm is the permission prompt currently shown (AS-024); permQueue holds
+	// further prompts awaiting their turn, since parallel tool calls (AS-019) can
+	// prompt concurrently but the user decides them one at a time. A non-destructive
+	// prompt renders as an inline card, a destructive one as a blocking modal.
+	perm      *pendingPerm
+	permQueue []*pendingPerm
 	// splash controls whether the startup header renders atop the transcript;
 	// --no-splash and serious mode clear it (D-TUI-10).
 	splash bool
+	// expandTools, when set, shows tool results in full rather than a preview; the
+	// leader chord Ctrl+G then t toggles it (AS-024 AC1).
+	expandTools bool
 
 	busy   bool
 	cancel context.CancelFunc
@@ -194,6 +203,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Re-arm the drain so the next event streams in too.
 		return m, waitForEvent(m.events)
 
+	case permPromptMsg:
+		m.enqueuePerm(msg)
+		m.refresh()
+		return m, nil
+
 	case turnDoneMsg:
 		return m.finishTurn(msg), nil
 
@@ -222,6 +236,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// A blocking modal traps focus until it is decided (D-TUI-8).
 	if m.modalOpen() {
 		return m.handleModalKey(msg)
+	}
+	// A pending permission prompt captures decision keys before anything else, so
+	// the user resolves it before typing or scrolling away (D-TUI-8).
+	if m.permActive() {
+		return m.handlePermKey(msg)
 	}
 	// A full-screen command panel captures navigation until dismissed.
 	if m.panelOpen() {
@@ -332,6 +351,9 @@ func (m model) finishTurn(msg turnDoneMsg) model {
 		m.cancel()
 		m.cancel = nil
 	}
+	// Drop any prompt still on screen: the turn is over, so its Asker has already
+	// unblocked and a lingering card would block the idle UI.
+	m.clearPerms()
 	m.finalizeText()
 
 	switch {
@@ -405,7 +427,7 @@ func (m *model) relayout() {
 	if !m.ready {
 		return
 	}
-	vpHeight := m.height - inputHeight - m.statusRows() - m.paletteHeight()
+	vpHeight := m.height - inputHeight - m.statusRows() - m.paletteHeight() - m.permRows()
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
@@ -480,6 +502,11 @@ func (m model) View() string {
 	if m.modalOpen() {
 		return m.modalView()
 	}
+	// A destructive permission prompt is a focus-trapped overlay, like the modal
+	// (D-TUI-8); a normal one renders inline below, in the work-mode stack.
+	if m.permActive() && m.perm.prompt.Destructive {
+		return m.permModalView()
+	}
 	if m.panelOpen() {
 		// Inspect mode: the status line is pinned above the panel body (D-TUI-3),
 		// then a footer keybar. The status line and then the footer drop, in that
@@ -499,6 +526,11 @@ func (m model) View() string {
 	// (paletteHeight()==0) so the rendered sections never exceed the terminal.
 	if m.palette.open && m.paletteHeight() > 0 {
 		sections = append(sections, m.paletteView())
+	}
+	// An inline permission card sits above the status line; like the palette it is
+	// dropped when the window is too short to reserve room for it (D-TUI-11).
+	if m.permActive() && !m.perm.prompt.Destructive && m.permRows() > 0 {
+		sections = append(sections, m.permCardView())
 	}
 	if m.statusRows() > 0 {
 		sections = append(sections, m.statusLine())

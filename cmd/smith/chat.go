@@ -101,6 +101,14 @@ func startChat(resumeID string, noSplash bool) error {
 		opts = append(opts, tui.WithoutSplash())
 	}
 	app := tui.New(ctl.Meta, chatCommands(ctl), ctl.Meter, opts...)
+	// Wire the permission gate before the first engine is built, so every tool
+	// call is approved through the TUI (AS-016/AS-024). The Asker delivers prompts
+	// into the running app, which app.Run starts below.
+	policy, err := buildPolicy(wd, app)
+	if err != nil {
+		return fmt.Errorf("load permission policy: %w", err)
+	}
+	ctl.setPolicy(policy)
 	if err := ctl.start(app.Observer()); err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
