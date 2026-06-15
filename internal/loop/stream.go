@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -70,6 +71,11 @@ func (e *Engine) streamOnce(ctx context.Context, iter int, req provider.Request)
 		appended int
 		text     strings.Builder
 		turnInfo provider.TurnInfo
+		// usage accumulates the turn's reported token counts across usage events
+		// (input arrives at the start, output at the end, more per server-tool
+		// iteration); usageMeta keeps the last price-affecting metadata seen.
+		usage     *schema.Tokens
+		usageMeta *schema.UsageMeta
 		// open holds the block currently streaming, keyed by BlockIndex; rawArgs
 		// accumulates a tool call's verbatim argument fragments.
 		open    = map[int]*schema.Block{}
@@ -133,6 +139,12 @@ func (e *Engine) streamOnce(ctx context.Context, iter int, req provider.Request)
 				turn.clientCalls = append(turn.clientCalls, stored)
 			}
 
+		case provider.EventUsage:
+			usage = mergeTokens(usage, ev.Usage)
+			if ev.UsageMeta != nil {
+				usageMeta = ev.UsageMeta
+			}
+
 		case provider.EventTurnStop:
 			turn.stopReason = ev.StopReason
 		}
@@ -140,12 +152,67 @@ func (e *Engine) streamOnce(ctx context.Context, iter int, req provider.Request)
 
 	if err := s.Err(); err != nil {
 		turn.text = text.String()
+		// A reported-but-not-yet-recorded usage on a failed stream is dropped: the
+		// turn is being abandoned and the partial counts would not reconcile.
 		return turn, appended, err
 	}
 
 	turn.text = text.String()
+	e.recordUsage(turnModel, turn.stopReason, usage, usageMeta)
 	e.emit(UIEvent{Kind: UITurnComplete, Iteration: iter, StopReason: turn.stopReason})
 	return turn, appended, nil
+}
+
+// recordUsage appends a usage event capturing the turn's accumulated token
+// counts and price-affecting metadata, so token/cost accounting (AS-020) is
+// derivable from the log. It is a no-op when the surface reported no usage, so a
+// provider that omits usage never adds an empty record. A failed append is
+// ignored: usage accounting is best-effort and must never abort a completed
+// turn whose content blocks are already on the log.
+func (e *Engine) recordUsage(model, stopReason string, tokens *schema.Tokens, meta *schema.UsageMeta) {
+	if tokens == nil && meta == nil {
+		return
+	}
+	rec := eventlog.NewUsage(producer, e.provider.Name(), model, stopReason, tokens, meta)
+	_, _ = e.log.Append(rec)
+}
+
+// mergeTokens returns the field-wise sum of two usage breakdowns, treating a nil
+// pointer field as unreported (not zero). It accumulates the disjoint usage
+// events a turn reports (input/cache at the start, output at the end) and sums
+// repeated counts across server-tool iterations. The result is nil when neither
+// side reported anything.
+func mergeTokens(dst, src *schema.Tokens) *schema.Tokens {
+	if src == nil {
+		return dst
+	}
+	if dst == nil {
+		dst = &schema.Tokens{}
+	}
+	dst.Input = addInt(dst.Input, src.Input)
+	dst.Output = addInt(dst.Output, src.Output)
+	dst.CacheRead = addInt(dst.CacheRead, src.CacheRead)
+	dst.CacheWrite = addInt(dst.CacheWrite, src.CacheWrite)
+	dst.Reasoning = addInt(dst.Reasoning, src.Reasoning)
+	dst.CacheWrite5m = addInt(dst.CacheWrite5m, src.CacheWrite5m)
+	dst.CacheWrite1h = addInt(dst.CacheWrite1h, src.CacheWrite1h)
+	return dst
+}
+
+// addInt sums two optional counts, preserving the "nil means unreported" rule:
+// nil + nil stays nil, and a reported value (even zero) makes the result present.
+func addInt(a, b *int) *int {
+	if a == nil && b == nil {
+		return nil
+	}
+	sum := 0
+	if a != nil {
+		sum += *a
+	}
+	if b != nil {
+		sum += *b
+	}
+	return &sum
 }
 
 // newBlock builds the in-progress block scaffold for an opening block, with the

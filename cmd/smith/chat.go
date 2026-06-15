@@ -9,6 +9,8 @@ import (
 	"golang.org/x/term"
 
 	"github.com/tonitienda/agent-smith/internal/command"
+	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/session"
@@ -69,11 +71,16 @@ func startChat() error {
 	prov := anthropic.New("")
 	model := chatModel()
 
+	pricing, err := cost.Default()
+	if err != nil {
+		return fmt.Errorf("load pricing table: %w", err)
+	}
+
 	app := tui.New(tui.Meta{
 		Provider: prov.Name(),
 		Model:    model,
 		Session:  shortID(sess.ID),
-	}, chatCommands())
+	}, chatCommands(sess.Log, pricing))
 	engine, err := loop.New(prov, sess.Log, runtime, reg, model, loop.WithObserver(app.Observer()))
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
@@ -82,12 +89,14 @@ func startChat() error {
 	return app.Run(engine)
 }
 
-// chatCommands builds the slash-command registry for the chat face. The
-// substantive commands (/cost, /context, /clean, /model, /resume, /clear) arrive
-// in their own tickets (AS-020, AS-023, AS-026, AS-028); for now the framework
-// (AS-022) ships with /help — a full-screen list of every registered command —
-// and /version, an inline command, which together exercise both render modes.
-func chatCommands() *command.Registry {
+// chatCommands builds the slash-command registry for the chat face. It ships
+// /help (a full-screen list of every registered command), /version (inline), and
+// /cost (AS-020) — a full-screen token & dollar breakdown derived from the
+// session log. The remaining commands (/context, /clean, /model, /resume,
+// /clear) arrive in their own tickets (AS-023, AS-026, AS-028). The cost handler
+// closes over the session log and pricing table so the command package stays
+// dependency-free.
+func chatCommands(log *eventlog.Log, pricing *cost.Table) *command.Registry {
 	reg := command.NewRegistry()
 	// HelpCommand reads the registry lazily, so it lists commands registered after
 	// it too; registering it first is fine.
@@ -98,6 +107,15 @@ func chatCommands() *command.Registry {
 		Mode:    command.Inline,
 		Run: func(context.Context, []string) (command.Output, error) {
 			return command.Output{Text: version.String()}, nil
+		},
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "cost",
+		Summary: "Show token & cost accounting for this session",
+		Mode:    command.FullScreen,
+		Run: func(context.Context, []string) (command.Output, error) {
+			summary := cost.Summarize(log.Events(), pricing)
+			return command.Output{Text: cost.Render(summary)}, nil
 		},
 	})
 	return reg

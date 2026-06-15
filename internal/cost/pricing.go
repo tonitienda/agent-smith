@@ -1,0 +1,153 @@
+package cost
+
+import (
+	"embed"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+)
+
+//go:embed data/pricing.json
+var embeddedData embed.FS
+
+// EnvPricingFile names an environment variable holding a path to a pricing JSON
+// file. When set, its rates override the embedded table model-by-model (a model
+// absent from the override falls back to the embedded rate), so a price change
+// or a new model needs no recompile (AS-020).
+const EnvPricingFile = "SMITH_PRICING"
+
+// Rate is the list price of a model's usage, in currency units per million
+// tokens. CacheRead/CacheWrite default to zero, which prices providers with no
+// (or free) prompt caching correctly.
+type Rate struct {
+	// Model is an exact model ID (e.g. "claude-opus-4-8") or a prefix pattern
+	// ending in "*" (e.g. "claude-opus-4-*"). On lookup an exact match wins; among
+	// patterns the longest matching prefix wins, so a specific entry beats a broad
+	// family default.
+	Model             string  `json:"model"`
+	Vendor            string  `json:"vendor,omitempty"`
+	InputPerMTok      float64 `json:"input_per_mtok"`
+	OutputPerMTok     float64 `json:"output_per_mtok"`
+	CacheReadPerMTok  float64 `json:"cache_read_per_mtok,omitempty"`
+	CacheWritePerMTok float64 `json:"cache_write_per_mtok,omitempty"`
+}
+
+// wireTable is the on-disk pricing document.
+type wireTable struct {
+	Version  int    `json:"version"`
+	Currency string `json:"currency"`
+	Models   []Rate `json:"models"`
+}
+
+// Table is a model-pricing lookup. A Table may chain to a parent: its own rates
+// are consulted first and the parent supplies the fallback, which is how a user
+// override layers over the embedded defaults.
+type Table struct {
+	rates    []Rate
+	currency string
+	parent   *Table
+}
+
+// Currency reports the table's currency code (e.g. "USD"), falling back to the
+// parent's and finally to "USD".
+func (t *Table) Currency() string {
+	switch {
+	case t == nil:
+		return "USD"
+	case t.currency != "":
+		return t.currency
+	case t.parent != nil:
+		return t.parent.Currency()
+	default:
+		return "USD"
+	}
+}
+
+// Lookup returns the rate for model, consulting this table before its parent. ok
+// is false when no entry matches, so callers can show tokens while marking the
+// dollar figure unknown (AS-020: unknown model degrades gracefully).
+func (t *Table) Lookup(model string) (Rate, bool) {
+	if t == nil {
+		return Rate{}, false
+	}
+	if r, ok := t.lookupLocal(model); ok {
+		return r, true
+	}
+	return t.parent.Lookup(model)
+}
+
+// lookupLocal matches model against this table's own rates only: an exact model
+// ID wins outright, otherwise the longest matching "prefix*" pattern wins.
+func (t *Table) lookupLocal(model string) (Rate, bool) {
+	var best Rate
+	bestLen := -1
+	for _, r := range t.rates {
+		if r.Model == model {
+			return r, true
+		}
+		if prefix, ok := strings.CutSuffix(r.Model, "*"); ok &&
+			strings.HasPrefix(model, prefix) && len(prefix) > bestLen {
+			best, bestLen = r, len(prefix)
+		}
+	}
+	return best, bestLen >= 0
+}
+
+// Embedded returns the built-in pricing table shipped with the binary. It panics
+// on a malformed embed because that is a build-time defect in our own data, not
+// a runtime condition a caller can handle.
+func Embedded() *Table {
+	t, err := parse(mustReadEmbedded())
+	if err != nil {
+		panic("cost: embedded pricing table is invalid: " + err.Error())
+	}
+	return t
+}
+
+// LoadFile parses a pricing table from path.
+func LoadFile(path string) (*Table, error) {
+	b, err := os.ReadFile(path) //nolint:gosec // path comes from the operator's own env var
+	if err != nil {
+		return nil, fmt.Errorf("cost: read pricing file: %w", err)
+	}
+	t, err := parse(b)
+	if err != nil {
+		return nil, fmt.Errorf("cost: parse pricing file %s: %w", path, err)
+	}
+	return t, nil
+}
+
+// Default returns the pricing table to use for a session: the embedded defaults,
+// optionally overlaid with the override file named by $SMITH_PRICING. A missing
+// env var yields the embedded table; a set-but-unreadable/invalid file is a
+// reported error so a typo'd override never silently misprices a session.
+func Default() (*Table, error) {
+	base := Embedded()
+	path := strings.TrimSpace(os.Getenv(EnvPricingFile))
+	if path == "" {
+		return base, nil
+	}
+	override, err := LoadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	override.parent = base
+	return override, nil
+}
+
+func parse(b []byte) (*Table, error) {
+	var w wireTable
+	if err := json.Unmarshal(b, &w); err != nil {
+		return nil, err
+	}
+	return &Table{rates: w.Models, currency: w.Currency}, nil
+}
+
+func mustReadEmbedded() []byte {
+	b, err := embeddedData.ReadFile("data/pricing.json")
+	if err != nil {
+		panic("cost: embedded pricing table missing: " + err.Error())
+	}
+	return b
+}
