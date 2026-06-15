@@ -130,15 +130,29 @@ func (m *model) finalizeText() {
 }
 
 // renderTranscript renders every segment into a single string for the viewport.
+// The startup header (D-TUI-10) is the first thing in the scrollback when splash
+// is on, so it shows on launch and scrolls away with the conversation.
 func (m *model) renderTranscript() string {
-	if len(m.segs) == 0 {
-		return dimStyle.Render("Ask Agent Smith anything to begin.")
+	parts := make([]string, 0, len(m.segs)+1)
+	if m.splash {
+		parts = append(parts, m.headerView())
 	}
-	parts := make([]string, 0, len(m.segs))
+	if len(m.segs) == 0 {
+		parts = append(parts, dimStyle.Render("Ask Agent Smith anything to begin."))
+		return strings.Join(parts, "\n\n")
+	}
 	for i := range m.segs {
 		parts = append(parts, m.renderSegment(&m.segs[i]))
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// headerView is the small ASCII startup header: a banner plus project · model ·
+// mode (D-TUI-10). No model call, no delay — it is pure projection of the cached
+// status-line identity.
+func (m *model) headerView() string {
+	meta := strings.Join(nonEmpty(m.meta.Project, m.meta.Model, "work mode"), " · ")
+	return bannerStyle.Render("▞▞ AGENT SMITH") + "\n" + dimStyle.Render(meta)
 }
 
 // renderSegment styles one segment. Assistant bodies render as markdown once
@@ -209,6 +223,7 @@ var (
 	commandLabelStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
 	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	dimStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	bannerStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
 	statusBarStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8"))
 )
 

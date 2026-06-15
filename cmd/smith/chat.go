@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
@@ -34,11 +35,12 @@ func interactiveTerminal() bool {
 // startChat wires the substrate — a persisted session log, the configured
 // providers, the built-in file and shell tools, and the agentic loop — behind
 // the TUI face and runs it. A non-empty resumeID resumes that session instead of
-// starting a fresh one (AS-023 /resume; `smith --resume <id>`). The mutable
-// session state (active provider/model, current log) lives in chatSession, which
-// the TUI drives through the Runner/Meta/Meter seams, so all of this
-// provider/tool wiring stays here in the command, never in internal/tui.
-func startChat(resumeID string) error {
+// starting a fresh one (AS-023 /resume; `smith --resume <id>`); noSplash hides
+// the startup header (AS-067; `smith --no-splash`). The mutable session state
+// (active provider/model, current log) lives in chatSession, which the TUI drives
+// through the Runner/Meta/Meter seams, so all of this provider/tool wiring stays
+// here in the command, never in internal/tui.
+func startChat(resumeID string, noSplash bool) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
@@ -93,8 +95,12 @@ func startChat(resumeID string) error {
 		}
 	}
 
-	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model)
-	app := tui.New(ctl.Meta, chatCommands(ctl), ctl.Meter)
+	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, filepath.Base(wd))
+	var opts []tui.Option
+	if noSplash {
+		opts = append(opts, tui.WithoutSplash())
+	}
+	app := tui.New(ctl.Meta, chatCommands(ctl), ctl.Meter, opts...)
 	if err := ctl.start(app.Observer()); err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}

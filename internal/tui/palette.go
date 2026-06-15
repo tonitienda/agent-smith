@@ -71,9 +71,14 @@ func (m *model) paletteHeight() int {
 	if n > paletteMaxRows {
 		n = paletteMaxRows
 	}
-	maxRows := m.height - inputHeight - statusHeight - 1
+	// Reserve only the chrome that actually renders: on a tiny window the status
+	// line is dropped (statusRows()==0), so reserving it unconditionally would let
+	// viewport+palette+textarea exceed the terminal (D-TUI-11). The trailing -1
+	// keeps at least one transcript row; when even that can't fit, the palette is
+	// dropped entirely (0) rather than forced to overflow the input.
+	maxRows := m.height - inputHeight - m.statusRows() - 1
 	if maxRows < 1 {
-		maxRows = 1
+		return 0
 	}
 	if n > maxRows {
 		n = maxRows
@@ -238,6 +243,43 @@ func (m *model) appendSegment(s segment) {
 	m.segs = append(m.segs, s)
 	m.curAssistant, m.curReasoning = -1, -1
 	m.refresh()
+}
+
+// handleLeaderKey resolves the key pressed after the panel leader (ctrl+g): a
+// bound key opens its panel, anything else cancels the chord without typing the
+// key (the leader captured it, so bare-letter input stays unaffected, D-TUI-7).
+func (m model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.leader = false
+	if msg.String() == "ctrl+c" {
+		if m.cancel != nil {
+			m.cancel()
+		}
+		return m, tea.Quit
+	}
+	if name, ok := m.panelHotkeys[msg.String()]; ok {
+		return m.openPanelByName(name)
+	}
+	return m, nil
+}
+
+// openPanelByName dispatches the named full-screen command — the hotkey path
+// into the same panel host the palette uses. A missing or non-full-screen
+// command is a no-op (a binding for a panel that doesn't exist yet), and a turn
+// in flight is declined like a palette dispatch so the view can't be swapped
+// from under a streaming turn.
+func (m model) openPanelByName(name string) (tea.Model, tea.Cmd) {
+	if m.commands == nil {
+		return m, nil
+	}
+	cmd, ok := m.commands.Lookup(name)
+	if !ok || cmd.Mode != command.FullScreen {
+		return m, nil
+	}
+	if m.busy {
+		m.appendSegment(segment{kind: segNotice, text: "finish or cancel the current turn (Esc) before opening a panel", done: true})
+		return m, nil
+	}
+	return m, runCommand(cmd, nil)
 }
 
 // panelOpen reports whether a full-screen command panel is showing.

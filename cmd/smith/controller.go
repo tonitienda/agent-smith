@@ -41,6 +41,10 @@ type chatSession struct {
 	providers map[string]provider.Provider // vendor -> provider
 	observer  loop.Observer
 
+	// project labels the working context in the startup header (D-TUI-10); it is
+	// static for the session's lifetime, so it needs no lock.
+	project string
+
 	mu       sync.Mutex
 	sess     *session.Session
 	provName string
@@ -59,7 +63,7 @@ type chatSession struct {
 // the default Anthropic + OpenAI providers and the model for the first turn. The
 // engine is not built yet: the caller sets the observer (from the TUI) and calls
 // start so turn progress is wired before the first turn runs.
-func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model string) *chatSession {
+func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, project string) *chatSession {
 	return &chatSession{
 		store:     store,
 		tools:     tools,
@@ -68,6 +72,7 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 		sess:      sess,
 		provName:  provName,
 		model:     model,
+		project:   project,
 	}
 }
 
@@ -112,7 +117,7 @@ func (s *chatSession) Run(ctx context.Context, userText string) (loop.Result, er
 func (s *chatSession) Meta() tui.Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return tui.Meta{Provider: s.provName, Model: s.model, Session: shortID(s.sess.ID)}
+	return tui.Meta{Provider: s.provName, Model: s.model, Session: shortID(s.sess.ID), Project: s.project}
 }
 
 // Meter computes the context/cost snapshot for the status line (tui.MeterFunc)
