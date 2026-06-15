@@ -2,8 +2,8 @@
 
 The full backlog derived from [PRD.md](../PRD.md), in two waves:
 
-- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, and **AS-064**, a `/resume` UX follow-on spun out of AS-023.)
-- **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes.
+- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, **AS-064**, a `/resume` UX follow-on spun out of AS-023, **AS-065**, the CLI subcommand router/contract from the [CLI-UX.md](../CLI-UX.md) grilling, and **AS-067**, the TUI inspect-mode panel framework from the [TUI-UX.md](../TUI-UX.md) grilling.)
+- **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes. (Plus **AS-066**, the shared slash↔subcommand command-registry follow-on from the [CLI-UX.md](../CLI-UX.md) grilling.)
 
 Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
 
@@ -44,7 +44,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-021](AS-021-tui-skeleton.md) | TUI skeleton (streaming chat) | tui | done | 018 |
 | [AS-022](AS-022-slash-command-framework.md) | Slash-command framework + palette | commands | done | 021 |
 | [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | done | 007, 008, 022 |
-| [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016 |
+| [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016, 067 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | done | 006, 020, 021 |
 | [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | ready | 006, 020, 022 |
 | [AS-027](AS-027-segment-topic-labeling.md) | Segment topic labeling engine | context-wedge | **needs clarification** | 006 |
@@ -56,6 +56,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-062](AS-062-tool-arg-schema-validation.md) | Fuller JSON-Schema validation for tool arguments | tools | ready | 013 |
 | [AS-063](AS-063-per-block-token-estimates.md) | Per-block token estimates for window composition pricing | cost | done | 020, 006 |
 | [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | ready | 023, 024 |
+| [AS-065](AS-065-cli-subcommand-router.md) | CLI subcommand router + arg/output/exit-code contract | faces | ready | 018, 021, 022 |
+| [AS-067](AS-067-tui-panel-framework.md) | TUI inspect-mode panel framework + focus/hotkey routing | tui | ready | 021, 022 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 
@@ -90,16 +92,17 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | **needs clarification** | 007, 020, 045 |
 | [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | **needs clarification** | 032, 045, 050 |
 | [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | ready (spike) | 044 |
+| [AS-066](AS-066-command-registry-parity.md) | Shared command registry — slash ↔ subcommand parity | commands | ready | 022, 065 |
 
 ## Suggested build order
 
 1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.
 2. **Providers + tools**: 009/010 → 011/012 · 013 → 014/016 → 015.
-3. **Loop + faces**: 018 → 019/021 → 022 → 020/023/024/025.
+3. **Loop + faces**: 018 → 019/021 → 022 → 020/023/024/025; 065 (CLI router) once 022 exists, so commands grow on the subcommand-first shape.
 4. **The V1 wedges** (the demo): 026 → 028, while 027/029 get their open questions answered.
 5. **Guardrail**: 030 as soon as 018+020 exist — D5 needs measurements before habits form. AS-056 (spike) can run any time; AS-059 after 044.
 6. **Fast-follow, capability wave**: 031 → 032/033/034/035/036 (mostly parallel) + the cheap commands 037–041.
-7. **Fast-follow, wedge wave**: 044 → 045/046 → 047 → 048/049/050; 051 → 052/053; 042/043 once clarified.
+7. **Fast-follow, wedge wave**: 044 → 045/046 → 047 → 048/049/050; 051 → 052/053; 066 (registry parity) alongside 051; 042/043 once clarified.
 8. **P2**: 054/055/057/058 as the async + analytics story matures.
 
 ## Needs clarification — decisions to make
