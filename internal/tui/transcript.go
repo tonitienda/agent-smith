@@ -17,6 +17,11 @@ import (
 // the global expand toggle (Ctrl+G then t) reveals the rest (AS-024 AC1).
 const toolPreviewLines = 6
 
+// argValueByteCap bounds how many bytes of a single argument value the card
+// summary inspects, so a huge value can't make the (once-per-call) summary scan
+// the whole payload. It is comfortably larger than the final 72-rune cap.
+const argValueByteCap = 256
+
 // segKind is the role a transcript segment plays. Segments are appended as the
 // loop streams events and rendered into the scrollback viewport.
 type segKind int
@@ -272,6 +277,12 @@ func summarizeToolArgs(raw json.RawMessage) string {
 		if !ok {
 			b, _ := json.Marshal(v)
 			s = string(b)
+		}
+		// Cap each value before whitespace-collapsing so a huge argument (an edit's
+		// old_string/new_string can be large) doesn't get scanned in full just to
+		// produce a 72-rune summary.
+		if len(s) > argValueByteCap {
+			s = s[:argValueByteCap]
 		}
 		parts = append(parts, fmt.Sprintf("%s: %s", k, oneLine(s)))
 	}

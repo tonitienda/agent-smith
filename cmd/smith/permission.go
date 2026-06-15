@@ -49,6 +49,11 @@ func (a tuiAsker) Ask(ctx context.Context, req permission.Request) (permission.O
 	return permission.Outcome{Allow: d.Allow, Remember: d.Remember}, nil
 }
 
+// maxDiffLines caps how many lines an edit diff renders in a permission prompt;
+// beyond it the diff is truncated with a marker, since the inline card shows only
+// a handful of rows anyway.
+const maxDiffLines = 40
+
 // destructive flags the broad-scope tools that escalate to a focus-trapped
 // blocking modal rather than an inline card (D-TUI-8). The shell tool runs an
 // arbitrary command with the user's privileges — the broadest scope — so it traps
@@ -71,18 +76,23 @@ func editDiff(req permission.Request) string {
 	if err := json.Unmarshal(req.Arguments, &args); err != nil {
 		return ""
 	}
-	var b strings.Builder
+	var lines []string
+	// Trim a single trailing newline (standard for POSIX file content) before
+	// splitting, so the diff doesn't end in a spurious empty "- "/"+ " line.
 	if args.OldString != "" {
-		// Trim a single trailing newline (standard for POSIX file content) before
-		// splitting, so the diff doesn't end in a spurious empty "- "/"+ " line.
 		for _, ln := range strings.Split(strings.TrimSuffix(args.OldString, "\n"), "\n") {
-			b.WriteString("- " + ln + "\n")
+			lines = append(lines, "- "+ln)
 		}
 	}
 	if args.NewString != "" {
 		for _, ln := range strings.Split(strings.TrimSuffix(args.NewString, "\n"), "\n") {
-			b.WriteString("+ " + ln + "\n")
+			lines = append(lines, "+ "+ln)
 		}
 	}
-	return strings.TrimRight(b.String(), "\n")
+	// A large multi-hundred-line edit would build (and the TUI would style)
+	// far more than the inline card can show, so cap the rendered diff.
+	if len(lines) > maxDiffLines {
+		lines = append(lines[:maxDiffLines], "… (diff truncated)")
+	}
+	return strings.Join(lines, "\n")
 }

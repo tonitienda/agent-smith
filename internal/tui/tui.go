@@ -190,7 +190,14 @@ func (a *App) Ask(ctx context.Context, p PermissionPrompt) (PermissionDecision, 
 		return PermissionDecision{}, errors.New("tui: not running")
 	}
 	reply := make(chan PermissionDecision, 1)
-	prog.Send(permPromptMsg{prompt: p, reply: reply})
+	// Deliver on a goroutine: Program.Send blocks until the program drains the
+	// message and, if the program is tearing down, may not deliver at all — so the
+	// caller must still be able to bail on ctx. The recover guards the unlikely
+	// panic of sending to an already-closed program during shutdown.
+	go func() {
+		defer func() { _ = recover() }()
+		prog.Send(permPromptMsg{prompt: p, reply: reply})
+	}()
 	select {
 	case d := <-reply:
 		return d, nil
