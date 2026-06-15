@@ -2,7 +2,7 @@
 id: AS-067
 title: TUI inspect-mode panel framework + focus/hotkey routing
 status: done
-github_issue: null
+github_issue: 104
 depends_on: [AS-021, AS-022]
 area: tui
 priority: P0

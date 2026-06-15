@@ -2,7 +2,7 @@
 id: AS-066
 title: Shared command registry — slash ↔ subcommand parity metadata
 status: ready-to-implement
-github_issue: null
+github_issue: 103
 depends_on: [AS-022, AS-065]
 area: commands
 priority: P1

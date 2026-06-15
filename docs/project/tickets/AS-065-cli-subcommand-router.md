@@ -2,7 +2,7 @@
 id: AS-065
 title: CLI subcommand router + arg/output/exit-code contract
 status: ready-to-implement
-github_issue: null
+github_issue: 102
 depends_on: [AS-018, AS-021, AS-022]
 area: faces
 priority: P1
