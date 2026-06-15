@@ -80,7 +80,7 @@ func startChat() error {
 		Provider: prov.Name(),
 		Model:    model,
 		Session:  shortID(sess.ID),
-	}, chatCommands(sess.Log, pricing))
+	}, chatCommands(sess.Log, pricing), chatMeter(sess.Log, pricing, model))
 	engine, err := loop.New(prov, sess.Log, runtime, reg, model, loop.WithObserver(app.Observer()))
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
@@ -119,6 +119,31 @@ func chatCommands(log *eventlog.Log, pricing *cost.Table) *command.Registry {
 		},
 	})
 	return reg
+}
+
+// chatMeter builds the context-meter snapshot function for the chat status line
+// (AS-025). It closes over the session log, the pricing table, and the active
+// model so internal/tui stays decoupled from the accounting engine: on each
+// event the TUI calls it, and it derives the live window occupancy and session
+// cost from the same log the /cost command reads — one accounting source, no
+// drift. Window occupancy is the most recent turn's prompt+output tokens (the
+// figure the provider last counted), refined later by per-block estimates
+// (AS-063); the denominator is the model's context window from the pricing table.
+func chatMeter(log *eventlog.Log, pricing *cost.Table, model string) tui.MeterFunc {
+	return func() tui.Meter {
+		summary := cost.Summarize(log.Events(), pricing)
+		used := 0
+		if last, ok := summary.Latest(); ok {
+			used = last.ContextTokens()
+		}
+		window, _ := pricing.Window(model)
+		return tui.Meter{
+			Tokens:    used,
+			Window:    window,
+			CostUSD:   summary.TotalUSD,
+			CostKnown: summary.AllPriced,
+		}
+	}
 }
 
 // mustRegisterCommand registers a built-in command, panicking on error. The

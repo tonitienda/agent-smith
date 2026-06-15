@@ -1,7 +1,7 @@
 ---
 id: AS-025
 title: Always-visible context meter in the TUI
-status: ready-to-implement
+status: done
 github_issue: 25
 depends_on: [AS-006, AS-020, AS-021]
 area: tui
@@ -11,7 +11,29 @@ source: PRD.md §7.8, §5
 
 # AS-025 · Always-visible context meter
 
-**Status: ready to implement**
+**Status: done**
+
+## Implementation notes
+
+- A `tui.Meter` value (tokens used, window size, session cost, cost-known flag)
+  plus a `tui.MeterFunc` seam keeps the face decoupled from the accounting engine
+  — `cmd/smith` closes the func over the session log, pricing table, and active
+  model, exactly as it already does for `/cost`. The TUI imports neither
+  `internal/cost` nor `internal/provider` (the AS-021 boundary test still holds).
+- The meter is recomputed once per loop event (cached in the model, rendered into
+  the status line), so it updates within one event and adds no per-keystroke or
+  model-call cost. It reads the same `cost.Summarize` source as `/cost`, so the
+  session dollar figure cannot drift from the command.
+- Window occupancy is the most recent turn's prompt+output tokens
+  (`cost.TurnCost.ContextTokens`) — the figure the provider last counted — which
+  needs no extra call. AS-063 (per-block estimates) will refine this into a
+  composed window size. The denominator is the model's context window, added as
+  an additive `context_window` field on the pricing table (`Table.Window`), so
+  switching models rescales it immediately. Unknown window → bare token count;
+  unpriced session → cost shown as `$?`.
+- Color thresholds: green < 60%, yellow < 85%, red ≥ 85%, with a fixed-width fill
+  bar. The live-vs-excluded reclaim split is left for AS-028 (`/clean`) to surface
+  once exclusions exist.
 
 ## Description
 

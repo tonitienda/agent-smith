@@ -31,6 +31,12 @@ type Rate struct {
 	OutputPerMTok     float64 `json:"output_per_mtok"`
 	CacheReadPerMTok  float64 `json:"cache_read_per_mtok,omitempty"`
 	CacheWritePerMTok float64 `json:"cache_write_per_mtok,omitempty"`
+
+	// ContextWindow is the model's maximum context-window size in tokens. The
+	// context meter (AS-025) uses it as the denominator for how full the window
+	// is; zero means the window is unknown, so the meter shows the raw token
+	// count without a percentage. The field is optional and additive (PRD D2).
+	ContextWindow int `json:"context_window,omitempty"`
 }
 
 // wireTable is the on-disk pricing document.
@@ -77,6 +83,19 @@ func (t *Table) Lookup(model string) (Rate, bool) {
 		return r, true
 	}
 	return t.parent.Lookup(model)
+}
+
+// Window returns the context-window size (in tokens) for model, resolved the
+// same way as pricing: an exact model ID wins, otherwise the longest matching
+// "prefix*" pattern. ok is false when no entry matches or the matched entry
+// records no window, so the context meter (AS-025) can fall back to showing raw
+// token counts without a percentage.
+func (t *Table) Window(model string) (int, bool) {
+	r, ok := t.Lookup(model)
+	if !ok || r.ContextWindow <= 0 {
+		return 0, false
+	}
+	return r.ContextWindow, true
 }
 
 // lookupLocal matches model against this table's own rates only: an exact model

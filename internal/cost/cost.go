@@ -86,6 +86,15 @@ type TurnCost struct {
 	CacheSavingsUSD float64
 }
 
+// ContextTokens estimates the context-window occupancy at this turn: the tokens
+// the provider counted in the prompt (fresh input plus cache reads and writes)
+// plus the output it generated, all of which the next request carries. It is the
+// figure the context meter (AS-025) shows from the most recent turn until
+// per-block estimates (AS-063) replace it with a composed window size.
+func (t TurnCost) ContextTokens() int {
+	return t.Tokens.Input + t.Tokens.CacheRead + t.Tokens.CacheWrite + t.Tokens.Output
+}
+
 // Summary is the session-wide accounting: every priced turn plus the rolled-up
 // totals the /cost command renders.
 type Summary struct {
@@ -103,6 +112,17 @@ type Summary struct {
 	// the session dollar total is a lower bound. Currency is the table's code.
 	AllPriced bool
 	Currency  string
+}
+
+// Latest returns the most recent priced turn (the last usage event in log
+// order) and whether one exists. The context meter (AS-025) uses it to size the
+// live window from the prompt the provider last counted, with no extra model
+// call.
+func (s Summary) Latest() (TurnCost, bool) {
+	if len(s.Turns) == 0 {
+		return TurnCost{}, false
+	}
+	return s.Turns[len(s.Turns)-1], true
 }
 
 // Summarize prices the usage events in events against table and rolls them into

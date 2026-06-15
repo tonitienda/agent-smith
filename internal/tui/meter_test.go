@@ -1,0 +1,100 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/tonitienda/agent-smith/internal/loop"
+)
+
+func TestMeterRenderKnownWindow(t *testing.T) {
+	got := Meter{Tokens: 12300, Window: 200000, CostUSD: 0.0421, CostKnown: true}.render()
+	for _, want := range []string{"12.3k", "200k", "6%", "$0.0421", "░"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("meter %q missing %q", got, want)
+		}
+	}
+}
+
+func TestMeterRenderUnknownWindow(t *testing.T) {
+	got := Meter{Tokens: 1500, Window: 0, CostUSD: 0.01, CostKnown: true}.render()
+	if !strings.Contains(got, "1.5k tok") {
+		t.Errorf("meter %q should show a bare token count when the window is unknown", got)
+	}
+	if strings.Contains(got, "%") || strings.Contains(got, "█") {
+		t.Errorf("meter %q should have no percentage or bar without a window", got)
+	}
+}
+
+func TestMeterRenderUnknownCost(t *testing.T) {
+	got := Meter{Tokens: 100, Window: 200000, CostKnown: false}.render()
+	if !strings.Contains(got, "$?") {
+		t.Errorf("meter %q should mark an unpriced session cost as unknown", got)
+	}
+}
+
+func TestMeterEmptyRendersNothing(t *testing.T) {
+	if got := (Meter{}).render(); got != "" {
+		t.Errorf("empty meter rendered %q, want \"\"", got)
+	}
+}
+
+func TestMeterColorThresholds(t *testing.T) {
+	// The colored span carries an ANSI SGR escape; different thresholds must pick
+	// different colors so nearing the window limit is visible.
+	green := Meter{Tokens: 10, Window: 100, CostKnown: true}.render()  // 10%
+	yellow := Meter{Tokens: 70, Window: 100, CostKnown: true}.render() // 70%
+	red := Meter{Tokens: 95, Window: 100, CostKnown: true}.render()    // 95%
+	if green == yellow || yellow == red || green == red {
+		t.Errorf("thresholds did not produce distinct styling:\n green=%q\n yellow=%q\n red=%q", green, yellow, red)
+	}
+}
+
+func TestMeterBarFillsWithUsage(t *testing.T) {
+	empty := meterBar(0)
+	full := meterBar(100)
+	if strings.Contains(empty, "█") {
+		t.Errorf("0%% bar %q should have no fill", empty)
+	}
+	if strings.Contains(full, "░") {
+		t.Errorf("100%% bar %q should be fully filled", full)
+	}
+	if len([]rune(empty)) != meterBarWidth || len([]rune(full)) != meterBarWidth {
+		t.Errorf("bar width changed: empty=%d full=%d, want %d", len([]rune(empty)), len([]rune(full)), meterBarWidth)
+	}
+}
+
+func TestHumanTokens(t *testing.T) {
+	cases := map[int]string{0: "0", 999: "999", 1500: "1.5k", 200000: "200k", 1047576: "1M"}
+	for n, want := range cases {
+		if got := humanTokens(n); got != want {
+			t.Errorf("humanTokens(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// TestMeterShownInStatusLineAndUpdates wires a MeterFunc whose value the test
+// controls, and checks the meter is visible in the view and refreshes within one
+// event (AS-025 acceptance: always visible, updates within one event).
+func TestMeterShownInStatusLineAndUpdates(t *testing.T) {
+	meter := Meter{Tokens: 1000, Window: 200000, CostUSD: 0.5, CostKnown: true}
+	m := newModel(&fakeRunner{}, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s"},
+		make(chan loop.UIEvent), nil, nil, func() Meter { return meter })
+	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
+
+	if !strings.Contains(m.View(), "$0.5000") {
+		t.Fatalf("initial view missing meter cost:\n%s", m.View())
+	}
+
+	// A new event must pull the updated snapshot into the status line.
+	meter = Meter{Tokens: 150000, Window: 200000, CostUSD: 1.25, CostKnown: true}
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnComplete})
+	view := m.View()
+	for _, want := range []string{"150k", "75%", "$1.2500"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view after event missing %q:\n%s", want, view)
+		}
+	}
+}
