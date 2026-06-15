@@ -24,11 +24,15 @@ func (f *fakeRunner) Run(_ context.Context, text string) (loop.Result, error) {
 	return loop.Result{}, f.err
 }
 
+// staticMeta wraps a fixed Meta as a MetaFunc for tests that need no live
+// session-identity updates.
+func staticMeta(m Meta) MetaFunc { return func() Meta { return m } }
+
 // newTestModel builds a sized, renderer-free model so the transcript is raw text
 // (deterministic, no terminal probing).
 func newTestModel(t *testing.T, runner Runner) model {
 	t.Helper()
-	m := newModel(runner, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123"},
+	m := newModel(runner, staticMeta(Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123"}),
 		make(chan loop.UIEvent), nil, nil, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }

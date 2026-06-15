@@ -202,6 +202,12 @@ func (m model) finishCommand(msg commandDoneMsg) model {
 		m.appendSegment(segment{kind: segError, text: "/" + msg.cmd.Name + ": " + msg.err.Error(), done: true})
 		return m
 	}
+	// A session-resetting command (/clear, /resume) clears the transcript so the
+	// view reflects the fresh context rather than the previous session's history.
+	if msg.out.ResetView {
+		m.segs = nil
+		m.curAssistant, m.curReasoning = -1, -1
+	}
 	switch msg.cmd.Mode {
 	case command.FullScreen:
 		m.openPanel(msg.cmd.Name, msg.out.Text)

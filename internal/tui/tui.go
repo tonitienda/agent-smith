@@ -52,29 +52,36 @@ type Runner interface {
 	Run(ctx context.Context, userText string) (loop.Result, error)
 }
 
-// Meta is the static session identity shown in the status line. The Matrix
-// personality layer (AS-053) will dress this up; here it is plain text (D6).
+// Meta is the session identity shown in the status line. The Matrix personality
+// layer (AS-053) will dress this up; here it is plain text (D6).
 type Meta struct {
 	Provider string
 	Model    string
 	Session  string
 }
 
+// MetaFunc yields the current session identity for the status line. It is
+// re-read once per event/command (not per keystroke), so the provider, model,
+// and session label stay current after a mid-session switch (/model) or a
+// session swap (/clear, /resume) without the face importing the wiring that owns
+// that state. A nil MetaFunc leaves the status-line identity empty.
+type MetaFunc func() Meta
+
 // App owns the Bubble Tea program and the bridge that carries loop events into
 // it. Build it with New, hand Observer to the loop engine, then call Run.
 type App struct {
-	meta     Meta
+	meta     MetaFunc
 	events   chan loop.UIEvent
 	commands *command.Registry
 	meter    MeterFunc
 }
 
-// New builds an App for the given session metadata and slash-command registry
-// (commands may be nil to run without slash commands; meter may be nil to hide
-// the context meter). The returned App's Observer is usable immediately (so it
-// can be wired into the engine before Run starts); events emitted before Run are
-// simply buffered.
-func New(meta Meta, commands *command.Registry, meter MeterFunc) *App {
+// New builds an App for the given session-identity source and slash-command
+// registry (commands may be nil to run without slash commands; meter may be nil
+// to hide the context meter; meta may be nil for an empty status-line identity).
+// The returned App's Observer is usable immediately (so it can be wired into the
+// engine before Run starts); events emitted before Run are simply buffered.
+func New(meta MetaFunc, commands *command.Registry, meter MeterFunc) *App {
 	return &App{
 		meta:     meta,
 		events:   make(chan loop.UIEvent, eventBuffer),

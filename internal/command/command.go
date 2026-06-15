@@ -35,6 +35,11 @@ const (
 // plain text for V1; richer payloads (tables, diffs) are additive later (D2).
 type Output struct {
 	Text string
+	// ResetView asks the face to clear its transcript/scrollback because the
+	// command started or restored a different session (e.g. /clear, /resume), so
+	// the view reflects the fresh context rather than the previous session's.
+	// It is advisory and additive (D2): a face with no transcript may ignore it.
+	ResetView bool
 }
 
 // Handler runs a command with its parsed arguments and returns what to render.

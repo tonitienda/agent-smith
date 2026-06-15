@@ -46,8 +46,12 @@ type turnDoneMsg struct {
 // transcript, the input/scrollback/spinner components, input history, and the
 // cancel func for the in-flight turn.
 type model struct {
-	runner   Runner
+	runner Runner
+	// meta is the cached status-line identity; metaFn re-reads it (provider,
+	// model, session) so a /model or /clear/-resume switch is reflected without
+	// the face owning that state. metaFn may be nil, leaving meta at its zero.
 	meta     Meta
+	metaFn   MetaFunc
 	events   <-chan loop.UIEvent
 	newRend  rendererFactory
 	renderer markdownRenderer
@@ -89,7 +93,7 @@ type model struct {
 // newModel builds the chat model. newRend may be nil to disable markdown
 // rendering (the transcript then shows raw text); commands may be nil to run
 // without any slash commands; meter may be nil to hide the context meter.
-func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc) model {
+func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
 	ta.Prompt = "┃ "
@@ -105,7 +109,7 @@ func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rend
 
 	m := model{
 		runner:       runner,
-		meta:         meta,
+		metaFn:       meta,
 		events:       events,
 		newRend:      newRend,
 		commands:     commands,
@@ -115,6 +119,9 @@ func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rend
 		curAssistant: -1,
 		curReasoning: -1,
 		histIdx:      0,
+	}
+	if meta != nil {
+		m.meta = meta()
 	}
 	m.refreshMeter()
 	return m
@@ -372,6 +379,9 @@ func (m *model) relayout() {
 // It runs once per event rather than per render, so the status line stays within
 // one event of any change (AS-025) without recomputing on every keystroke.
 func (m *model) refreshMeter() {
+	if m.metaFn != nil {
+		m.meta = m.metaFn()
+	}
 	if m.meter != nil {
 		m.meterState = m.meter(m.meta.Model)
 	}
