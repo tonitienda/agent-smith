@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -164,9 +165,14 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	}
 	eng, err := s.buildEngine(fresh, s.provName, s.model)
 	if err != nil {
+		_ = fresh.Log.Close() // built nothing; don't leak the fresh log's handle
 		return command.Output{}, err
 	}
+	prev := s.sess
 	s.sess, s.engine = fresh, eng
+	// Safe to close the previous log: the busy guard means no turn is writing it
+	// when a swap runs, so its file descriptor isn't leaked across /clear.
+	_ = prev.Log.Close()
 	return command.Output{Text: "Started a new session (" + shortID(fresh.ID) + "). The previous one is still in /resume.", ResetView: true}, nil
 }
 
@@ -181,6 +187,12 @@ func (s *chatSession) cmdModel(_ context.Context, args []string) (command.Output
 		return command.Output{Text: s.modelListing()}, nil
 	}
 	target := strings.TrimSpace(args[0])
+	// The pricing table holds wildcard family patterns (e.g. "gpt-4o*"); a bare
+	// pattern would Lookup as an exact match and become an invalid active model.
+	// Require a concrete id so the next turn issues a real model.
+	if strings.Contains(target, "*") {
+		return command.Output{}, fmt.Errorf("model %q is a family pattern; pass a concrete model id (e.g. gpt-4o)", target)
+	}
 	rate, ok := s.pricing.Lookup(target)
 	if !ok || rate.Vendor == "" {
 		return command.Output{}, fmt.Errorf("unknown model %q: not in the pricing table, so its provider can't be resolved", target)
@@ -269,9 +281,13 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 	}
 	eng, err := s.buildEngine(opened, provName, model)
 	if err != nil {
+		_ = opened.Log.Close() // won't switch to it; don't leak the opened log's handle
 		return command.Output{}, err
 	}
+	prev := s.sess
 	s.sess, s.provName, s.model, s.engine = opened, provName, model, eng
+	// Close the previously-active log; the busy guard means no turn is writing it.
+	_ = prev.Log.Close()
 	return command.Output{
 		Text:      "Resumed session " + shortID(opened.ID) + " on " + s.provName + " · " + s.model + ".",
 		ResetView: true,
@@ -279,7 +295,9 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 }
 
 // resumeListing renders the project's sessions newest-first with the full ID to
-// pass to /resume, plus age, size, cost-free shape, and the models used.
+// pass to /resume, plus title, age, cost, size, and the models used (the shape
+// the ticket specifies). Cost is derived from each session's log through the
+// same accounting source as /cost.
 func (s *chatSession) resumeListing() string {
 	summaries, err := s.store.List()
 	if err != nil {
@@ -310,10 +328,29 @@ func (s *chatSession) resumeListing() string {
 			title = "(untitled)"
 		}
 		fmt.Fprintf(&b, "%s%s\n", marker, sum.ID)
-		fmt.Fprintf(&b, "    %s · %d events · %s · %s · %s\n",
-			title, sum.EventCount, humanAge(now.Sub(sum.UpdatedAt)), humanBytes(sum.SizeBytes), models)
+		fmt.Fprintf(&b, "    %s · %d events · %s · %s · %s · %s\n",
+			title, sum.EventCount, humanAge(now.Sub(sum.UpdatedAt)), s.sessionCostLabel(sum.ID), humanBytes(sum.SizeBytes), models)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// sessionCostLabel computes a session's accrued cost for the /resume listing
+// using the same accounting source as /cost. It opens a throwaway read handle on
+// the session log and closes it, so the listing never leaks descriptors. An
+// unreadable session or an unpriced turn degrades to "<sym>?" rather than a
+// misleadingly exact figure.
+func (s *chatSession) sessionCostLabel(id string) string {
+	opened, err := s.store.Open(id)
+	if err != nil {
+		return "—"
+	}
+	summary := cost.Summarize(opened.Log.Events(), s.pricing)
+	_ = opened.Log.Close()
+	sym := cost.Symbol(summary.Currency)
+	if !summary.AllPriced {
+		return sym + "?"
+	}
+	return sym + strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64)
 }
 
 // lastModel returns the most recent model recorded on the log (by the latest

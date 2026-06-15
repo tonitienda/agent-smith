@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/tonitienda/agent-smith/internal/cost"
@@ -191,6 +192,31 @@ func TestResumeListingAndUnknownID(t *testing.T) {
 	}
 	if _, err := ctl.cmdResume(context.TODO(), []string{"sess_does_not_exist"}); err == nil {
 		t.Error("/resume accepted an unknown session id")
+	}
+}
+
+// TestModelRejectsWildcardPattern guards that a pricing-table family pattern
+// can't become the active model (it would fail on the next turn).
+func TestModelRejectsWildcardPattern(t *testing.T) {
+	ctl := newTestController(t)
+	if _, err := ctl.cmdModel(context.TODO(), []string{"gpt-4o*"}); err == nil {
+		t.Error("/model accepted a family pattern as a concrete model")
+	}
+	if ctl.model != "claude-opus-4-8" {
+		t.Errorf("model changed to %q after a rejected pattern", ctl.model)
+	}
+}
+
+// TestResumeListingShowsCost guards that the /resume listing carries a cost
+// signal (the ticket specifies title, age, cost, size).
+func TestResumeListingShowsCost(t *testing.T) {
+	ctl := newTestController(t)
+	out, err := ctl.cmdResume(context.TODO(), nil)
+	if err != nil {
+		t.Fatalf("/resume listing: %v", err)
+	}
+	if !strings.Contains(out.Text, "$") {
+		t.Errorf("/resume listing missing a cost signal:\n%s", out.Text)
 	}
 }
 
