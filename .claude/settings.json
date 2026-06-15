@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"Caveman full mode ACTIVE. Ponytail full mode ACTIVE. Apply both skills every response until explicitly disabled.\"}}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
