@@ -39,6 +39,8 @@ package tui
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -87,6 +89,12 @@ type App struct {
 	commands *command.Registry
 	meter    MeterFunc
 	splash   bool
+
+	// mu guards prog, which is set when Run starts the program. The permission
+	// Asker (Ask) runs on the turn goroutine and reads prog to deliver a prompt
+	// into the Update loop, so the two must synchronize.
+	mu   sync.Mutex
+	prog *tea.Program
 }
 
 // Option configures an App at construction. Options keep New's signature stable
@@ -135,6 +143,65 @@ func (a *App) Observer() loop.Observer {
 func (a *App) Run(runner Runner) error {
 	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	a.mu.Lock()
+	a.prog = p
+	a.mu.Unlock()
 	_, err := p.Run()
+	// Clear prog once the program has exited so a late Ask (during shutdown) fails
+	// fast with "not running" rather than sending to a dead program and blocking
+	// forever on its reply.
+	a.mu.Lock()
+	a.prog = nil
+	a.mu.Unlock()
 	return err
+}
+
+// PermissionPrompt is a face-agnostic approval request the TUI renders for the
+// permission model (AS-016/AS-024). Subject is the exact command or path being
+// approved, shown verbatim — never a paraphrase (UX.md §11). Detail is optional
+// extra verbatim context (a unified diff for an edit, AS-024 AC2). Destructive
+// selects the surface (D-TUI-8): a broad-scope action escalates to a focus-trapped
+// blocking modal, a normal one to an inline transcript card the user can scroll
+// context behind before deciding.
+type PermissionPrompt struct {
+	Tool        string
+	Subject     string
+	Detail      string
+	Destructive bool
+}
+
+// PermissionDecision is the user's answer to a PermissionPrompt. Allow gates this
+// one call; Remember asks the policy to persist an allow-rule ("always allow").
+type PermissionDecision struct {
+	Allow    bool
+	Remember bool
+}
+
+// Ask presents a permission prompt and blocks until the user decides or ctx is
+// cancelled. It is the seam the loop's permission Asker (wired in the command)
+// calls from the turn goroutine: it hands the prompt to the Update loop and waits
+// for the decision on a private channel. A cancelled turn returns ctx.Err(), which
+// the policy treats as a denial, so an aborted turn never hangs a tool call.
+func (a *App) Ask(ctx context.Context, p PermissionPrompt) (PermissionDecision, error) {
+	a.mu.Lock()
+	prog := a.prog
+	a.mu.Unlock()
+	if prog == nil {
+		return PermissionDecision{}, errors.New("tui: not running")
+	}
+	reply := make(chan PermissionDecision, 1)
+	// Deliver on a goroutine: Program.Send blocks until the program drains the
+	// message and, if the program is tearing down, may not deliver at all — so the
+	// caller must still be able to bail on ctx. The recover guards the unlikely
+	// panic of sending to an already-closed program during shutdown.
+	go func() {
+		defer func() { _ = recover() }()
+		prog.Send(permPromptMsg{prompt: p, reply: reply})
+	}()
+	select {
+	case d := <-reply:
+		return d, nil
+	case <-ctx.Done():
+		return PermissionDecision{}, ctx.Err()
+	}
 }

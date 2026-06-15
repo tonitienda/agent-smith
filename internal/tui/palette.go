@@ -256,6 +256,13 @@ func (m model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	}
+	// Ctrl+G then t toggles full tool output in the transcript (AS-024 AC1). It is
+	// a view toggle, not a panel, so it is handled before the panel-name lookup.
+	if msg.String() == "t" {
+		m.expandTools = !m.expandTools
+		m.refresh()
+		return m, nil
+	}
 	if name, ok := m.panelHotkeys[msg.String()]; ok {
 		return m.openPanelByName(name)
 	}

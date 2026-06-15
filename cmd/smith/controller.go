@@ -13,6 +13,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -40,6 +41,11 @@ type chatSession struct {
 	pricing   *cost.Table
 	providers map[string]provider.Provider // vendor -> provider
 	observer  loop.Observer
+	// policy is the permission gate every tool call passes through (AS-016/AS-024).
+	// It is built once and reused across engine rebuilds (/clear, /model, /resume)
+	// so a remembered "always allow" rule keeps applying for the rest of the
+	// session. It may be nil (tests), in which case no gate is wired.
+	policy *permission.Policy
 
 	// project labels the working context in the startup header (D-TUI-10); it is
 	// static for the session's lifetime, so it needs no lock.
@@ -76,6 +82,11 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 	}
 }
 
+// setPolicy installs the permission gate used by every engine this controller
+// builds. It must be called before start (and before any turn), so the first
+// engine already carries the gate.
+func (s *chatSession) setPolicy(p *permission.Policy) { s.policy = p }
+
 // start records the UIEvent observer and builds the initial engine. It must be
 // called once, after the TUI exists (so its observer is available) and before
 // the first turn.
@@ -99,7 +110,11 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 	if !ok {
 		return nil, fmt.Errorf("no provider configured for %q", provName)
 	}
-	rt := tool.NewRuntime(s.tools, sess.Log)
+	var rtOpts []tool.Option
+	if s.policy != nil {
+		rtOpts = append(rtOpts, tool.WithPermission(s.policy.Func()))
+	}
+	rt := tool.NewRuntime(s.tools, sess.Log, rtOpts...)
 	return loop.New(prov, sess.Log, rt, s.tools, model, loop.WithObserver(s.observer))
 }
 

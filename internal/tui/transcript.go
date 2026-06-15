@@ -1,14 +1,26 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/schema"
 )
+
+// toolPreviewLines is how many lines of a tool result the collapsed card shows;
+// the global expand toggle (Ctrl+G then t) reveals the rest (AS-024 AC1).
+const toolPreviewLines = 6
+
+// argValueByteCap bounds how many bytes of a single argument value the card
+// summary inspects, so a huge value can't make the (once-per-call) summary scan
+// the whole payload. It is comfortably larger than the final 72-rune cap.
+const argValueByteCap = 256
 
 // segKind is the role a transcript segment plays. Segments are appended as the
 // loop streams events and rendered into the scrollback viewport.
@@ -35,6 +47,11 @@ type segment struct {
 	toolID    string
 	toolError bool
 	toolDone  bool
+	// toolArgs is a one-line summary of the call's arguments, shown on the card
+	// while it runs; toolResult is the recorded result text, previewed when done
+	// and expandable in full (AS-024).
+	toolArgs   string
+	toolResult string
 	// toolSettled marks that the loop reported a definitive result for this call
 	// (a UIToolFinished). A tool finalized only because its turn was interrupted
 	// is done-but-not-settled, so a late authoritative result can still correct it.
@@ -70,7 +87,11 @@ func (m *model) apply(ev loop.UIEvent) {
 
 	case loop.UIToolStarted:
 		name, id := toolIdentity(ev)
-		m.segs = append(m.segs, segment{kind: segTool, toolName: name, toolID: id})
+		args := ""
+		if ev.Tool != nil {
+			args = summarizeToolArgs(ev.Tool.Arguments)
+		}
+		m.segs = append(m.segs, segment{kind: segTool, toolName: name, toolID: id, toolArgs: args})
 		// A tool call ends the current text run; later text starts a fresh bubble.
 		m.curAssistant, m.curReasoning = -1, -1
 
@@ -83,7 +104,10 @@ func (m *model) apply(ev loop.UIEvent) {
 			if s.kind == segTool && s.toolID == id && !s.toolSettled {
 				s.toolDone = true
 				s.toolSettled = true
-				s.toolError = ev.Tool != nil && ev.Tool.Result != nil && ev.Tool.Result.IsError
+				if ev.Tool != nil && ev.Tool.Result != nil {
+					s.toolError = ev.Tool.Result.IsError
+					s.toolResult = toolResultText(ev.Tool.Result)
+				}
 				break
 			}
 		}
@@ -193,7 +217,18 @@ func (m *model) renderSegment(s *segment) string {
 		if name == "" {
 			name = "tool"
 		}
-		return style.Render(fmt.Sprintf("%s %s", icon, name))
+		head := style.Render(fmt.Sprintf("%s %s", icon, name))
+		if s.toolArgs != "" {
+			head += "  " + dimStyle.Render(s.toolArgs)
+		}
+		body := s.toolResult
+		if body == "" {
+			return head
+		}
+		if !m.expandTools {
+			body = previewLines(body, toolPreviewLines)
+		}
+		return head + "\n" + indentBlock(body)
 
 	case segCommand:
 		body := strings.TrimRight(s.text, "\n")
@@ -210,6 +245,112 @@ func (m *model) renderSegment(s *segment) string {
 		return errorStyle.Render("! " + s.text)
 	}
 	return s.text
+}
+
+// summarizeToolArgs renders a call's JSON arguments as a compact one-line summary
+// for the running tool card (AS-024). String fields are shown "key: value" in key
+// order; the whole thing is truncated so the card stays one readable line. Args
+// that aren't a JSON object (or are empty) yield no summary.
+func summarizeToolArgs(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || len(obj) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		var v any
+		if err := json.Unmarshal(obj[k], &v); err != nil {
+			continue
+		}
+		// A string value is shown directly; any other JSON type (number, bool,
+		// array, object) is re-encoded so it appears in the summary rather than
+		// being silently dropped.
+		s, ok := v.(string)
+		if !ok {
+			b, _ := json.Marshal(v)
+			s = string(b)
+		}
+		// Cap each value before whitespace-collapsing so a huge argument (an edit's
+		// old_string/new_string can be large) doesn't get scanned in full just to
+		// produce a 72-rune summary.
+		if len(s) > argValueByteCap {
+			s = s[:argValueByteCap]
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", k, oneLine(s)))
+	}
+	return truncate(strings.Join(parts, ", "), 72)
+}
+
+// toolResultText extracts the human-readable text of a recorded tool result for
+// the card preview: the text parts joined, falling back to stdout/stderr (shell
+// results carry those) when there are none.
+func toolResultText(r *schema.ToolResultBody) string {
+	var b strings.Builder
+	for _, p := range r.Content {
+		if p.Type == "text" && p.Text != "" {
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(p.Text)
+		}
+	}
+	if b.Len() == 0 {
+		if r.Stdout != "" {
+			b.WriteString(r.Stdout)
+		}
+		if r.Stderr != "" {
+			if b.Len() > 0 {
+				b.WriteByte('\n')
+			}
+			b.WriteString(r.Stderr)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// previewLines keeps the first n lines of s, appending a dimmed marker naming how
+// many were hidden and how to reveal them (Ctrl+G then t), so a long result stays
+// scannable while remaining expandable (AS-024 AC1).
+func previewLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	hidden := len(lines) - n
+	kept := append([]string(nil), lines[:n]...)
+	kept = append(kept, dimStyle.Render(fmt.Sprintf("… +%d more line(s) — Ctrl+G t to expand", hidden)))
+	return strings.Join(kept, "\n")
+}
+
+// indentBlock prefixes every line with two spaces and dims it, so a tool result
+// reads as subordinate detail under its card header.
+func indentBlock(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		lines[i] = "  " + dimStyle.Render(ln)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// oneLine collapses whitespace runs (including newlines) to single spaces so a
+// multi-line argument value still fits on the one-line card summary.
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// truncate caps s to n runes, appending an ellipsis when it had to cut.
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 // Styles for transcript roles and the status bar. Colors are ANSI-256 so they
