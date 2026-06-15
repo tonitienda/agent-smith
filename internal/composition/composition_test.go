@@ -166,15 +166,21 @@ func TestExcludedBlocksCounted(t *testing.T) {
 	}
 	c := build(t, events, composition.SortSize)
 
-	if c.Excluded != 1 {
-		t.Errorf("Excluded = %d, want 1", c.Excluded)
+	if len(c.Excluded) != 1 {
+		t.Fatalf("Excluded = %d segments, want 1", len(c.Excluded))
+	}
+	if ex := c.Excluded[0]; ex.ID != "b" || ex.Live || ex.Reason == "" {
+		t.Errorf("excluded segment = %+v, want id b, Live=false, a non-empty Reason", ex)
 	}
 	for _, s := range c.Segments {
 		if s.ID == "b" {
 			t.Error("excluded block b must not appear as a live segment")
 		}
+		if !s.Live {
+			t.Errorf("live segment %q has Live=false", s.ID)
+		}
 	}
-	// Total reflects only the live block a.
+	// Total reflects only the live block a — excluded blocks are not in the window.
 	if want := cost.EstimateBlockTokens(events[0]); c.TotalTokens != want {
 		t.Errorf("TotalTokens = %d, want only live block a = %d", c.TotalTokens, want)
 	}
@@ -199,9 +205,9 @@ func TestSortModes(t *testing.T) {
 	}
 
 	byType := build(t, events, composition.SortType)
-	// Groups are alphabetized; "assistant" precedes "file read" precedes "user".
-	if byType.Segments[0].Group != "assistant" {
-		t.Errorf("SortType first group = %q, want assistant", byType.Segments[0].Group)
+	// Largest group first: file read (~1000 tok) leads assistant (~100) and user (~10).
+	if byType.Segments[0].Group != "file read" {
+		t.Errorf("SortType first group = %q, want file read (largest group)", byType.Segments[0].Group)
 	}
 }
 

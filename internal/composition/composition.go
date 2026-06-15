@@ -89,6 +89,8 @@ type Segment struct {
 	Age     time.Duration // now − append time
 	Seq     int           // append order (recency)
 	Path    string        // file path for a file read, else ""
+	Live    bool          // in the model-facing window; false for an excluded segment
+	Reason  string        // why a non-live segment was dropped (projection.Reason*)
 }
 
 // GroupTotal is the per-type rollup shown in the "by type" breakdown.
@@ -124,7 +126,7 @@ type Composition struct {
 	ByGroup      []GroupTotal // per-type rollup, largest group first
 	Duplicates   []Duplicate  // files read more than once, biggest combined first
 	Stale        []Segment    // large, old reclaim candidates, biggest first
-	Excluded     int          // blocks dropped from the window (not itemized here)
+	Excluded     []Segment    // blocks dropped from the window, biggest first (not in the total)
 	Sort         Sort
 }
 
@@ -149,30 +151,23 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 	var dupeOrder []string
 
 	for _, b := range proj.Blocks() {
-		if !b.Live {
-			c.Excluded++
-			continue
-		}
 		tokens := cost.EstimateBlockTokens(b.Block)
 		if tokens == 0 {
 			continue // control or empty block: no window share to attribute
 		}
-		usd := priceTokens(tokens, rate, priced)
-		seg := Segment{
-			ID:      b.ID,
-			Kind:    b.Kind,
-			Group:   groupFor(b.Block),
-			Origin:  originFor(b.Block),
-			Tokens:  tokens,
-			CostUSD: usd,
-			Priced:  priced,
-			Age:     now.Sub(b.TS),
-			Seq:     b.Seq,
-			Path:    filePath(b.Block),
+		seg := segmentOf(b, tokens, rate, priced, now)
+
+		// Excluded blocks are no longer in the window, so they are itemized in
+		// their own section (the live/excluded dimension, AS-026) but kept out of
+		// the window total and the consumer rankings — the total tracks the live
+		// window, the AC that segment tokens sum to it.
+		if !b.Live {
+			c.Excluded = append(c.Excluded, seg)
+			continue
 		}
 		c.Segments = append(c.Segments, seg)
 		c.TotalTokens += tokens
-		c.TotalCostUSD += usd
+		c.TotalCostUSD += seg.CostUSD
 
 		g, ok := groups[seg.Group]
 		if !ok {
@@ -181,7 +176,7 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 			groupOrder = append(groupOrder, seg.Group)
 		}
 		g.Tokens += tokens
-		g.CostUSD += usd
+		g.CostUSD += seg.CostUSD
 		g.Count++
 
 		if seg.Path != "" {
@@ -193,7 +188,7 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 			}
 			d.Count++
 			d.Tokens += tokens
-			d.CostUSD += usd
+			d.CostUSD += seg.CostUSD
 			d.SegmentIDs = append(d.SegmentIDs, seg.ID)
 		}
 	}
@@ -203,7 +198,28 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 	c.TopConsumers = topConsumers(c.Segments)
 	c.Stale = staleCandidates(c.Segments)
 	sortSegments(c.Segments, sortBy)
+	sort.SliceStable(c.Excluded, func(i, j int) bool { return c.Excluded[i].Tokens > c.Excluded[j].Tokens })
 	return c
+}
+
+// segmentOf reduces a projected block to a Segment: its display group and
+// origin, estimated token share priced at the input rate, recency, and its
+// live/excluded status (the dimension /clean, AS-028, also reads).
+func segmentOf(b projection.Block, tokens int, rate cost.Rate, priced bool, now time.Time) Segment {
+	return Segment{
+		ID:      b.ID,
+		Kind:    b.Kind,
+		Group:   groupFor(b.Block),
+		Origin:  originFor(b.Block),
+		Tokens:  tokens,
+		CostUSD: priceTokens(tokens, rate, priced),
+		Priced:  priced,
+		Age:     now.Sub(b.TS),
+		Seq:     b.Seq,
+		Path:    filePath(b.Block),
+		Live:    b.Live,
+		Reason:  b.Reason,
+	}
 }
 
 // priceTokens values tokens at a model's per-million input rate. Output/cache
@@ -325,7 +341,17 @@ func sortSegments(segs []Segment, by Sort) {
 	case SortAge:
 		sort.SliceStable(segs, func(i, j int) bool { return segs[i].Seq < segs[j].Seq })
 	case SortType:
+		// Largest group first (matching the ByGroup rollup and the docs), then
+		// largest segment within a group; the group name breaks an exact tie so the
+		// order is deterministic.
+		totals := map[string]int{}
+		for _, s := range segs {
+			totals[s.Group] += s.Tokens
+		}
 		sort.SliceStable(segs, func(i, j int) bool {
+			if gi, gj := totals[segs[i].Group], totals[segs[j].Group]; gi != gj {
+				return gi > gj
+			}
 			if segs[i].Group != segs[j].Group {
 				return segs[i].Group < segs[j].Group
 			}

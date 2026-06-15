@@ -15,23 +15,29 @@ import (
 // TUI panel (AS-026) and a headless face (AS-051) render the same view, with no
 // markup the viewport would have to strip.
 func Render(c Composition) string {
+	// Empty window: still surface excluded blocks (e.g. everything was /clean'd
+	// out) rather than claiming "empty" with no hint that blocks were dropped.
 	if len(c.Segments) == 0 {
-		return "Context is empty — no segments occupy the window yet."
+		if len(c.Excluded) == 0 {
+			return "Context is empty — no segments occupy the window yet."
+		}
+		var b strings.Builder
+		b.WriteString("Context window has no live segments.\n")
+		renderExcluded(&b, c)
+		return strings.TrimRight(b.String(), "\n")
 	}
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context composition — %s across %s\n",
 		tokensLabel(c.TotalTokens), countLabel(len(c.Segments), "segment"))
 	fmt.Fprintf(&b, "Window: %s · total %s\n", windowLabel(c.TotalTokens, c.Window), c.cost(c.TotalCostUSD, c.Priced))
-	if c.Excluded > 0 {
-		fmt.Fprintf(&b, "(%s excluded from the window, not shown)\n", countLabel(c.Excluded, "block"))
-	}
 
 	renderTopConsumers(&b, c)
 	renderByGroup(&b, c)
 	renderDuplicates(&b, c)
 	renderStale(&b, c)
 	renderAll(&b, c)
+	renderExcluded(&b, c)
 
 	if !c.Priced {
 		b.WriteString("\nNote: the active model has no pricing entry, so dollar figures are blank.\n")
@@ -84,6 +90,27 @@ func renderStale(b *strings.Builder, c Composition) {
 	tw, row := newTab(b)
 	for _, s := range c.Stale {
 		row("  %s\t%s\t%s ago\t\n", s.Origin, tokensLabel(s.Tokens), ageLabel(s.Age))
+	}
+	_ = tw.Flush()
+}
+
+// renderExcluded lists the blocks that have been dropped from the window (the
+// live/excluded dimension). They are not counted in the window total; the
+// section shows what was removed and why, the restore candidates a later /clean
+// undo (AS-028) acts on.
+func renderExcluded(b *strings.Builder, c Composition) {
+	if len(c.Excluded) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\nExcluded from the window (%s, not counted in the total)\n",
+		countLabel(len(c.Excluded), "segment"))
+	tw, row := newTab(b)
+	for _, s := range c.Excluded {
+		reason := s.Reason
+		if reason == "" {
+			reason = "excluded"
+		}
+		row("  %s\t%s\t%s\t%s\t\n", s.Group, s.Origin, tokensLabel(s.Tokens), reason)
 	}
 	_ = tw.Flush()
 }

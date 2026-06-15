@@ -7,6 +7,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -42,6 +43,29 @@ func TestRenderSections(t *testing.T) {
 	// Top consumers must appear before the full list, so the eye lands on them.
 	if strings.Index(out, "Top consumers") > strings.Index(out, "All segments") {
 		t.Error("Top consumers must render before the full segment list")
+	}
+}
+
+// TestRenderAllExcluded checks an empty live window still surfaces the excluded
+// blocks rather than claiming the context is simply "empty".
+func TestRenderAllExcluded(t *testing.T) {
+	events := []schema.Block{
+		textBlock("a", 80),
+		eventlog.NewExclusion("test", "a"),
+	}
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	c := composition.Build(proj, cost.Embedded(), model, base, composition.SortSize)
+	if len(c.Segments) != 0 {
+		t.Fatalf("want no live segments, got %d", len(c.Segments))
+	}
+	out := composition.Render(c)
+	if strings.Contains(out, "no segments occupy") {
+		t.Errorf("all-excluded render must not claim a bare empty window:\n%s", out)
+	}
+	for _, want := range []string{"no live segments", "Excluded from the window"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render missing %q:\n%s", want, out)
+		}
 	}
 }
 

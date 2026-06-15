@@ -40,6 +40,11 @@ The flagship differentiator (§7.11): a full-screen panel showing what is actual
 - Wired as the `/context [size|age|type]` full-screen command (`cmd/smith/controller.go`
   `cmdContext`, registered in `chat.go`). The pre-existing `Ctrl+G c` panel hotkey now
   resolves to it.
+- **Live vs excluded:** live blocks drive the window total and the consumer
+  rankings; blocks dropped from the window (`projection.Block.Live == false`) are
+  itemized read-only in a dedicated "Excluded from the window" section with their
+  reason, and kept out of the total — the restore candidates a later `/clean` undo
+  (AS-028) acts on.
 - **Token total is the per-block estimate sum** (`cost.EstimateContextTokens` over the live
   blocks, AS-063) — self-consistent by construction. This is the projection total; the
   always-visible meter (AS-025) uses provider-reported per-turn counts, which are a different
