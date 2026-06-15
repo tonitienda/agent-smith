@@ -75,23 +75,26 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 // the first turn.
 func (s *chatSession) start(observer loop.Observer) error {
 	s.observer = observer
-	return s.rebuildEngine()
-}
-
-// rebuildEngine constructs a fresh engine over the current session log, provider,
-// and model. Callers hold s.mu (except start, which runs before any concurrency).
-func (s *chatSession) rebuildEngine() error {
-	prov, ok := s.providers[s.provName]
-	if !ok {
-		return fmt.Errorf("no provider configured for %q", s.provName)
-	}
-	rt := tool.NewRuntime(s.tools, s.sess.Log)
-	eng, err := loop.New(prov, s.sess.Log, rt, s.tools, s.model, loop.WithObserver(s.observer))
+	eng, err := s.buildEngine(s.sess, s.provName, s.model)
 	if err != nil {
 		return err
 	}
 	s.engine = eng
 	return nil
+}
+
+// buildEngine constructs an engine over the given session log, provider, and
+// model without mutating any controller state. A switch builds the new engine
+// first and only commits the new session/provider/model fields once this
+// succeeds, so a build failure leaves the controller on its previous, consistent
+// state rather than half-switched.
+func (s *chatSession) buildEngine(sess *session.Session, provName, model string) (*loop.Engine, error) {
+	prov, ok := s.providers[provName]
+	if !ok {
+		return nil, fmt.Errorf("no provider configured for %q", provName)
+	}
+	rt := tool.NewRuntime(s.tools, sess.Log)
+	return loop.New(prov, sess.Log, rt, s.tools, model, loop.WithObserver(s.observer))
 }
 
 // Run drives one user turn against the current engine (tui.Runner). It reads the
@@ -159,10 +162,11 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	if err != nil {
 		return command.Output{}, fmt.Errorf("start new session: %w", err)
 	}
-	s.sess = fresh
-	if err := s.rebuildEngine(); err != nil {
+	eng, err := s.buildEngine(fresh, s.provName, s.model)
+	if err != nil {
 		return command.Output{}, err
 	}
+	s.sess, s.engine = fresh, eng
 	return command.Output{Text: "Started a new session (" + shortID(fresh.ID) + "). The previous one is still in /resume.", ResetView: true}, nil
 }
 
@@ -190,15 +194,17 @@ func (s *chatSession) cmdModel(_ context.Context, args []string) (command.Output
 	if target == s.model && rate.Vendor == s.provName {
 		return command.Output{Text: "Already on " + s.provName + " · " + s.model + "."}, nil
 	}
-	prev := s.provName + " · " + s.model
+	// Build the new engine before mutating any state or appending the switch
+	// event, so a build failure leaves the session on its current model.
+	eng, err := s.buildEngine(s.sess, rate.Vendor, target)
+	if err != nil {
+		return command.Output{}, err
+	}
 	if _, err := s.sess.Log.Append(eventlog.NewModelSwitch("/model", rate.Vendor, target)); err != nil {
 		return command.Output{}, fmt.Errorf("record model switch: %w", err)
 	}
-	s.provName = rate.Vendor
-	s.model = target
-	if err := s.rebuildEngine(); err != nil {
-		return command.Output{}, err
-	}
+	prev := s.provName + " · " + s.model
+	s.provName, s.model, s.engine = rate.Vendor, target, eng
 	return command.Output{Text: "Model switched: " + prev + " → " + s.provName + " · " + s.model + ". The next turn uses it."}, nil
 }
 
@@ -250,18 +256,22 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sess = opened
+	// Adopt the session's last-used model only when its provider is configured,
+	// so the model and provider never disagree (a model with no provider would
+	// fail at turn time). Otherwise keep the current provider/model.
+	provName, model := s.provName, s.model
 	if m := lastModel(opened.Log.Events()); m != "" {
-		s.model = m
 		if r, ok := s.pricing.Lookup(m); ok && r.Vendor != "" {
 			if _, ok := s.providers[r.Vendor]; ok {
-				s.provName = r.Vendor
+				provName, model = r.Vendor, m
 			}
 		}
 	}
-	if err := s.rebuildEngine(); err != nil {
+	eng, err := s.buildEngine(opened, provName, model)
+	if err != nil {
 		return command.Output{}, err
 	}
+	s.sess, s.provName, s.model, s.engine = opened, provName, model, eng
 	return command.Output{
 		Text:      "Resumed session " + shortID(opened.ID) + " on " + s.provName + " · " + s.model + ".",
 		ResetView: true,

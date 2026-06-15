@@ -146,6 +146,17 @@ type commandDoneMsg struct {
 // highlighted command is used; otherwise the typed name is looked up. An unknown
 // command yields an error line with a nearest-match suggestion.
 func (m model) dispatchCommand() (tea.Model, tea.Cmd) {
+	// A command must not run while a turn is in flight: /clear and /resume swap
+	// the session (and clear the transcript), which would corrupt the view with
+	// the still-streaming turn's events and race the engine swap. Mirror submit's
+	// busy guard and ask the user to finish or cancel the turn first.
+	if m.busy {
+		m.resetInput()
+		m.relayout()
+		m.appendSegment(segment{kind: segNotice, text: "finish or cancel the current turn (Esc) before running a command", done: true})
+		return m, nil
+	}
+
 	line := strings.TrimSpace(m.textarea.Value())
 
 	var (

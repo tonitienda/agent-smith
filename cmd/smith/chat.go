@@ -81,13 +81,14 @@ func startChat(resumeID string) error {
 		"openai":    openai.New(""),
 	}
 	// A resumed session keeps the model it last used so its window/cost meter
-	// matches; otherwise start on the configured default (Anthropic).
+	// matches; otherwise start on the configured default (Anthropic). The model is
+	// adopted only when its provider is configured, so the provider and model never
+	// disagree (a model with no provider would fail at turn time).
 	provName, model := "anthropic", chatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
-		model = m
 		if r, ok := pricing.Lookup(m); ok && r.Vendor != "" {
 			if _, ok := providers[r.Vendor]; ok {
-				provName = r.Vendor
+				provName, model = r.Vendor, m
 			}
 		}
 	}
