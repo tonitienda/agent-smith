@@ -2,7 +2,7 @@
 
 The full backlog derived from [PRD.md](../PRD.md), in two waves:
 
-- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, **AS-064**, a `/resume` UX follow-on spun out of AS-023, and **AS-065**, the CLI subcommand router/contract from the [CLI-UX.md](../CLI-UX.md) grilling.)
+- **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, **AS-064**, a `/resume` UX follow-on spun out of AS-023, **AS-065**, the CLI subcommand router/contract from the [CLI-UX.md](../CLI-UX.md) grilling, and **AS-067**, the TUI inspect-mode panel framework from the [TUI-UX.md](../TUI-UX.md) grilling.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes. (Plus **AS-066**, the shared slash↔subcommand command-registry follow-on from the [CLI-UX.md](../CLI-UX.md) grilling.)
 
 Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
@@ -44,7 +44,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-021](AS-021-tui-skeleton.md) | TUI skeleton (streaming chat) | tui | done | 018 |
 | [AS-022](AS-022-slash-command-framework.md) | Slash-command framework + palette | commands | done | 021 |
 | [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | done | 007, 008, 022 |
-| [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016 |
+| [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | ready | 021, 016, 067 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | done | 006, 020, 021 |
 | [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | ready | 006, 020, 022 |
 | [AS-027](AS-027-segment-topic-labeling.md) | Segment topic labeling engine | context-wedge | **needs clarification** | 006 |
@@ -57,6 +57,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-063](AS-063-per-block-token-estimates.md) | Per-block token estimates for window composition pricing | cost | ready | 020, 006 |
 | [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | ready | 023, 024 |
 | [AS-065](AS-065-cli-subcommand-router.md) | CLI subcommand router + arg/output/exit-code contract | faces | ready | 018, 022 |
+| [AS-067](AS-067-tui-panel-framework.md) | TUI inspect-mode panel framework + focus/hotkey routing | tui | ready | 021, 022 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 

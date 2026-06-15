@@ -1211,12 +1211,14 @@ These should remain explicit revisit items:
 These are intentionally small and should not block the first UX implementation.
 
 1. What exact package names should hold face-neutral view models?
-2. How much subagent activity should be visible by default before it becomes
-   noisy?
+2. ~~How much subagent activity should be visible by default before it becomes
+   noisy?~~ **Resolved** (TUI-UX.md D-TUI-9): collapsed one line per subagent,
+   expand on demand; orchestrator posts the inline summary.
 3. Should `/agents` ship before `/insights`, or only once orchestration becomes
    common?
 4. What is the minimum useful JSON schema for stream output?
 5. Should context cleanup preview be mandatory for all scopes or only risky
    scopes?
-6. Should the startup mascot/art be enabled by default or only on first run/theme
-   mode?
+6. ~~Should the startup mascot/art be enabled by default or only on first run/theme
+   mode?~~ **Resolved** (TUI-UX.md D-TUI-10): small ASCII header on by default in
+   the TUI (no model call, no delay); `--no-splash`/serious-mode hides it.
