@@ -1,7 +1,7 @@
 ---
 id: AS-063
 title: Per-block token estimates for window composition pricing
-status: ready-to-implement
+status: done
 github_issue: 94
 depends_on: [AS-020, AS-006]
 area: cost
@@ -11,7 +11,15 @@ source: PRD.md §7.10, AS-020 follow-on
 
 # AS-063 · Per-block token estimates
 
-**Status: ready to implement**
+**Status: done**
+
+Implemented in `internal/cost/estimate.go`: a stdlib-only chars-per-token
+heuristic (`EstimateTokens`), a per-block estimator (`EstimateBlockTokens`) that
+sums the model-facing payload of each body kind, and a window roll-up
+(`EstimateContextTokens`) the `/context` view (AS-026) and meter (AS-025) call on
+projection blocks. The method and its accuracy band are documented on the package
+note; a reconciliation test sanity-checks the per-block sum against
+provider-reported input usage.
 
 ## Description
 
