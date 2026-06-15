@@ -255,3 +255,67 @@ func TestDefaultNoOverride(t *testing.T) {
 		t.Error("embedded table should price opus")
 	}
 }
+
+// TestWindowLookup resolves the model context window the same way pricing does:
+// longest-prefix match, with an unknown model reported as not found so the meter
+// can fall back to a bare token count.
+func TestWindowLookup(t *testing.T) {
+	tbl := cost.Embedded()
+	if w, ok := tbl.Window("claude-opus-4-8"); !ok || w != 200000 {
+		t.Errorf("opus window = (%d, %v), want (200000, true)", w, ok)
+	}
+	if w, ok := tbl.Window("gpt-4.1-2025-04-14"); !ok || w != 1047576 {
+		t.Errorf("gpt-4.1 window = (%d, %v), want (1047576, true)", w, ok)
+	}
+	if w, ok := tbl.Window("mystery-model-9"); ok || w != 0 {
+		t.Errorf("unknown window = (%d, %v), want (0, false)", w, ok)
+	}
+	if w, ok := tbl.Window(""); ok || w != 0 {
+		t.Errorf("empty model window = (%d, %v), want (0, false)", w, ok)
+	}
+}
+
+// TestWindowUnsetIsUnknown confirms a priced model with no recorded window
+// reports the window as unknown rather than zero-as-a-real-size.
+func TestWindowUnsetIsUnknown(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "pricing.json")
+	doc := `{"version":1,"currency":"USD","models":[
+		{"model":"local-llm","input_per_mtok":0,"output_per_mtok":0}]}`
+	if err := os.WriteFile(path, []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tbl, err := cost.LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if _, ok := tbl.Lookup("local-llm"); !ok {
+		t.Fatal("local-llm should be priced")
+	}
+	if w, ok := tbl.Window("local-llm"); ok || w != 0 {
+		t.Errorf("window for entry with no context_window = (%d, %v), want (0, false)", w, ok)
+	}
+}
+
+// TestLatestAndContextTokens checks that the most recent turn drives the live
+// window occupancy: prompt (input + cache read + cache write) plus output.
+func TestLatestAndContextTokens(t *testing.T) {
+	if _, ok := cost.Summarize(nil, cost.Embedded()).Latest(); ok {
+		t.Error("Latest on an empty summary should report no turn")
+	}
+	s := cost.Summarize([]schema.Block{
+		usageBlock("claude-opus-4-8", &schema.Tokens{Input: ptr(100), Output: ptr(10)}),
+		usageBlock("claude-opus-4-8", &schema.Tokens{
+			Input: ptr(900), CacheRead: ptr(8000), CacheWrite: ptr(200), Output: ptr(150),
+		}),
+	}, cost.Embedded())
+	last, ok := s.Latest()
+	if !ok {
+		t.Fatal("Latest should report the most recent turn")
+	}
+	if last.Index != 2 {
+		t.Errorf("Latest index = %d, want 2 (the last turn)", last.Index)
+	}
+	if got := last.ContextTokens(); got != 9250 {
+		t.Errorf("ContextTokens = %d, want 9250 (900+8000+200+150)", got)
+	}
+}

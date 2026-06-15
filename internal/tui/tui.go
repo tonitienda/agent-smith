@@ -11,6 +11,11 @@
 // tool execution stay behind their interfaces (PRD §5, §9). A test
 // (no_business_imports_test.go) enforces that boundary.
 //
+// The status line carries an always-visible context meter (AS-025): how full the
+// current model's context window is and what the session has cost. It is fed by a
+// MeterFunc the command wires up, so the face renders the gauge without importing
+// the accounting engine — see meter.go.
+//
 // Slash commands (AS-022) plug in through internal/command: typing "/" opens a
 // filterable palette over the registry handed to New, and dispatched commands
 // render either inline (a transcript segment) or full-screen (a scrollable
@@ -61,17 +66,20 @@ type App struct {
 	meta     Meta
 	events   chan loop.UIEvent
 	commands *command.Registry
+	meter    MeterFunc
 }
 
 // New builds an App for the given session metadata and slash-command registry
-// (commands may be nil to run without slash commands). The returned App's
-// Observer is usable immediately (so it can be wired into the engine before Run
-// starts); events emitted before Run are simply buffered.
-func New(meta Meta, commands *command.Registry) *App {
+// (commands may be nil to run without slash commands; meter may be nil to hide
+// the context meter). The returned App's Observer is usable immediately (so it
+// can be wired into the engine before Run starts); events emitted before Run are
+// simply buffered.
+func New(meta Meta, commands *command.Registry, meter MeterFunc) *App {
 	return &App{
 		meta:     meta,
 		events:   make(chan loop.UIEvent, eventBuffer),
 		commands: commands,
+		meter:    meter,
 	}
 }
 
@@ -89,7 +97,7 @@ func (a *App) Observer() loop.Observer {
 // until the user quits. It uses the alternate screen and mouse support so
 // scrollback and resize behave like a full-screen app.
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err

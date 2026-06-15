@@ -53,6 +53,12 @@ type model struct {
 	renderer markdownRenderer
 	commands *command.Registry
 
+	// meter computes the context/cost snapshot for the status line; nil disables
+	// it. meterState caches the most recent snapshot so the status line renders
+	// without recomputing on every keystroke — it is refreshed once per event.
+	meter      MeterFunc
+	meterState Meter
+
 	textarea textarea.Model
 	viewport viewport.Model
 	spinner  spinner.Model
@@ -82,8 +88,8 @@ type model struct {
 
 // newModel builds the chat model. newRend may be nil to disable markdown
 // rendering (the transcript then shows raw text); commands may be nil to run
-// without any slash commands.
-func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry) model {
+// without any slash commands; meter may be nil to hide the context meter.
+func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
 	ta.Prompt = "┃ "
@@ -97,18 +103,21 @@ func newModel(runner Runner, meta Meta, events <-chan loop.UIEvent, newRend rend
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
-	return model{
+	m := model{
 		runner:       runner,
 		meta:         meta,
 		events:       events,
 		newRend:      newRend,
 		commands:     commands,
+		meter:        meter,
 		textarea:     ta,
 		spinner:      sp,
 		curAssistant: -1,
 		curReasoning: -1,
 		histIdx:      0,
 	}
+	m.refreshMeter()
+	return m
 }
 
 func (m model) Init() tea.Cmd {
@@ -359,9 +368,19 @@ func (m *model) relayout() {
 	m.panel.Height = panelHeight
 }
 
+// refreshMeter recomputes the cached context/cost snapshot from the live log.
+// It runs once per event rather than per render, so the status line stays within
+// one event of any change (AS-025) without recomputing on every keystroke.
+func (m *model) refreshMeter() {
+	if m.meter != nil {
+		m.meterState = m.meter(m.meta.Model)
+	}
+}
+
 // refresh re-renders the transcript into the viewport, keeping the view pinned
 // to the bottom when it was already there (chat-style auto-scroll).
 func (m *model) refresh() {
+	m.refreshMeter()
 	atBottom := m.viewport.AtBottom()
 	m.viewport.SetContent(m.renderTranscript())
 	if atBottom {
@@ -392,18 +411,23 @@ func (m model) View() string {
 	return strings.Join(sections, "\n")
 }
 
-// statusLine renders provider · model · session and the working/ready state.
+// statusLine renders provider · model · session on the left and, on the right,
+// the always-visible context meter followed by the working/ready state.
 func (m model) statusLine() string {
 	left := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model, m.meta.Session), " · ")
 	state := "ready"
 	if m.busy {
 		state = m.spinner.View() + "working… (Esc to cancel)"
 	}
-	gap := m.width - lipglossWidth(left) - lipglossWidth(state)
+	right := state
+	if gauge := m.meterState.render(); gauge != "" {
+		right = gauge + "  " + state
+	}
+	gap := m.width - lipglossWidth(left) - lipglossWidth(right)
 	if gap < 1 {
 		gap = 1
 	}
-	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + state)
+	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + right)
 }
 
 // nonEmpty returns the non-empty values among its arguments, preserving order.
