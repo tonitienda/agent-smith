@@ -57,7 +57,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-063](AS-063-per-block-token-estimates.md) | Per-block token estimates for window composition pricing | cost | done | 020, 006 |
 | [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | ready | 023, 024 |
 | [AS-065](AS-065-cli-subcommand-router.md) | CLI subcommand router + arg/output/exit-code contract | faces | ready | 018, 021, 022 |
-| [AS-067](AS-067-tui-panel-framework.md) | TUI inspect-mode panel framework + focus/hotkey routing | tui | ready | 021, 022 |
+| [AS-067](AS-067-tui-panel-framework.md) | TUI inspect-mode panel framework + focus/hotkey routing | tui | done | 021, 022 |
 
 ## Index — Fast-follow & P2 (AS-031 … AS-059)
 

@@ -22,6 +22,14 @@
 // panel). The command framework is itself face-agnostic, so this face only
 // renders the palette and routes keys — see palette.go.
 //
+// Inspect-mode panel host (AS-067): a full-screen command panel swaps over the
+// transcript with the status line pinned (D-TUI-3); the leader chord Ctrl+G then
+// a key opens common panels by name (D-TUI-4) without stealing bare-letter input
+// (D-TUI-7). A reusable blocking modal overlay (modal.go) backs AS-024's
+// destructive-permission prompts (D-TUI-8). A startup header (D-TUI-10) shows on
+// launch unless WithoutSplash is set, and the status line degrades away first on
+// a too-small terminal (D-TUI-11).
+//
 // Event flow: the loop calls its Observer inline on the goroutine driving a
 // turn. App.Observer returns a loop.Observer that forwards each event onto a
 // buffered channel; a long-lived tea.Cmd drains that channel into the Update
@@ -52,12 +60,16 @@ type Runner interface {
 	Run(ctx context.Context, userText string) (loop.Result, error)
 }
 
-// Meta is the session identity shown in the status line. The Matrix personality
-// layer (AS-053) will dress this up; here it is plain text (D6).
+// Meta is the session identity shown in the status line and startup header. The
+// Matrix personality layer (AS-053) will dress this up; here it is plain text
+// (D6).
 type Meta struct {
 	Provider string
 	Model    string
 	Session  string
+	// Project labels the working context in the startup header (D-TUI-10); empty
+	// is fine and is simply omitted.
+	Project string
 }
 
 // MetaFunc yields the current session identity for the status line. It is
@@ -74,20 +86,37 @@ type App struct {
 	events   chan loop.UIEvent
 	commands *command.Registry
 	meter    MeterFunc
+	splash   bool
+}
+
+// Option configures an App at construction. Options keep New's signature stable
+// as toggles accrue (D2: additive).
+type Option func(*App)
+
+// WithoutSplash hides the startup header (D-TUI-10) — used by --no-splash and,
+// once it lands, serious mode (AS-053).
+func WithoutSplash() Option {
+	return func(a *App) { a.splash = false }
 }
 
 // New builds an App for the given session-identity source and slash-command
 // registry (commands may be nil to run without slash commands; meter may be nil
 // to hide the context meter; meta may be nil for an empty status-line identity).
-// The returned App's Observer is usable immediately (so it can be wired into the
+// The startup header shows by default; pass WithoutSplash to hide it. The
+// returned App's Observer is usable immediately (so it can be wired into the
 // engine before Run starts); events emitted before Run are simply buffered.
-func New(meta MetaFunc, commands *command.Registry, meter MeterFunc) *App {
-	return &App{
+func New(meta MetaFunc, commands *command.Registry, meter MeterFunc, opts ...Option) *App {
+	a := &App{
 		meta:     meta,
 		events:   make(chan loop.UIEvent, eventBuffer),
 		commands: commands,
 		meter:    meter,
+		splash:   true,
 	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 // Observer returns the loop.Observer that forwards UIEvents into the running UI.
@@ -104,7 +133,7 @@ func (a *App) Observer() loop.Observer {
 // until the user quits. It uses the alternate screen and mouse support so
 // scrollback and resize behave like a full-screen app.
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	_, err := p.Run()
 	return err

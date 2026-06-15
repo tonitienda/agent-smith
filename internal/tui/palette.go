@@ -240,6 +240,43 @@ func (m *model) appendSegment(s segment) {
 	m.refresh()
 }
 
+// handleLeaderKey resolves the key pressed after the panel leader (ctrl+g): a
+// bound key opens its panel, anything else cancels the chord without typing the
+// key (the leader captured it, so bare-letter input stays unaffected, D-TUI-7).
+func (m model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.leader = false
+	if msg.String() == "ctrl+c" {
+		if m.cancel != nil {
+			m.cancel()
+		}
+		return m, tea.Quit
+	}
+	if name, ok := m.panelHotkeys[msg.String()]; ok {
+		return m.openPanelByName(name)
+	}
+	return m, nil
+}
+
+// openPanelByName dispatches the named full-screen command — the hotkey path
+// into the same panel host the palette uses. A missing or non-full-screen
+// command is a no-op (a binding for a panel that doesn't exist yet), and a turn
+// in flight is declined like a palette dispatch so the view can't be swapped
+// from under a streaming turn.
+func (m model) openPanelByName(name string) (tea.Model, tea.Cmd) {
+	if m.commands == nil {
+		return m, nil
+	}
+	cmd, ok := m.commands.Lookup(name)
+	if !ok || cmd.Mode != command.FullScreen {
+		return m, nil
+	}
+	if m.busy {
+		m.appendSegment(segment{kind: segNotice, text: "finish or cancel the current turn (Esc) before opening a panel", done: true})
+		return m, nil
+	}
+	return m, runCommand(cmd, nil)
+}
+
 // panelOpen reports whether a full-screen command panel is showing.
 func (m model) panelOpen() bool { return m.panelTitle != "" }
 

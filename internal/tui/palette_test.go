@@ -30,7 +30,7 @@ func (r *recorder) handler(out command.Output) command.Handler {
 func newCommandModel(t *testing.T, reg *command.Registry) model {
 	t.Helper()
 	m := newModel(&fakeRunner{}, staticMeta(Meta{Provider: "anthropic", Model: "m", Session: "s"}),
-		make(chan loop.UIEvent), nil, reg, nil)
+		make(chan loop.UIEvent), nil, reg, nil, false)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
 
@@ -306,7 +306,7 @@ func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
 			t.Fatalf("register %q: %v", n, err)
 		}
 	}
-	m := newModel(&fakeRunner{}, staticMeta(Meta{}), make(chan loop.UIEvent), nil, reg, nil)
+	m := newModel(&fakeRunner{}, staticMeta(Meta{}), make(chan loop.UIEvent), nil, reg, nil, false)
 	// A short window: only a couple of rows beyond the input + status chrome.
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 8})
 	m = typeString(t, m, "/cmd") // matches all six

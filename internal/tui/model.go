@@ -81,6 +81,18 @@ type model struct {
 	panel viewport.Model
 	// panelTitle labels the open full-screen panel; empty means no panel.
 	panelTitle string
+	// leader is true after the panel leader key (ctrl+g) until the next key
+	// selects a panel or cancels the chord (D-TUI-4 modifier hotkeys).
+	leader bool
+	// panelHotkeys maps a leader-chord key to the command name it opens, so common
+	// inspect panels have a fast path that never steals bare-letter input (D-TUI-7).
+	panelHotkeys map[string]string
+	// modal, when non-nil, is the blocking permission overlay (D-TUI-8); it traps
+	// focus and is rendered instead of the transcript until dismissed.
+	modal *modal
+	// splash controls whether the startup header renders atop the transcript;
+	// --no-splash and serious mode clear it (D-TUI-10).
+	splash bool
 
 	busy   bool
 	cancel context.CancelFunc
@@ -90,10 +102,24 @@ type model struct {
 	ready  bool
 }
 
+// defaultPanelHotkeys binds the leader chord (ctrl+g, then this key) to the
+// inspect panels worth a daily-speed shortcut. Bindings for panels that aren't
+// registered yet (/context, /diff land in AS-026/AS-024) are harmless no-ops
+// until their command exists, so the chord is stable as panels arrive.
+func defaultPanelHotkeys() map[string]string {
+	return map[string]string{
+		"c": "context",
+		"d": "diff",
+		"h": "help",
+		"$": "cost",
+	}
+}
+
 // newModel builds the chat model. newRend may be nil to disable markdown
 // rendering (the transcript then shows raw text); commands may be nil to run
-// without any slash commands; meter may be nil to hide the context meter.
-func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc) model {
+// without any slash commands; meter may be nil to hide the context meter; splash
+// shows the startup header.
+func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
 	ta.Prompt = "┃ "
@@ -114,6 +140,8 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 		newRend:      newRend,
 		commands:     commands,
 		meter:        meter,
+		panelHotkeys: defaultPanelHotkeys(),
+		splash:       splash,
 		textarea:     ta,
 		spinner:      sp,
 		curAssistant: -1,
@@ -187,12 +215,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// handleKey routes key presses: control keys first, then the full-screen panel,
-// command palette, and finally input vs. scrollback.
+// handleKey routes key presses: the blocking modal first (focus trapped), then
+// the full-screen panel, the panel leader chord, control keys, the command
+// palette, and finally input vs. scrollback.
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// A blocking modal traps focus until it is decided (D-TUI-8).
+	if m.modalOpen() {
+		return m.handleModalKey(msg)
+	}
 	// A full-screen command panel captures navigation until dismissed.
 	if m.panelOpen() {
 		return m.handlePanelKey(msg)
+	}
+	// The leader chord (ctrl+g, then a key) opens a panel; the next key is the
+	// panel selector, never bare input.
+	if m.leader {
+		return m.handleLeaderKey(msg)
 	}
 
 	switch msg.String() {
@@ -201,6 +239,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cancel()
 		}
 		return m, tea.Quit
+
+	case "ctrl+g":
+		// Begin a panel leader chord; the next key picks a panel (D-TUI-4).
+		m.leader = true
+		return m, nil
 
 	case "esc":
 		// Abort an open palette first, then cancel an in-flight turn; either way
@@ -362,17 +405,30 @@ func (m *model) relayout() {
 	if !m.ready {
 		return
 	}
-	vpHeight := m.height - inputHeight - statusHeight - m.paletteHeight()
+	vpHeight := m.height - inputHeight - m.statusRows() - m.paletteHeight()
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
 	m.viewport.Height = vpHeight
 
-	panelHeight := m.height - statusHeight
+	// The inspect panel keeps the pinned status line (when there's room) and a
+	// one-row footer keybar; the rest is the panel body.
+	panelHeight := m.height - m.statusRows() - 1
 	if panelHeight < 1 {
 		panelHeight = 1
 	}
 	m.panel.Height = panelHeight
+}
+
+// statusRows is the height the status line occupies: one row normally, zero when
+// the terminal is too short to also fit the input and at least one body row. The
+// status line is the first chrome to drop so a tiny window degrades to a usable
+// prompt instead of a glitch (D-TUI-11).
+func (m model) statusRows() int {
+	if m.height < inputHeight+statusHeight+1 {
+		return 0
+	}
+	return statusHeight
 }
 
 // refreshMeter recomputes the cached context/cost snapshot from the live log.
@@ -410,14 +466,28 @@ func (m model) View() string {
 	if !m.ready {
 		return "starting…"
 	}
+	if m.modalOpen() {
+		return m.modalView()
+	}
 	if m.panelOpen() {
-		return m.panel.View() + "\n" + m.panelFooter()
+		// Inspect mode: the status line is pinned above the panel body (D-TUI-3),
+		// then a footer keybar. The status line drops first when the terminal is too
+		// short to fit everything (D-TUI-11).
+		sections := make([]string, 0, 3)
+		if m.statusRows() > 0 {
+			sections = append(sections, m.statusLine())
+		}
+		sections = append(sections, m.panel.View(), m.panelFooter())
+		return strings.Join(sections, "\n")
 	}
 	sections := []string{m.viewport.View()}
 	if m.palette.open {
 		sections = append(sections, m.paletteView())
 	}
-	sections = append(sections, m.statusLine(), m.textarea.View())
+	if m.statusRows() > 0 {
+		sections = append(sections, m.statusLine())
+	}
+	sections = append(sections, m.textarea.View())
 	return strings.Join(sections, "\n")
 }
 

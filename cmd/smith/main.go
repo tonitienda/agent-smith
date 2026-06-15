@@ -26,6 +26,7 @@ func run(args []string, out io.Writer) error {
 	showHelp := flags.Bool("help", false, "print help and exit")
 	flags.BoolVar(showHelp, "h", false, "print help and exit")
 	resumeID := flags.String("resume", "", "resume a previous session by ID")
+	noSplash := flags.Bool("no-splash", false, "hide the startup header")
 
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -51,7 +52,7 @@ func run(args []string, out io.Writer) error {
 	if !interactiveTerminal() {
 		return printUsage(out)
 	}
-	return startChat(*resumeID)
+	return startChat(*resumeID, *noSplash)
 }
 
 func printUsage(out io.Writer) error {
@@ -61,6 +62,7 @@ func printUsage(out io.Writer) error {
 		"Usage:",
 		"  smith                start an interactive chat session (requires a terminal)",
 		"  smith --resume <id>  resume a previous session by ID",
+		"  smith --no-splash    start without the startup header",
 		"  smith --version      print version and exit",
 		"  smith --help         print this help and exit",
 		"",

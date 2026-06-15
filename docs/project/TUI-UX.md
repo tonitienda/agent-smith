@@ -153,9 +153,10 @@ and view models; the same registry/events feed the headless CLI (CLI-UX.md §4).
   (inline card, modal only for destructive).
 - **AS-026 (ready)** — `/context` is the first inspect panel; renders inside the
   AS-067 panel host.
-- **AS-067 (new)** — the generic inspect-mode panel framework: full-screen panel
-  host, pinned status, Esc-to-return, modifier-hotkey routing, modal-overlay
-  infra, startup header. D-TUI-3, -4, -7, -10, -12.
+- **AS-067 (done)** — the generic inspect-mode panel framework: full-screen panel
+  host with pinned status + Esc-to-return, `Ctrl+G` leader-hotkey routing,
+  reusable modal-overlay infra, startup header (`--no-splash`), and status-line
+  graceful degrade. D-TUI-3, -4, -7, -8 (modal), -10, -11.
 - **AS-053** — Matrix layer / `/serious`; this doc only fixes the *default*
   (header on in TUI).
 
