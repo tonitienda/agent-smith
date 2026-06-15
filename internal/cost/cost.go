@@ -114,8 +114,9 @@ type Summary struct {
 	Currency  string
 }
 
-// Latest returns the most recent priced turn (the last usage event in log
-// order) and whether one exists. The context meter (AS-025) uses it to size the
+// Latest returns the most recent turn (the last usage event in log order) and
+// whether one exists — priced or not, since its token counts are exact even when
+// the model has no pricing entry. The context meter (AS-025) uses it to size the
 // live window from the prompt the provider last counted, with no extra model
 // call.
 func (s Summary) Latest() (TurnCost, bool) {

@@ -25,6 +25,10 @@ type Meter struct {
 	// CostKnown is false when an unpriced turn makes CostUSD a lower bound; the
 	// meter then shows the cost as unknown rather than a misleadingly exact figure.
 	CostKnown bool
+	// Currency is the money prefix for CostUSD (e.g. "$" or "EUR "), supplied by
+	// the accounting engine so the meter agrees with /cost under a non-USD pricing
+	// override. Empty defaults to "$".
+	Currency string
 }
 
 // MeterFunc yields the current Meter for the active model. The model passes the
@@ -63,9 +67,13 @@ func (mt Meter) render() string {
 		gauge = fmt.Sprintf("%s tok", humanTokens(mt.Tokens))
 	}
 
-	cost := "$?"
+	prefix := mt.Currency
+	if prefix == "" {
+		prefix = "$"
+	}
+	cost := prefix + "?"
 	if mt.CostKnown {
-		cost = "$" + strconv.FormatFloat(mt.CostUSD, 'f', 4, 64)
+		cost = prefix + strconv.FormatFloat(mt.CostUSD, 'f', 4, 64)
 	}
 	return gauge + " · " + cost
 }

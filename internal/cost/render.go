@@ -67,6 +67,11 @@ func modelLabel(m string) string {
 	return m
 }
 
+// Symbol returns the money prefix for a currency, exported so other faces — the
+// always-visible context meter (AS-025) — format amounts consistently with the
+// /cost report instead of hard-coding "$".
+func Symbol(currency string) string { return symbol(currency) }
+
 // symbol returns the money prefix for a currency: "$" for USD (and the empty
 // default), otherwise the ISO code plus a space (e.g. "EUR 1.2345"), so the
 // rendered amounts stay consistent with the currency named in the header.

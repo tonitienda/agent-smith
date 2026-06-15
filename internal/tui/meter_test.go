@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tonitienda/agent-smith/internal/loop"
 )
@@ -42,13 +43,30 @@ func TestMeterEmptyRendersNothing(t *testing.T) {
 }
 
 func TestMeterColorThresholds(t *testing.T) {
-	// The colored span carries an ANSI SGR escape; different thresholds must pick
-	// different colors so nearing the window limit is visible.
-	green := Meter{Tokens: 10, Window: 100, CostKnown: true}.render()  // 10%
-	yellow := Meter{Tokens: 70, Window: 100, CostKnown: true}.render() // 70%
-	red := Meter{Tokens: 95, Window: 100, CostKnown: true}.render()    // 95%
-	if green == yellow || yellow == red || green == red {
-		t.Errorf("thresholds did not produce distinct styling:\n green=%q\n yellow=%q\n red=%q", green, yellow, red)
+	// Assert the gauge color directly (not the rendered string, which also differs
+	// by bar fill and percentage text) so the test actually pins the thresholds:
+	// green < 60%, yellow < 85%, red beyond — including the exact boundaries.
+	cases := []struct {
+		pct  float64
+		want lipgloss.Color
+	}{
+		{0, "10"}, {59, "10"}, {60, "11"}, {84, "11"}, {85, "9"}, {130, "9"},
+	}
+	for _, c := range cases {
+		if got := meterStyle(c.pct).GetForeground(); got != c.want {
+			t.Errorf("meterStyle(%.0f) color = %v, want %v", c.pct, got, c.want)
+		}
+	}
+}
+
+func TestMeterCurrencyPrefix(t *testing.T) {
+	got := Meter{Tokens: 10, Window: 100, CostUSD: 1.5, CostKnown: true, Currency: "EUR "}.render()
+	if !strings.Contains(got, "EUR 1.5000") {
+		t.Errorf("meter %q should format cost with the currency prefix", got)
+	}
+	unknown := Meter{Tokens: 10, Window: 100, Currency: "EUR "}.render()
+	if !strings.Contains(unknown, "EUR ?") {
+		t.Errorf("meter %q should mark unknown cost with the currency prefix", unknown)
 	}
 }
 

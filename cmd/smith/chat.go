@@ -145,7 +145,8 @@ func chatMeter(log *eventlog.Log, pricing *cost.Table) tui.MeterFunc {
 		if n := log.Len(); n == lastLen && model == lastModel {
 			return cached
 		}
-		summary := cost.Summarize(log.Events(), pricing)
+		events := log.Events()
+		summary := cost.Summarize(events, pricing)
 		used := 0
 		if last, ok := summary.Latest(); ok {
 			used = last.ContextTokens()
@@ -156,8 +157,12 @@ func chatMeter(log *eventlog.Log, pricing *cost.Table) tui.MeterFunc {
 			Window:    window,
 			CostUSD:   summary.TotalUSD,
 			CostKnown: summary.AllPriced,
+			Currency:  cost.Symbol(summary.Currency),
 		}
-		lastLen, lastModel = log.Len(), model
+		// Key on the snapshot length, not a second log.Len(), so the cache key
+		// always matches the data `cached` was computed from even if an append
+		// races in after the guard above.
+		lastLen, lastModel = len(events), model
 		return cached
 	}
 }
