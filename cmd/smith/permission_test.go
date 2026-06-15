@@ -32,6 +32,17 @@ func TestEditDiffRendersReplacement(t *testing.T) {
 	}
 }
 
+func TestEditDiffTrimsTrailingNewline(t *testing.T) {
+	args, _ := json.Marshal(map[string]string{
+		"old_string": "a\n",
+		"new_string": "b\n",
+	})
+	got := editDiff(permission.Request{Tool: "edit", Arguments: args})
+	if want := "- a\n+ b"; got != want {
+		t.Fatalf("editDiff = %q, want %q (no spurious empty diff line)", got, want)
+	}
+}
+
 func TestEditDiffOnlyForEdits(t *testing.T) {
 	args, _ := json.Marshal(map[string]string{"command": "ls"})
 	if got := editDiff(permission.Request{Tool: "shell", Arguments: args}); got != "" {

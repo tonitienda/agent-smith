@@ -147,6 +147,12 @@ func (a *App) Run(runner Runner) error {
 	a.prog = p
 	a.mu.Unlock()
 	_, err := p.Run()
+	// Clear prog once the program has exited so a late Ask (during shutdown) fails
+	// fast with "not running" rather than sending to a dead program and blocking
+	// forever on its reply.
+	a.mu.Lock()
+	a.prog = nil
+	a.mu.Unlock()
 	return err
 }
 

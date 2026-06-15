@@ -261,10 +261,19 @@ func summarizeToolArgs(raw json.RawMessage) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		var s string
-		if err := json.Unmarshal(obj[k], &s); err == nil {
-			parts = append(parts, fmt.Sprintf("%s: %s", k, oneLine(s)))
+		var v any
+		if err := json.Unmarshal(obj[k], &v); err != nil {
+			continue
 		}
+		// A string value is shown directly; any other JSON type (number, bool,
+		// array, object) is re-encoded so it appears in the summary rather than
+		// being silently dropped.
+		s, ok := v.(string)
+		if !ok {
+			b, _ := json.Marshal(v)
+			s = string(b)
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", k, oneLine(s)))
 	}
 	return truncate(strings.Join(parts, ", "), 72)
 }

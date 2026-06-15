@@ -163,6 +163,17 @@ func TestFinishTurnClearsPendingPrompts(t *testing.T) {
 	}
 }
 
+// TestSummarizeToolArgsKeepsNonStrings guards the transparency requirement: a
+// non-string argument (number, bool) is shown, not silently dropped.
+func TestSummarizeToolArgsKeepsNonStrings(t *testing.T) {
+	got := summarizeToolArgs([]byte(`{"path":"f.go","limit":40,"replace_all":true}`))
+	for _, want := range []string{"path: f.go", "limit: 40", "replace_all: true"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("summary %q missing %q", got, want)
+		}
+	}
+}
+
 // TestToolCardShowsArgsAndExpandablePreview covers AC1: a tool call is visible
 // with summarized args and a previewed result, expandable in full by the leader
 // toggle.

@@ -72,11 +72,17 @@ func editDiff(req permission.Request) string {
 		return ""
 	}
 	var b strings.Builder
-	for _, ln := range strings.Split(args.OldString, "\n") {
-		b.WriteString("- " + ln + "\n")
+	if args.OldString != "" {
+		// Trim a single trailing newline (standard for POSIX file content) before
+		// splitting, so the diff doesn't end in a spurious empty "- "/"+ " line.
+		for _, ln := range strings.Split(strings.TrimSuffix(args.OldString, "\n"), "\n") {
+			b.WriteString("- " + ln + "\n")
+		}
 	}
-	for _, ln := range strings.Split(args.NewString, "\n") {
-		b.WriteString("+ " + ln + "\n")
+	if args.NewString != "" {
+		for _, ln := range strings.Split(strings.TrimSuffix(args.NewString, "\n"), "\n") {
+			b.WriteString("+ " + ln + "\n")
+		}
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
