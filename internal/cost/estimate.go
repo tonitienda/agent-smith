@@ -1,7 +1,6 @@
 package cost
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/tonitienda/agent-smith/schema"
@@ -45,9 +44,16 @@ func EstimateTokens(s string) int {
 // by summing the model-facing textual payload it carries and applying the
 // chars-per-token heuristic. Control events (usage, exclusion, model-switch)
 // carry no such payload and so estimate to zero, which is what lets
-// EstimateContextTokens sum a raw log slice without filtering them out.
+// EstimateContextTokens sum a raw log slice without filtering them out. It counts
+// runes per field directly rather than concatenating them, so estimating a large
+// file-read or tool-result block allocates nothing.
 func EstimateBlockTokens(b schema.Block) int {
-	return EstimateTokens(blockText(b))
+	n := blockRuneCount(b)
+	if n == 0 {
+		return 0
+	}
+	// Round up so any non-empty content counts as at least one token.
+	return (n + charsPerToken - 1) / charsPerToken
 }
 
 // EstimateContextTokens sums the per-block estimates over events — the
@@ -62,44 +68,47 @@ func EstimateContextTokens(events []schema.Block) int {
 	return total
 }
 
-// blockText collects the textual payload a block presents to the model, across
-// whichever body matches its Kind. It is intentionally inclusive — tool-call
-// arguments and tool-result stdout/stderr are part of the window the model pays
-// for, so they count toward the block's size.
-func blockText(b schema.Block) string {
-	var sb strings.Builder
+// blockRuneCount counts the runes of the textual payload a block presents to the
+// model, across whichever body matches its Kind, without allocating an
+// intermediate string. It is intentionally inclusive — tool-call arguments and
+// tool-result stdout/stderr are part of the window the model pays for, so they
+// count toward the block's size.
+func blockRuneCount(b schema.Block) int {
+	var count int
 	switch {
 	case b.Text != nil:
-		sb.WriteString(b.Text.Text)
-		writeParts(&sb, b.Text.Parts)
+		count += utf8.RuneCountInString(b.Text.Text)
+		count += partsRuneCount(b.Text.Parts)
 	case b.ToolCall != nil:
-		sb.WriteString(b.ToolCall.Name)
+		count += utf8.RuneCountInString(b.ToolCall.Name)
 		if len(b.ToolCall.Arguments) > 0 {
-			sb.Write(b.ToolCall.Arguments)
+			count += utf8.RuneCount(b.ToolCall.Arguments)
 		} else {
-			sb.WriteString(b.ToolCall.ArgumentsRaw)
+			count += utf8.RuneCountInString(b.ToolCall.ArgumentsRaw)
 		}
 	case b.ToolResult != nil:
-		sb.WriteString(b.ToolResult.Stdout)
-		sb.WriteString(b.ToolResult.Stderr)
-		sb.Write(b.ToolResult.StructuredContent)
-		writeParts(&sb, b.ToolResult.Content)
+		count += utf8.RuneCountInString(b.ToolResult.Stdout)
+		count += utf8.RuneCountInString(b.ToolResult.Stderr)
+		count += utf8.RuneCount(b.ToolResult.StructuredContent)
+		count += partsRuneCount(b.ToolResult.Content)
 	case b.FileRead != nil:
-		sb.WriteString(b.FileRead.Content)
+		count += utf8.RuneCountInString(b.FileRead.Content)
 	case b.Reasoning != nil:
-		sb.WriteString(b.Reasoning.Text)
+		count += utf8.RuneCountInString(b.Reasoning.Text)
 		for _, s := range b.Reasoning.Summary {
-			sb.WriteString(s)
+			count += utf8.RuneCountInString(s)
 		}
 	}
-	return sb.String()
+	return count
 }
 
-// writeParts appends the text of any text parts in a multimodal slice. Binary
-// parts (image/audio/file) carry no estimable text — their token cost is
+// partsRuneCount returns the rune count of the text parts in a multimodal slice.
+// Binary parts (image/audio/file) carry no estimable text — their token cost is
 // vendor-specific and out of scope for this heuristic — so only Text is summed.
-func writeParts(sb *strings.Builder, parts []schema.Part) {
+func partsRuneCount(parts []schema.Part) int {
+	var count int
 	for _, p := range parts {
-		sb.WriteString(p.Text)
+		count += utf8.RuneCountInString(p.Text)
 	}
+	return count
 }
