@@ -6,7 +6,7 @@ github_issue: null
 depends_on: [AS-021, AS-022]
 area: tui
 priority: P0
-source: TUI-UX.md (D-TUI-3,-4,-7,-10,-12), UX.md §4.3/§9.4
+source: TUI-UX.md (D-TUI-3,-4,-7,-8,-10,-11,-12), UX.md §4.3/§9.4
 ---
 
 # AS-067 · TUI inspect-mode panel framework + focus/hotkey routing

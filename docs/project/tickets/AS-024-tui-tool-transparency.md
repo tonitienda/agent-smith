@@ -31,4 +31,4 @@ The trust surface of the TUI (§7.8): the user must always see what the agent is
 
 ## Dependencies
 
-- AS-021 (TUI), AS-016 (permission decisions to render)
+- AS-021 (TUI), AS-016 (permission decisions to render), AS-067 (panel host + modal overlay infra reused for destructive prompts)

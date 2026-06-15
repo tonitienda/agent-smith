@@ -36,8 +36,8 @@ exits non-zero (usage error). The TUI is also reachable explicitly via `smith tu
 `smith run` three ways, in precedence order:
 1. positional argument — `smith run "fix the failing test"`
 2. piped stdin (when stdin is not a TTY) — `echo "fix the test" | smith run`,
-   or explicit `-` — `smith run -`
-3. file — `smith run -f task.md` (and shell redirection `smith run < task.md`)
+   shell redirection `smith run < task.md`, or explicit `-` — `smith run -`
+3. file — `smith run -f task.md` (an explicit path flag, distinct from stdin)
 
 There is **no `-p`/`--prompt` flag** — one obvious way in. (This drops the
 familiar `smith -p` from UX.md §3.2 on purpose; the positional form is shorter
