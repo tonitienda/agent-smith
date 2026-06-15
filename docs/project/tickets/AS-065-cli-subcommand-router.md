@@ -46,8 +46,11 @@ Scope:
 - **Exit codes (D-CLI-7).** `0` success, `1` runtime/task failure, `2` invalid
   usage. Richer classes reserved for AS-051 (additive).
 - **Discoverability (D-CLI-10).** `--help`/`-h` + runnable examples on root and
-  every subcommand; `--version`; "did you mean…?" on unknown commands. Shell
-  completion deferred.
+  every subcommand; `--version`; "did you mean…?" on unknown commands;
+  machine-readable help (`smith <cmd> --help --output json` dumps the registry
+  entry). Shell completion deferred.
+- **Accessibility (D-CLI-4).** Color is never the only signal — status/severity
+  use symbols (`✓`/`✗`/`◐`) + exit code + stderr (UX.md §19).
 
 Stdlib-only (`flag` or a hand-rolled dispatcher) unless a ticket explicitly
 introduces a dependency.
@@ -62,7 +65,8 @@ introduces a dependency.
   data lands on stdout and diagnostics on stderr (verified by piping).
 - [ ] Config resolves in the documented precedence order, covered by a test.
 - [ ] Unknown subcommand exits 2 with a "did you mean…?" suggestion; `--version`
-  and per-command `--help` with examples work.
+  and per-command `--help` with examples work; `--help --output json` emits the
+  registry entry.
 - [ ] A CLI subcommand and its TUI slash-command equivalent dispatch to the same
   registry handler (no duplicated command logic).
 

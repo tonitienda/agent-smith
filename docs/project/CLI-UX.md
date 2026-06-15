@@ -48,7 +48,9 @@ human/plain output with color. Non-TTY (piped/redirected) → plain, no ANSI.
 `--output plain|json|stream-json` forces a mode regardless of TTY. `NO_COLOR` is
 honored; `--color auto|always|never` overrides (default `auto`). clig.dev: be a
 good Unix citizen — detect the pipe, drop the decoration. Per UX.md §2.5 / §5.2,
-personality is **off** on every non-interactive path.
+personality is **off** on every non-interactive path. Color is never load-bearing:
+status and severity (`✓`/`✗`/`◐`, exit code, stderr) carry meaning without it
+(UX.md §19 accessibility).
 
 **D-CLI-5 · stdout is data, stderr is diagnostics.** Primary results go to stdout;
 logs, spinners, progress, prompts, and errors go to stderr — always, so `| jq`
@@ -88,7 +90,10 @@ subcommands resolve through the **same face-neutral command registry** (UX.md §
 `smith context clean` to another. A documented parity table (UX.md §17.5) states,
 per command, whether it is interactive-only, scriptable, or both. Help, examples,
 and `--version` ship on root and every subcommand; unknown commands get a
-"did you mean…?" suggestion. Shell completion is deferred (not V1).
+"did you mean…?" suggestion. Help is also machine-readable: `smith <cmd> --help
+--output json` dumps the registry entry (name, aliases, args, scriptability,
+output schema) straight from the face-neutral registry, so tooling and docs read
+the same source the palette does. Shell completion is deferred (not V1).
 
 ---
 
