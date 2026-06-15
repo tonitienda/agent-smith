@@ -3,7 +3,7 @@ id: AS-065
 title: CLI subcommand router + arg/output/exit-code contract
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-018, AS-022]
+depends_on: [AS-018, AS-021, AS-022]
 area: faces
 priority: P1
 source: CLI-UX.md (D-CLI-1..10), UX.md §3.2/§9.3/§17, PRD.md §7.18

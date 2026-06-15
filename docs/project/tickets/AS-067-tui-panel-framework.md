@@ -35,7 +35,7 @@ Scope:
 - **Focus model (D-TUI-7).** Always-typing prompt: keystrokes go to the input;
   scrolling and panel hotkeys are modifiers (PgUp / ctrl- / alt- / leader), never
   bare letters. In-TUI help via `/help` or a chord.
-- **Modal overlay (D-TUI-12 / D-TUI-8 support).** Blocking modal-overlay infra
+- **Modal overlay (D-TUI-8 support).** Blocking modal-overlay infra
   (focus trapped, severe styling) reused by AS-024's destructive permission
   prompts.
 - **Startup header (D-TUI-10).** Small ASCII header (project/model/mode) on
