@@ -37,6 +37,41 @@ func NewExclusion(producer string, removes ...string) schema.Block {
 	}
 }
 
+// KindUsage is the event kind for a usage event: a control event recording one
+// provider turn's token usage and price-affecting metadata so token/cost
+// accounting (AS-020) is derivable from the log without re-querying the
+// provider. It is a non-content kind carrying no content body — the counts live
+// on the envelope (Block.Tokens, Block.UsageMeta), the model that served the
+// turn on Block.Provider, and the turn's stop reason on Block.StopReason.
+//
+// Like KindExclusion it is defined here rather than in the frozen content-block
+// schema (AS-003) because it is a harness/log control event, not a content
+// block; the schema tolerates non-content kinds (Block.Validate imposes no body
+// constraint on them) and the projection engine (AS-006) never renders it into
+// model-facing context.
+const KindUsage schema.Kind = "usage"
+
+// NewUsage builds a usage event recording the tokens and metadata a single
+// provider turn reported, attributed to producer (the loop). vendor and model
+// identify the surface that served the turn so accounting can price it;
+// stopReason carries the turn's normalized stop reason. tokens and meta may be
+// nil when the surface reported nothing.
+//
+// The returned block has a fresh ID; its Seq and append timestamp are assigned
+// when it is appended to a Log.
+func NewUsage(producer, vendor, model, stopReason string, tokens *schema.Tokens, meta *schema.UsageMeta) schema.Block {
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindUsage,
+		Role:       schema.RoleHarness,
+		StopReason: stopReason,
+		Tokens:     tokens,
+		UsageMeta:  meta,
+		Provider:   &schema.Provider{Vendor: vendor, Model: model},
+		Provenance: &schema.Provenance{Producer: producer},
+	}
+}
+
 // Derive stamps a caller-built replacement block as a derived-block event:
 // derived from the given source block IDs and attributed to producer. The
 // derived block replaces its sources in the projection — the sources are

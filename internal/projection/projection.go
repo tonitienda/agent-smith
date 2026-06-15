@@ -169,10 +169,11 @@ func computeExclusions(events []schema.Block) map[string][]string {
 }
 
 // isRendered reports whether an event contributes content to the projection.
-// Pure exclusion events (eventlog.KindExclusion) are control only and never
-// rendered; every content kind and derived block (compaction, fallback) is.
+// Control-only events — exclusions (eventlog.KindExclusion) and usage/accounting
+// records (eventlog.KindUsage) — are never rendered; every content kind and
+// derived block (compaction, fallback) is.
 func isRendered(b schema.Block) bool {
-	return b.Kind != eventlog.KindExclusion
+	return b.Kind != eventlog.KindExclusion && b.Kind != eventlog.KindUsage
 }
 
 // droppedByReplay reports whether a same-model-only reasoning block must be

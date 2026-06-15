@@ -109,6 +109,8 @@ make verify     # runs fmt, test, vet, and lint in the same order agents use
 
 Run `./smith` in a terminal to start an interactive chat session (the flagship TUI face, AS-021); set `ANTHROPIC_API_KEY` to talk to the Anthropic provider and `SMITH_MODEL` to override the default model. Off a TTY (scripts, CI) the binary prints usage instead.
 
+Inside the chat, type `/` to open the command palette. `/cost` (AS-020) shows the session's token & dollar accounting — a per-turn breakdown by input/output/cache plus how much prompt caching saved. Pricing ships as data; point `SMITH_PRICING` at a JSON file (same shape as [`internal/cost/data/pricing.json`](internal/cost/data/pricing.json)) to override or add model rates without recompiling. Models with no rate still show exact token counts, with the dollar figure marked unknown.
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).
