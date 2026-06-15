@@ -373,7 +373,7 @@ func (m *model) relayout() {
 // one event of any change (AS-025) without recomputing on every keystroke.
 func (m *model) refreshMeter() {
 	if m.meter != nil {
-		m.meterState = m.meter()
+		m.meterState = m.meter(m.meta.Model)
 	}
 }
 

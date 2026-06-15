@@ -75,13 +75,29 @@ func TestHumanTokens(t *testing.T) {
 	}
 }
 
+// TestMeterReceivesActiveModel checks the model is threaded into the MeterFunc so
+// the window denominator can rescale on a model switch (AS-023 /model).
+func TestMeterReceivesActiveModel(t *testing.T) {
+	var got string
+	m := newModel(&fakeRunner{}, Meta{Model: "claude-opus-4-8"},
+		make(chan loop.UIEvent), nil, nil, func(model string) Meter {
+			got = model
+			return Meter{}
+		})
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	_ = m
+	if got != "claude-opus-4-8" {
+		t.Errorf("MeterFunc got model %q, want the status line's active model", got)
+	}
+}
+
 // TestMeterShownInStatusLineAndUpdates wires a MeterFunc whose value the test
 // controls, and checks the meter is visible in the view and refreshes within one
 // event (AS-025 acceptance: always visible, updates within one event).
 func TestMeterShownInStatusLineAndUpdates(t *testing.T) {
 	meter := Meter{Tokens: 1000, Window: 200000, CostUSD: 0.5, CostKnown: true}
 	m := newModel(&fakeRunner{}, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s"},
-		make(chan loop.UIEvent), nil, nil, func() Meter { return meter })
+		make(chan loop.UIEvent), nil, nil, func(string) Meter { return meter })
 	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
 
 	if !strings.Contains(m.View(), "$0.5000") {

@@ -16,14 +16,17 @@ source: PRD.md §7.8, §5
 ## Implementation notes
 
 - A `tui.Meter` value (tokens used, window size, session cost, cost-known flag)
-  plus a `tui.MeterFunc` seam keeps the face decoupled from the accounting engine
-  — `cmd/smith` closes the func over the session log, pricing table, and active
-  model, exactly as it already does for `/cost`. The TUI imports neither
+  plus a `tui.MeterFunc func(model string) Meter` seam keeps the face decoupled
+  from the accounting engine — `cmd/smith` closes the func over the session log
+  and pricing table and takes the active model per call, so a `/model` switch
+  (AS-023) rescales the window denominator immediately. The TUI imports neither
   `internal/cost` nor `internal/provider` (the AS-021 boundary test still holds).
 - The meter is recomputed once per loop event (cached in the model, rendered into
   the status line), so it updates within one event and adds no per-keystroke or
   model-call cost. It reads the same `cost.Summarize` source as `/cost`, so the
-  session dollar figure cannot drift from the command.
+  session dollar figure cannot drift from the command. The closure memoizes on the
+  log length and active model, so the many text-delta events in a streamed turn
+  cost a single O(1) length check instead of re-summarizing the whole log.
 - Window occupancy is the most recent turn's prompt+output tokens
   (`cost.TurnCost.ContextTokens`) — the figure the provider last counted — which
   needs no extra call. AS-063 (per-block estimates) will refine this into a

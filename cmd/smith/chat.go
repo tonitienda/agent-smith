@@ -80,7 +80,7 @@ func startChat() error {
 		Provider: prov.Name(),
 		Model:    model,
 		Session:  shortID(sess.ID),
-	}, chatCommands(sess.Log, pricing), chatMeter(sess.Log, pricing, model))
+	}, chatCommands(sess.Log, pricing), chatMeter(sess.Log, pricing))
 	engine, err := loop.New(prov, sess.Log, runtime, reg, model, loop.WithObserver(app.Observer()))
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
@@ -122,27 +122,43 @@ func chatCommands(log *eventlog.Log, pricing *cost.Table) *command.Registry {
 }
 
 // chatMeter builds the context-meter snapshot function for the chat status line
-// (AS-025). It closes over the session log, the pricing table, and the active
-// model so internal/tui stays decoupled from the accounting engine: on each
-// event the TUI calls it, and it derives the live window occupancy and session
-// cost from the same log the /cost command reads — one accounting source, no
-// drift. Window occupancy is the most recent turn's prompt+output tokens (the
-// figure the provider last counted), refined later by per-block estimates
-// (AS-063); the denominator is the model's context window from the pricing table.
-func chatMeter(log *eventlog.Log, pricing *cost.Table, model string) tui.MeterFunc {
-	return func() tui.Meter {
+// (AS-025). It closes over the session log and pricing table and takes the active
+// model per call, so the window denominator rescales the moment the model is
+// switched (AS-023 /model) while internal/tui stays decoupled from the accounting
+// engine. It derives live window occupancy and session cost from the same log the
+// /cost command reads — one accounting source, no drift. Window occupancy is the
+// most recent turn's prompt+output tokens (the figure the provider last counted),
+// refined later by per-block estimates (AS-063); the denominator is the model's
+// context window from the pricing table.
+//
+// The TUI calls this on every loop event, including each streamed text delta, but
+// the log only grows between turns — so the result is memoized on the log length
+// and active model and recomputed only when one of them changes, keeping the
+// per-delta cost a single O(1) length check rather than a full re-summarize. The
+// closure is called only from the Bubble Tea goroutine, so its memo state needs
+// no locking.
+func chatMeter(log *eventlog.Log, pricing *cost.Table) tui.MeterFunc {
+	lastLen := -1
+	var lastModel string
+	var cached tui.Meter
+	return func(model string) tui.Meter {
+		if n := log.Len(); n == lastLen && model == lastModel {
+			return cached
+		}
 		summary := cost.Summarize(log.Events(), pricing)
 		used := 0
 		if last, ok := summary.Latest(); ok {
 			used = last.ContextTokens()
 		}
 		window, _ := pricing.Window(model)
-		return tui.Meter{
+		cached = tui.Meter{
 			Tokens:    used,
 			Window:    window,
 			CostUSD:   summary.TotalUSD,
 			CostKnown: summary.AllPriced,
 		}
+		lastLen, lastModel = log.Len(), model
+		return cached
 	}
 }
 

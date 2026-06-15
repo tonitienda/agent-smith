@@ -27,10 +27,12 @@ type Meter struct {
 	CostKnown bool
 }
 
-// MeterFunc yields the current Meter. The model calls it once per loop event (not
-// per keystroke), so the status line stays current without measurable input
-// latency or extra model calls. A nil MeterFunc disables the meter.
-type MeterFunc func() Meter
+// MeterFunc yields the current Meter for the active model. The model passes the
+// status line's current model so the window denominator rescales the moment the
+// model is switched (AS-023 /model). It is called once per loop event (not per
+// keystroke), so the status line stays current without measurable input latency
+// or extra model calls. A nil MeterFunc disables the meter.
+type MeterFunc func(model string) Meter
 
 // empty reports whether the meter has nothing worth showing yet — no window
 // known and no usage recorded — so the status line can omit it before the first
