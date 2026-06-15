@@ -159,19 +159,64 @@ func TestModalEscDeniesByDefault(t *testing.T) {
 }
 
 // TestModalWrapsLongDetail guards against the layout glitch where a long
-// verbatim command/path overflows a narrow terminal (D-TUI-11).
+// verbatim command/path overflows the terminal (D-TUI-11) — including very
+// narrow terminals where a fixed minimum wrap width would itself overflow.
 func TestModalWrapsLongDetail(t *testing.T) {
-	m := newCommandModel(t, command.NewRegistry())
-	m = update(t, m, tea.WindowSizeMsg{Width: 60, Height: 24})
-	m.openModal(modal{
-		title:   "Run shell command?",
-		detail:  strings.Repeat("rm -rf /very/long/path/segment ", 10),
-		choices: []string{"Deny", "Allow"},
-	})
-	for _, line := range strings.Split(m.View(), "\n") {
-		if w := lipglossWidth(line); w > m.width {
-			t.Fatalf("modal line overflows terminal: width %d > %d:\n%q", w, m.width, line)
+	for _, width := range []int{16, 40, 60, 80} {
+		m := newCommandModel(t, command.NewRegistry())
+		m = update(t, m, tea.WindowSizeMsg{Width: width, Height: 24})
+		m.openModal(modal{
+			title:   "Run shell command?",
+			detail:  strings.Repeat("rm -rf /very/long/path/segment ", 10),
+			choices: []string{"Deny", "Allow"},
+		})
+		for _, line := range strings.Split(m.View(), "\n") {
+			if w := lipglossWidth(line); w > m.width {
+				t.Fatalf("width %d: modal line overflows terminal: %d > %d:\n%q", width, w, m.width, line)
+			}
 		}
+	}
+}
+
+// TestPanelFooterDropsBeforeOverflow covers the inspect-mode footer degrade: on
+// an extremely short terminal the footer keybar is dropped so the panel body
+// renders alone instead of overflowing (D-TUI-11).
+func TestPanelFooterDropsBeforeOverflow(t *testing.T) {
+	reg := command.NewRegistry()
+	if err := reg.Register(command.HelpCommand(reg)); err != nil {
+		t.Fatalf("register help: %v", err)
+	}
+	m := newCommandModel(t, reg)
+	m = update(t, m, key("ctrl+g"))
+	next, cmd := m.Update(key("h"))
+	m = runCmd(t, next.(model), cmd)
+	if !m.panelOpen() {
+		t.Fatal("panel did not open")
+	}
+	m = update(t, m, tea.WindowSizeMsg{Width: 40, Height: 1})
+	if m.panelFooterRows() != 0 {
+		t.Fatalf("footer not dropped at height 1: panelFooterRows=%d", m.panelFooterRows())
+	}
+	if got := strings.Count(m.View(), "\n") + 1; got > 1 {
+		t.Fatalf("inspect view is %d rows, want <= 1:\n%s", got, m.View())
+	}
+}
+
+// TestPaletteFitsTinyWindow covers fix for paletteHeight reserving the status
+// row unconditionally: with the palette open in a tiny window, the rendered
+// sections must still fit the terminal height (D-TUI-11).
+func TestPaletteFitsTinyWindow(t *testing.T) {
+	reg := command.NewRegistry()
+	for _, n := range []string{"cost", "context", "clean", "clear", "config"} {
+		if err := reg.Register(command.Command{Name: n, Run: nopHandler}); err != nil {
+			t.Fatalf("register %q: %v", n, err)
+		}
+	}
+	m := newCommandModel(t, reg)
+	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 4})
+	m = typeString(t, m, "/c") // matches all five
+	if got := strings.Count(m.View(), "\n") + 1; got > 4 {
+		t.Fatalf("view with palette is %d rows, want <= 4:\n%s", got, m.View())
 	}
 }
 

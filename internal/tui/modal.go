@@ -93,10 +93,11 @@ func (m model) modalView() string {
 		// The detail is unbounded user content (a verbatim command or path), so
 		// wrap it to the box's inner width — otherwise a long line overflows and
 		// glitches a narrow terminal (D-TUI-11). 8 leaves room for the double
-		// border + padding, with a floor so a tiny terminal still wraps sanely.
+		// border + padding; the floor stays at 1 so an extremely narrow terminal
+		// still wraps within its own width rather than forcing an over-wide line.
 		detailWidth := m.width - 8
-		if detailWidth < 20 {
-			detailWidth = 20
+		if detailWidth < 1 {
+			detailWidth = 1
 		}
 		b.WriteString(modalDetailStyle.Width(detailWidth).Render(md.detail))
 	}
@@ -113,7 +114,10 @@ func (m model) modalView() string {
 	b.WriteString("\n\n")
 	b.WriteString(dimStyle.Render("←/→ choose · Enter confirm · Esc cancel"))
 
-	box := modalBoxStyle.Render(b.String())
+	// Wrapping the detail keeps the box at a sane width; MaxWidth is the final
+	// backstop so the fixed title/keybar lines truncate rather than overflow an
+	// extremely narrow terminal — degrade, never glitch (D-TUI-11).
+	box := lipgloss.NewStyle().MaxWidth(m.width).MaxHeight(m.height).Render(modalBoxStyle.Render(b.String()))
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 

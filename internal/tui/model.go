@@ -413,7 +413,7 @@ func (m *model) relayout() {
 
 	// The inspect panel keeps the pinned status line (when there's room) and a
 	// one-row footer keybar; the rest is the panel body.
-	panelHeight := m.height - m.statusRows() - 1
+	panelHeight := m.height - m.statusRows() - m.panelFooterRows()
 	if panelHeight < 1 {
 		panelHeight = 1
 	}
@@ -429,6 +429,17 @@ func (m model) statusRows() int {
 		return 0
 	}
 	return statusHeight
+}
+
+// panelFooterRows is the height the inspect-panel footer keybar occupies: one
+// row normally, zero when there isn't room for at least one body row above it
+// (after any pinned status row), so an extremely short terminal shows the panel
+// body alone rather than overflowing (D-TUI-11).
+func (m model) panelFooterRows() int {
+	if m.height < m.statusRows()+2 {
+		return 0
+	}
+	return 1
 }
 
 // refreshMeter recomputes the cached context/cost snapshot from the live log.
@@ -471,17 +482,22 @@ func (m model) View() string {
 	}
 	if m.panelOpen() {
 		// Inspect mode: the status line is pinned above the panel body (D-TUI-3),
-		// then a footer keybar. The status line drops first when the terminal is too
-		// short to fit everything (D-TUI-11).
+		// then a footer keybar. The status line and then the footer drop, in that
+		// order, when the terminal is too short to fit everything (D-TUI-11).
 		sections := make([]string, 0, 3)
 		if m.statusRows() > 0 {
 			sections = append(sections, m.statusLine())
 		}
-		sections = append(sections, m.panel.View(), m.panelFooter())
+		sections = append(sections, m.panel.View())
+		if m.panelFooterRows() > 0 {
+			sections = append(sections, m.panelFooter())
+		}
 		return strings.Join(sections, "\n")
 	}
 	sections := []string{m.viewport.View()}
-	if m.palette.open {
+	// Gate on the reserved height, not just open: a tiny window drops the palette
+	// (paletteHeight()==0) so the rendered sections never exceed the terminal.
+	if m.palette.open && m.paletteHeight() > 0 {
 		sections = append(sections, m.paletteView())
 	}
 	if m.statusRows() > 0 {

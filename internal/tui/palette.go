@@ -71,9 +71,14 @@ func (m *model) paletteHeight() int {
 	if n > paletteMaxRows {
 		n = paletteMaxRows
 	}
-	maxRows := m.height - inputHeight - statusHeight - 1
+	// Reserve only the chrome that actually renders: on a tiny window the status
+	// line is dropped (statusRows()==0), so reserving it unconditionally would let
+	// viewport+palette+textarea exceed the terminal (D-TUI-11). The trailing -1
+	// keeps at least one transcript row; when even that can't fit, the palette is
+	// dropped entirely (0) rather than forced to overflow the input.
+	maxRows := m.height - inputHeight - m.statusRows() - 1
 	if maxRows < 1 {
-		maxRows = 1
+		return 0
 	}
 	if n > maxRows {
 		n = maxRows
