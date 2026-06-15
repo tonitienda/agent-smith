@@ -46,7 +46,9 @@ func renderTopConsumers(b *strings.Builder, c Composition) {
 		share := percent(s.Tokens, c.TotalTokens)
 		row("  %d.\t%s\t%s\t%s\t%s\t%s ago\t\n",
 			i+1, s.Group, tokensLabel(s.Tokens), share, c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
-		row("  \t\t\t\t%s\t\t\n", s.Origin)
+		// Origin under the Group column: a long path/tool name there won't stretch
+		// the narrow numeric columns (tokens/share/cost) out of alignment.
+		row("  \t%s\t\t\t\t\t\n", s.Origin)
 	}
 	_ = tw.Flush()
 }

@@ -205,6 +205,27 @@ func TestSortModes(t *testing.T) {
 	}
 }
 
+// TestNilTableNoPanic confirms Build degrades gracefully with a nil pricing
+// table: cost.Table's methods are nil-receiver-safe (Lookup/Window/Currency all
+// handle a nil receiver), so the view still attributes tokens, just unpriced.
+func TestNilTableNoPanic(t *testing.T) {
+	proj := projection.Project([]schema.Block{text("a", schema.RoleUser, 40, 1)},
+		projection.Options{})
+	c := composition.Build(proj, nil, model, base, composition.SortSize)
+	if c.Priced {
+		t.Error("a nil table cannot price anything")
+	}
+	if c.TotalTokens == 0 {
+		t.Error("tokens must still attribute with a nil table")
+	}
+	if c.Currency != "$" {
+		t.Errorf("Currency = %q, want $ (nil-table fallback)", c.Currency)
+	}
+	if out := composition.Render(c); out == "" {
+		t.Error("Render must not panic or empty out on a nil-table composition")
+	}
+}
+
 func TestParseSort(t *testing.T) {
 	cases := map[string]composition.Sort{
 		"":        composition.SortSize,
