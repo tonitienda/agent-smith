@@ -46,7 +46,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-023](AS-023-parity-commands.md) | Parity commands: `/clear` `/model` `/resume` | commands | done | 007, 008, 022 |
 | [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | done | 021, 016, 067 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | done | 006, 020, 021 |
-| [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | ready | 006, 020, 022 |
+| [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | done | 006, 020, 022 |
 | [AS-027](AS-027-segment-topic-labeling.md) | Segment topic labeling engine | context-wedge | **needs clarification** | 006 |
 | [AS-028](AS-028-clean-manual.md) | `/clean` manual removal + preview/undo (wedge) | context-wedge | ready | 006, 026 |
 | [AS-029](AS-029-clean-semantic.md) | `/clean "<topic>"` semantic matching (wedge) | context-wedge | **needs clarification** | 028, 027 |

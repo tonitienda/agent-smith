@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/command"
+	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
+	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -171,6 +173,28 @@ func (s *chatSession) events() []schema.Block {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sess.Log.Events()
+}
+
+// cmdContext renders the /context composition view (AS-026): what is occupying
+// the window right now, ranked by share, from the live projection alone — no
+// model calls, so the panel opens instantly. The optional argument sorts the
+// full segment list (size | age | type; default size). The projection uses the
+// active model so reasoning-replay filtering matches the real window, and prices
+// each block's estimated tokens at that model's input rate.
+func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model := s.model
+	table := s.pricing
+	s.mu.Unlock()
+
+	sortBy := composition.SortSize
+	if len(args) > 0 {
+		sortBy = composition.ParseSort(args[0])
+	}
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	comp := composition.Build(proj, table, model, time.Now(), sortBy)
+	return command.Output{Text: composition.Render(comp)}, nil
 }
 
 // cmdClear ends the current session and starts a fresh one (AS-023 /clear). The
