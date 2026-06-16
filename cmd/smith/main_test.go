@@ -185,6 +185,12 @@ func TestResolvePromptSources(t *testing.T) {
 			file:    writeTemp(t, "   \n"),
 			wantErr: true,
 		},
+		{
+			name:    "blank piped stdin beats -f and errors",
+			ctx:     &cli.Context{Stdin: strings.NewReader("\n"), StdinTTY: false},
+			file:    writeTemp(t, "from file\n"),
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -290,18 +290,21 @@ func resolvePrompt(c *cli.Context, file string) (string, error) {
 	case len(c.Args) > 0:
 		return strings.Join(c.Args, " "), nil
 	case !c.StdinTTY:
-		s, err := readTrim(c.Stdin)
+		raw, err := readRaw(c.Stdin)
 		if err != nil {
 			return "", err
 		}
-		if s != "" {
-			return s, nil
+		// Bytes on stdin mean data was actually piped, so stdin is the source and
+		// outranks -f per D-CLI-3 #2 — a blank pipe (`printf "\n" | smith run`)
+		// surfaces as "empty prompt", not a silent fall-through to the file.
+		if len(raw) > 0 {
+			return nonEmptyPrompt(strings.TrimSpace(string(raw)))
 		}
+		// Zero bytes means nothing was piped (CI, a script, stdin from /dev/null):
+		// fall back to -f, else report no prompt at all (AS-069).
 		if file != "" {
 			return readFile(file)
 		}
-		// Non-TTY with nothing piped and no -f: the user supplied no prompt at
-		// all, so the standard no-prompt guidance is clearer than "empty prompt".
 		return "", errNoPrompt()
 	case file != "":
 		return readFile(file)
@@ -315,16 +318,26 @@ func errNoPrompt() error {
 	return cli.Usagef("run: no prompt — pass it as an argument, pipe it on stdin, or use -f <file>")
 }
 
-// readTrim reads r fully and trims surrounding whitespace; an empty result is
-// allowed (callers decide whether emptiness is an error). A nil reader is treated
-// as empty rather than panicking, so a face that leaves Stdin unset is safe.
-func readTrim(r io.Reader) (string, error) {
+// readRaw reads r fully without trimming, so callers can tell a truly empty
+// stream (0 bytes) from blank-but-piped input. A nil reader yields no bytes
+// rather than panicking, so a face that leaves Stdin unset is safe.
+func readRaw(r io.Reader) ([]byte, error) {
 	if r == nil {
-		return "", nil
+		return nil, nil
 	}
 	b, err := io.ReadAll(r)
 	if err != nil {
-		return "", fmt.Errorf("read prompt: %w", err)
+		return nil, fmt.Errorf("read prompt: %w", err)
+	}
+	return b, nil
+}
+
+// readTrim reads r fully and trims surrounding whitespace; an empty result is
+// allowed (callers decide whether emptiness is an error).
+func readTrim(r io.Reader) (string, error) {
+	b, err := readRaw(r)
+	if err != nil {
+		return "", err
 	}
 	return strings.TrimSpace(string(b)), nil
 }
