@@ -523,9 +523,14 @@ func (s *chatSession) sessionDetail(sum session.Summary, now time.Time) string {
 // its prior turns exactly as the window holds them, and a freshly cleared
 // session yields no blocks (an empty transcript).
 func (s *chatSession) rehydrate() []schema.Block {
+	// Snapshot the log and model under the lock, then project after releasing it:
+	// Events() already returns a copy, so the projection (potentially heavy on a
+	// large session) doesn't block other readers of the controller state.
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model}).Live()
+	events := s.sess.Log.Events()
+	model := s.model
+	s.mu.Unlock()
+	return projection.Project(events, projection.Options{TargetModel: model}).Live()
 }
 
 // sessionCostLabel computes a session's accrued cost for the /resume listing

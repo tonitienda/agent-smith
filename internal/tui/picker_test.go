@@ -64,6 +64,43 @@ func TestSegmentsFromBlocks(t *testing.T) {
 	}
 }
 
+// TestSegmentsFromBlocksMatchesLiveBehavior covers the Copilot-review refinements:
+// non-conversation roles are skipped, server tool calls conjure no ghost card,
+// an unresolved tool card replays as interrupted (not pending), and consecutive
+// assistant blocks fold under one segment.
+func TestSegmentsFromBlocksMatchesLiveBehavior(t *testing.T) {
+	system := schema.Block{Kind: schema.KindText, Role: schema.RoleSystem, Text: &schema.TextBody{Text: "you are a harness prompt"}}
+	serverCall := schema.Block{Kind: schema.KindToolCall, Role: schema.RoleAssistant, ToolCall: &schema.ToolCallBody{ToolUseID: "srv", Name: "web_search", ToolKind: schema.ToolKindServer}}
+	orphanCall := schema.Block{Kind: schema.KindToolCall, Role: schema.RoleAssistant, ToolCall: &schema.ToolCallBody{ToolUseID: "t9", Name: "shell"}}
+
+	segs := segmentsFromBlocks([]schema.Block{
+		system,
+		userText("do a thing"),
+		assistantText("part one"),
+		assistantText("part two"),
+		serverCall,
+		orphanCall,
+	})
+
+	// system text skipped; the two assistant blocks fold into one segment.
+	if len(segs) != 3 {
+		t.Fatalf("got %d segments, want 3 (user, merged assistant, orphan tool): %+v", len(segs), segs)
+	}
+	if segs[0].kind != segUser {
+		t.Errorf("seg0 kind = %v, want user (system text must be skipped)", segs[0].kind)
+	}
+	if segs[1].kind != segAssistant || !strings.Contains(segs[1].text, "part one") || !strings.Contains(segs[1].text, "part two") {
+		t.Errorf("seg1 = %+v, want consecutive assistant blocks merged", segs[1])
+	}
+	tool := segs[2]
+	if tool.kind != segTool || tool.toolName != "shell" {
+		t.Fatalf("seg2 = %+v, want the client 'shell' card (server call skipped)", tool)
+	}
+	if !tool.toolDone || !tool.toolError {
+		t.Errorf("orphan tool card = %+v, want done+error (interrupted), not pending", tool)
+	}
+}
+
 // TestLaunchRehydratesTranscript covers AC2's launch path: a model built with a
 // rehydrate source shows the prior turns immediately, so a `smith --resume <id>`
 // start is not a blank screen.
