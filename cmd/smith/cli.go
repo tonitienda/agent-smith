@@ -58,6 +58,7 @@ func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(
 		Usage:         desc.Args,
 		Examples:      desc.Examples,
 		Scriptability: desc.Scriptability.String(),
+		Reason:        desc.Reason,
 		OutputSchema:  desc.OutputSchema,
 		Run:           registryCommand(regName, pickArgs),
 	}
@@ -321,13 +322,15 @@ func readTrim(r io.Reader) (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 
-// readFile reads the -f prompt file and trims surrounding whitespace.
+// readFile reads the -f prompt file and trims surrounding whitespace, rejecting
+// an empty result so `smith run -f <emptyfile>` gives the same usage error as an
+// empty stdin rather than running with no prompt.
 func readFile(file string) (string, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return "", fmt.Errorf("read prompt file: %w", err)
 	}
-	return strings.TrimSpace(string(b)), nil
+	return nonEmptyPrompt(strings.TrimSpace(string(b)))
 }
 
 // nonEmptyPrompt returns s, or a usage error when s is empty.
