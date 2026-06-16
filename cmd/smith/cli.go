@@ -58,6 +58,7 @@ func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(
 		Usage:         desc.Args,
 		Examples:      desc.Examples,
 		Scriptability: desc.Scriptability.String(),
+		Reason:        desc.Reason,
 		OutputSchema:  desc.OutputSchema,
 		Run:           registryCommand(regName, pickArgs),
 	}
@@ -272,32 +273,68 @@ func runCommand() *cli.Command {
 // resolvePrompt resolves the task prompt per D-CLI-3 precedence: a positional
 // argument, then stdin (piped, or an explicit `-`), then `-f <file>`. It is a
 // usage error to supply none.
+//
+// A non-TTY signals only that stdin *might* be piped, not that data was actually
+// sent (CI, a script, or stdin redirected from /dev/null are all non-TTY with an
+// empty stream). So when nothing is piped we fall back to -f rather than erroring,
+// which keeps -f usable in its primary scripted environment (AS-069) while genuinely
+// piped data still outranks the file per D-CLI-3 #2.
 func resolvePrompt(c *cli.Context, file string) (string, error) {
 	switch {
 	case len(c.Args) == 1 && c.Args[0] == "-":
-		return readAllTrim(c.Stdin)
+		s, err := readTrim(c.Stdin)
+		if err != nil {
+			return "", err
+		}
+		return nonEmptyPrompt(s)
 	case len(c.Args) > 0:
 		return strings.Join(c.Args, " "), nil
 	case !c.StdinTTY:
-		return readAllTrim(c.Stdin)
-	case file != "":
-		b, err := os.ReadFile(file)
+		s, err := readTrim(c.Stdin)
 		if err != nil {
-			return "", fmt.Errorf("read prompt file: %w", err)
+			return "", err
 		}
-		return strings.TrimSpace(string(b)), nil
+		if s != "" {
+			return s, nil
+		}
+		if file != "" {
+			return readFile(file)
+		}
+		return nonEmptyPrompt(s)
+	case file != "":
+		return readFile(file)
 	default:
 		return "", cli.Usagef("run: no prompt — pass it as an argument, pipe it on stdin, or use -f <file>")
 	}
 }
 
-// readAllTrim reads r fully and trims surrounding whitespace.
-func readAllTrim(r io.Reader) (string, error) {
+// readTrim reads r fully and trims surrounding whitespace; an empty result is
+// allowed (callers decide whether emptiness is an error). A nil reader is treated
+// as empty rather than panicking, so a face that leaves Stdin unset is safe.
+func readTrim(r io.Reader) (string, error) {
+	if r == nil {
+		return "", nil
+	}
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return "", fmt.Errorf("read prompt: %w", err)
 	}
-	s := strings.TrimSpace(string(b))
+	return strings.TrimSpace(string(b)), nil
+}
+
+// readFile reads the -f prompt file and trims surrounding whitespace, rejecting
+// an empty result so `smith run -f <emptyfile>` gives the same usage error as an
+// empty stdin rather than running with no prompt.
+func readFile(file string) (string, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return "", fmt.Errorf("read prompt file: %w", err)
+	}
+	return nonEmptyPrompt(strings.TrimSpace(string(b)))
+}
+
+// nonEmptyPrompt returns s, or a usage error when s is empty.
+func nonEmptyPrompt(s string) (string, error) {
 	if s == "" {
 		return "", cli.Usagef("run: empty prompt")
 	}

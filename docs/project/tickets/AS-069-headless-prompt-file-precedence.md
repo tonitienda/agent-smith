@@ -1,7 +1,7 @@
 ---
 id: AS-069
 title: "smith run -f <file> is shadowed by ambient stdin on a non-TTY"
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-065]
 area: faces
@@ -11,7 +11,7 @@ source: AS-065 follow-on; Gemini review on PR #111
 
 # AS-069 · `smith run -f <file>` is shadowed by ambient stdin on a non-TTY
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -38,10 +38,10 @@ distinguishing "stdin has data" from "non-TTY with nothing piped":
 
 ## Acceptance criteria
 
-- [ ] `smith run -f task.md` reads the file on a non-TTY with no piped stdin.
-- [ ] `echo data | smith run -f task.md` still prefers the piped stdin (D-CLI-3).
-- [ ] Positional, explicit `-`, and the no-prompt usage error are unchanged.
-- [ ] A test covers the non-TTY `-f` case and the piped-stdin-beats-`-f` case.
+- [x] `smith run -f task.md` reads the file on a non-TTY with no piped stdin.
+- [x] `echo data | smith run -f task.md` still prefers the piped stdin (D-CLI-3).
+- [x] Positional, explicit `-`, and the no-prompt usage error are unchanged.
+- [x] A test covers the non-TTY `-f` case and the piped-stdin-beats-`-f` case.
 
 ## Dependencies
 
