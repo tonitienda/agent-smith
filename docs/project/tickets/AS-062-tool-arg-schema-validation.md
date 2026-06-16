@@ -1,7 +1,7 @@
 ---
 id: AS-062
 title: Fuller JSON-Schema validation for tool arguments
-status: ready-to-implement
+status: done
 github_issue: 84
 depends_on: [AS-013]
 area: tools
@@ -11,7 +11,7 @@ source: AS-013 follow-on
 
 # AS-062 · Fuller JSON-Schema validation for tool arguments
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -40,11 +40,11 @@ sharper feedback.
 
 ## Acceptance criteria
 
-- [ ] A call violating a nested/enum/bounds constraint produces a model-readable
+- [x] A call violating a nested/enum/bounds constraint produces a model-readable
       error before the tool runs.
-- [ ] Unknown/unsupported keywords still never cause a false rejection.
-- [ ] The error message names the offending property and the constraint.
-- [ ] Existing AS-013 validation behavior (object/required/scalar/`additionalProperties`)
+- [x] Unknown/unsupported keywords still never cause a false rejection.
+- [x] The error message names the offending property and the constraint.
+- [x] Existing AS-013 validation behavior (object/required/scalar/`additionalProperties`)
       is preserved.
 
 ## Dependencies
