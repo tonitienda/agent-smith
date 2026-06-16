@@ -2,7 +2,7 @@
 id: AS-069
 title: "smith run -f <file> is shadowed by ambient stdin on a non-TTY"
 status: done
-github_issue: null
+github_issue: 114
 depends_on: [AS-065]
 area: faces
 priority: P2

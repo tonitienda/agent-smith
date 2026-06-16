@@ -2,7 +2,7 @@
 id: AS-070
 title: "smith <cmd> --help omits command-specific flags"
 status: ready-to-implement
-github_issue: null
+github_issue: 115
 depends_on: [AS-065]
 area: faces
 priority: P2
