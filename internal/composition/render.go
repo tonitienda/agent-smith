@@ -105,12 +105,13 @@ func renderExcluded(b *strings.Builder, c Composition) {
 	fmt.Fprintf(b, "\nExcluded from the window (%s, not counted in the total)\n",
 		countLabel(len(c.Excluded), "segment"))
 	tw, row := newTab(b)
+	row("  Handle\tType\tOrigin\tTokens\tReason\t\n")
 	for _, s := range c.Excluded {
 		reason := s.Reason
 		if reason == "" {
 			reason = "excluded"
 		}
-		row("  %s\t%s\t%s\t%s\t%s\t\n", handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), reason)
+		row("  %s\t%s\t%s\t%s\t%s\t\n", Handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), reason)
 	}
 	_ = tw.Flush()
 	b.WriteString("  Restore the most recent /clean removal: /clean --undo\n")
@@ -123,16 +124,18 @@ func renderAll(b *strings.Builder, c Composition) {
 	row("  #\tHandle\tType\tOrigin\tTokens\tShare\tCost\tAge\t\n")
 	for i, s := range c.Segments {
 		row("  %d\t%s\t%s\t%s\t%s\t%s\t%s\t%s ago\t\n",
-			i+1, handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), percent(s.Tokens, c.TotalTokens),
+			i+1, Handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), percent(s.Tokens, c.TotalTokens),
 			c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
 	}
 	_ = tw.Flush()
 	b.WriteString("  Use the handle to remove a segment: /clean <handle>\n")
 }
 
-// handle shortens a block ID to the compact selection handle shown in the view;
-// /clean resolves any unambiguous prefix back to the full block.
-func handle(id string) string {
+// Handle shortens a block ID to the compact selection handle shown in the view;
+// /clean resolves any unambiguous prefix back to the full block. It is exported
+// so the /clean preview (internal/clean) renders the same handles as /context —
+// the single source of the handle width, so the two views can't drift.
+func Handle(id string) string {
 	if len(id) > 12 {
 		return id[:12]
 	}

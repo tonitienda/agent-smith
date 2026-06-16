@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/tonitienda/agent-smith/internal/composition"
 )
 
 // RenderPreview formats a plan as the plain-text preview the user confirms
@@ -30,7 +32,7 @@ func RenderPreview(p Plan) string {
 			note = "paired (tool call/result)"
 		}
 		row("  %s\t%s\t%s\t%s\t%s\t\n",
-			handle(it.ID), it.Kind, it.Origin, tokensLabel(it.Tokens), note)
+			composition.Handle(it.ID), it.Kind, it.Origin, tokensLabel(it.Tokens), note)
 	}
 	_ = tw.Flush()
 
@@ -57,15 +59,6 @@ func costSuffix(p Plan) string {
 		return ""
 	}
 	return " (" + p.Currency + strconv.FormatFloat(p.CostUSD, 'f', 4, 64) + ")"
-}
-
-// handle shortens a block ID to the compact form shown in /context, so the
-// preview and the composition view speak the same handles.
-func handle(id string) string {
-	if len(id) > 12 {
-		return id[:12]
-	}
-	return id
 }
 
 // tokensLabel mirrors composition's compact token formatting.
