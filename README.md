@@ -111,7 +111,9 @@ Run `./smith` in a terminal to start an interactive chat session (the flagship T
 
 Inside the chat, type `/` to open the command palette. `/cost` (AS-020) shows the session's token & dollar accounting — a per-turn breakdown by input/output/cache plus how much prompt caching saved. Pricing ships as data; point `SMITH_PRICING` at a JSON file (same shape as [`internal/cost/data/pricing.json`](internal/cost/data/pricing.json)) to override or add model rates without recompiling. Models with no rate still show exact token counts, with the dollar figure marked unknown.
 
-`/context` (AS-026, also `Ctrl+G c`) opens the composition view — what is actually filling the window right now, broken down segment by segment: the top consumers first, a by-type rollup, duplicate file reads flagged with their combined cost, and stale reclaim candidates, each with its token share, dollar cost and age. It opens instantly from projection data (no model call); sort the full list with `/context size|age|type`.
+`/context` (AS-026, also `Ctrl+G c`) opens the composition view — what is actually filling the window right now, broken down segment by segment: the top consumers first, a by-type rollup, duplicate file reads flagged with their combined cost, and stale reclaim candidates, each with its token share, dollar cost and age. It opens instantly from projection data (no model call); sort the full list with `/context size|age|type`. Each segment in the list carries a short **handle**.
+
+`/clean` (AS-028) edits the window by removing segments you no longer need — pass the handles from `/context`: `/clean <handle>…` previews exactly what would leave the window and the tokens/$ it reclaims (tool-call/result pairs are removed together, and very recent blocks draw a warning) without changing anything; `/clean --apply` confirms, `/clean --undo` restores the most recent removal, `/clean --cancel` discards a preview. Nothing ever leaves the log — a removal is an appended exclusion event and an undo is its exact reversal (PRD D3) — and excluded blocks stay browsable in the "Excluded from the window" section of `/context`.
 
 ## License
 

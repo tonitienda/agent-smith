@@ -137,9 +137,9 @@ func openOrCreate(store *session.Store, resumeID string) (*session.Session, erro
 // /help (a full-screen list of every registered command), /version (inline),
 // /cost (AS-020, a full-screen token & dollar breakdown), /context (AS-026, the
 // full-screen window-composition view), and the parity power commands /clear,
-// /model, and /resume (AS-023). The remaining wedge command /clean arrives in
-// its own ticket (AS-028). The handlers close over the chat controller so the
-// command package stays dependency-free.
+// /model, and /resume (AS-023), and the wedge command /clean (AS-028). The
+// handlers close over the chat controller so the command package stays
+// dependency-free.
 func chatCommands(ctl *chatSession) *command.Registry {
 	reg := command.NewRegistry()
 	// HelpCommand reads the registry lazily, so it lists commands registered after
@@ -168,6 +168,13 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Args:    "[size|age|type]",
 		Mode:    command.FullScreen,
 		Run:     ctl.cmdContext,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:    "clean",
+		Summary: "Remove segments from the window: /clean <handle>… | --apply | --undo | --cancel",
+		Args:    "<handle>… | --apply | --undo | --cancel",
+		Mode:    command.FullScreen,
+		Run:     ctl.cmdClean,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:    "clear",

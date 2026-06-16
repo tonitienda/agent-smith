@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonitienda/agent-smith/internal/clean"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
@@ -58,6 +59,14 @@ type chatSession struct {
 	provName string
 	model    string
 	engine   *loop.Engine
+
+	// pendingClean holds the previewed /clean plan awaiting confirmation
+	// (/clean --apply) or discard (/clean --cancel). nil when none is pending.
+	// It is keyed to the session it was previewed against, so a /clear or
+	// /resume between preview and apply invalidates it rather than removing
+	// blocks from the wrong log.
+	pendingClean    *clean.Plan
+	pendingCleanFor *session.Session
 
 	// meter memo: recomputed only when the active log, its length, or the model
 	// changes, so the per-delta status-line refresh stays O(1) (mirrors AS-025).
@@ -196,6 +205,119 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	comp := composition.Build(proj, table, model, time.Now(), sortBy)
 	return command.Output{Text: composition.Render(comp)}, nil
 }
+
+// cmdClean is the manual context editor (AS-028 /clean, PRD §7.12): the user
+// selects live segments by their /context handle, sees a preview of exactly what
+// leaves the window and the tokens/$ reclaimed, then confirms. Removal is an
+// appended exclusion event — history is never mutated (D3) — and /clean --undo
+// restores the most recent removal exactly.
+//
+//   - /clean <handle>…  preview the removal (mutates nothing) and stage it
+//   - /clean --apply     confirm the staged preview, appending the exclusion
+//   - /clean --undo      restore the most recent removal
+//   - /clean --cancel    discard the staged preview
+func (s *chatSession) cmdClean(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		switch args[0] {
+		case "--apply":
+			return s.cleanApply()
+		case "--undo":
+			return s.cleanUndo()
+		case "--cancel":
+			return s.cleanCancel()
+		default:
+			return command.Output{}, fmt.Errorf("unknown /clean flag %q (use --apply, --undo, or --cancel)", args[0])
+		}
+	}
+	if len(args) == 0 {
+		return command.Output{Text: cleanUsage}, nil
+	}
+	return s.cleanPreview(args)
+}
+
+// cleanPreview stages a removal: it projects the live window, builds the plan,
+// and stores it pending confirmation. Nothing is appended to the log.
+func (s *chatSession) cleanPreview(handles []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
+	plan := clean.Preview(proj, s.pricing, s.model, time.Now(), handles)
+	if plan.Empty() {
+		s.pendingClean, s.pendingCleanFor = nil, nil
+		return command.Output{Text: clean.RenderPreview(plan)}, nil
+	}
+	s.pendingClean, s.pendingCleanFor = &plan, s.sess
+	return command.Output{Text: clean.RenderPreview(plan)}, nil
+}
+
+// cleanApply confirms the staged preview, appending the exclusion event that
+// drops its blocks from the projection. The plan is discarded once applied.
+func (s *chatSession) cleanApply() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingClean == nil {
+		return command.Output{Text: "Nothing staged. Run /clean <handle>… to preview a removal first."}, nil
+	}
+	if s.pendingCleanFor != s.sess {
+		s.pendingClean, s.pendingCleanFor = nil, nil
+		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /clean again."}, nil
+	}
+	plan := *s.pendingClean
+	event, ok := clean.Apply(plan)
+	if !ok {
+		s.pendingClean, s.pendingCleanFor = nil, nil
+		return command.Output{Text: "Nothing to apply."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record exclusion: %w", err)
+	}
+	s.pendingClean, s.pendingCleanFor = nil, nil
+	return command.Output{Text: fmt.Sprintf("Removed %s from the window, reclaiming %d tokens. Restore with /clean --undo.",
+		pluralSegments(len(plan.Items)), plan.Tokens)}, nil
+}
+
+// cleanUndo restores the most recent /clean removal by appending a
+// counter-exclusion. The log is never rewritten, so the restoration is exact.
+func (s *chatSession) cleanUndo() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, removed, ok := clean.Undo(s.sess.Log.Events())
+	if !ok {
+		return command.Output{Text: "No /clean removal to undo in this session."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record undo: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Restored %s to the window.", pluralSegments(removed))}, nil
+}
+
+// cleanCancel discards a staged preview without touching the log.
+func (s *chatSession) cleanCancel() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingClean == nil {
+		return command.Output{Text: "Nothing staged to cancel."}, nil
+	}
+	s.pendingClean, s.pendingCleanFor = nil, nil
+	return command.Output{Text: "Discarded the staged /clean preview. Nothing changed."}, nil
+}
+
+// pluralSegments labels a segment count for the confirm/undo lines.
+func pluralSegments(n int) string {
+	if n == 1 {
+		return "1 segment"
+	}
+	return strconv.Itoa(n) + " segments"
+}
+
+const cleanUsage = `/clean removes segments from the model's context window.
+
+  /clean <handle>…   preview removing the named segments (handles come from /context)
+  /clean --apply     confirm the previewed removal
+  /clean --undo      restore the most recent removal
+  /clean --cancel    discard the preview
+
+Nothing leaves the log — a removal is reversible, and the live thread keeps working.`
 
 // cmdClear ends the current session and starts a fresh one (AS-023 /clear). The
 // previous session stays on disk and resumable (append-only ethos, D3); only the

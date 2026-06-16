@@ -110,21 +110,33 @@ func renderExcluded(b *strings.Builder, c Composition) {
 		if reason == "" {
 			reason = "excluded"
 		}
-		row("  %s\t%s\t%s\t%s\t\n", s.Group, s.Origin, tokensLabel(s.Tokens), reason)
+		row("  %s\t%s\t%s\t%s\t%s\t\n", handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), reason)
 	}
 	_ = tw.Flush()
+	b.WriteString("  Restore the most recent /clean removal: /clean --undo\n")
 }
 
 func renderAll(b *strings.Builder, c Composition) {
 	fmt.Fprintf(b, "\nAll segments (%s)\n", sortLabel(c.Sort))
 	tw, row := newTab(b)
-	row("  #\tType\tOrigin\tTokens\tShare\tCost\tAge\t\n")
+	// Handle is the block ID prefix /clean (AS-028) selects by.
+	row("  #\tHandle\tType\tOrigin\tTokens\tShare\tCost\tAge\t\n")
 	for i, s := range c.Segments {
-		row("  %d\t%s\t%s\t%s\t%s\t%s\t%s ago\t\n",
-			i+1, s.Group, s.Origin, tokensLabel(s.Tokens), percent(s.Tokens, c.TotalTokens),
+		row("  %d\t%s\t%s\t%s\t%s\t%s\t%s\t%s ago\t\n",
+			i+1, handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), percent(s.Tokens, c.TotalTokens),
 			c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
 	}
 	_ = tw.Flush()
+	b.WriteString("  Use the handle to remove a segment: /clean <handle>\n")
+}
+
+// handle shortens a block ID to the compact selection handle shown in the view;
+// /clean resolves any unambiguous prefix back to the full block.
+func handle(id string) string {
+	if len(id) > 12 {
+		return id[:12]
+	}
+	return id
 }
 
 // cost formats a dollar amount with the composition's currency prefix, or a
