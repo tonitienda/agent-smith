@@ -33,6 +33,11 @@ const (
 	ApplyProducer = "/clean"
 	// UndoProducer attributes the counter-exclusion an undo appends.
 	UndoProducer = "/clean --undo"
+	// RestoreProducer attributes the counter-exclusion a per-item archive restore
+	// appends to cancel the removal that dropped a single block (AS-068). It is
+	// distinct from UndoProducer so Undo never mistakes a per-item restore's
+	// cancel event for a whole-removal undo target.
+	RestoreProducer = "/clean restore"
 )
 
 // recentAge flags a "very recent" block: removing something this fresh is more
@@ -178,6 +183,68 @@ func Undo(events []schema.Block) (event schema.Block, removed int, ok bool) {
 		return eventlog.NewExclusion(UndoProducer, e.ID), len(e.Provenance.DerivedFrom), true
 	}
 	return schema.Block{}, 0, false
+}
+
+// RestoreBlock builds the events that re-include a single archived block while
+// leaving every other excluded block excluded (AS-068 per-item restore). A
+// removal exclusion drops a set of blocks at once, so restoring just one means:
+// cancel each active exclusion that currently drops id (a counter-exclusion
+// targeting that exclusion event), and re-exclude that removal's other members
+// so only id returns to the window. The re-exclusion names content blocks only —
+// never an exclusion event — so cancelling it later can never reactivate a
+// removal and re-drop id (the chained-restore correctness the single mixed event
+// would break).
+//
+// It returns the events to append in order, and false when id is not a currently
+// excluded block (already live, never excluded, or unknown). The log is never
+// rewritten — restoration is exact and itself reversible, like every /clean edit
+// (PRD D3). events is the full log (e.g. Log.Events()).
+func RestoreBlock(events []schema.Block, id string) ([]schema.Block, bool) {
+	// Project with no target model: only exclusion membership matters here, and
+	// the replay-scope filter (which needs a model) never marks ExcludedBy.
+	proj := projection.Project(events, projection.Options{})
+	var by []string
+	found := false
+	for _, b := range proj.Blocks() {
+		if b.ID != id {
+			continue
+		}
+		found = true
+		if b.Live || len(b.ExcludedBy) == 0 {
+			return nil, false // not an excluded block — nothing to restore
+		}
+		by = b.ExcludedBy
+		break
+	}
+	if !found {
+		return nil, false
+	}
+
+	byID := make(map[string]schema.Block, len(events))
+	for _, e := range events {
+		byID[e.ID] = e
+	}
+
+	var out []schema.Block
+	for _, exclID := range by {
+		// Cancel the active exclusion that drops id, restoring all of its members…
+		out = append(out, eventlog.NewExclusion(RestoreProducer, exclID))
+		// …then re-exclude its other members so only id actually returns.
+		e := byID[exclID]
+		if e.Provenance == nil {
+			continue
+		}
+		var siblings []string
+		for _, m := range e.Provenance.DerivedFrom {
+			if m != id {
+				siblings = append(siblings, m)
+			}
+		}
+		if len(siblings) > 0 {
+			out = append(out, eventlog.NewExclusion(ApplyProducer, siblings...))
+		}
+	}
+	return out, true
 }
 
 // targetedIDs returns the set of block IDs named in any event's DerivedFrom — an

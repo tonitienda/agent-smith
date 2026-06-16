@@ -230,9 +230,124 @@ func (s *chatSession) cmdClean(_ context.Context, args []string) (command.Output
 		}
 	}
 	if len(args) == 0 {
-		return command.Output{Text: cleanUsage}, nil
+		// No args: show the usage text for a scriptable face, and offer the
+		// interactive multi-select surface for an interactive one (AS-068). The TUI
+		// opens the selector; the CLI ignores it and renders the usage text.
+		return command.Output{Text: cleanUsage, Selector: s.buildCleanSelector()}, nil
 	}
 	return s.cleanPreview(args)
+}
+
+// buildCleanSelector snapshots the live composition into the interactive
+// multi-select surface (AS-068): the live segments become selectable items
+// (largest first, so the biggest consumers lead), the excluded blocks become the
+// restorable archive, and the Preview/Apply/Restore closures run the same
+// projection + clean engine as the typed /clean path — so the in-panel
+// selection and `/clean <handle>` can never disagree about what a removal does.
+func (s *chatSession) buildCleanSelector() *command.Selector {
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model := s.model
+	table := s.pricing
+	s.mu.Unlock()
+
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	comp := composition.Build(proj, table, model, time.Now(), composition.SortSize)
+
+	items := make([]command.SelectItem, 0, len(comp.Segments))
+	for _, seg := range comp.Segments {
+		items = append(items, command.SelectItem{Label: selectLabel(seg), Value: seg.ID})
+	}
+	archive := make([]command.SelectItem, 0, len(comp.Excluded))
+	for _, seg := range comp.Excluded {
+		archive = append(archive, command.SelectItem{Label: selectLabel(seg), Value: seg.ID})
+	}
+	return &command.Selector{
+		Title:   "Clean the context window",
+		Items:   items,
+		Archive: archive,
+		Preview: s.cleanSelectPreview,
+		Apply:   s.cleanSelectApply,
+		Restore: s.cleanSelectRestore,
+	}
+}
+
+// selectLabel formats one segment as a fixed-width row for the selector list,
+// showing the handle, display group, origin and estimated token share.
+func selectLabel(seg composition.Segment) string {
+	return fmt.Sprintf("%-13s %-13s %-24s %6d tok",
+		composition.Handle(seg.ID), seg.Group, clip(seg.Origin, 24), seg.Tokens)
+}
+
+// clip shortens s to at most n runes, ending in an ellipsis when it was longer,
+// so a long path or tool name can't stretch the selector rows out of alignment.
+func clip(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n <= 1 {
+		return string(r[:n])
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// cleanSelectPreview computes the live reclaim feedback for the selector's
+// current selection (AS-068): it runs the same clean.Preview the typed path
+// does, so the tokens/$ shown as the selection changes match exactly, including
+// atomic tool-call/result pairing. It mutates nothing.
+func (s *chatSession) cleanSelectPreview(values []string) command.SelectPreview {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(values) == 0 {
+		return command.SelectPreview{Summary: "Nothing selected"}
+	}
+	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
+	plan := clean.Preview(proj, s.pricing, s.model, time.Now(), values)
+	if plan.Empty() {
+		return command.SelectPreview{Summary: "Nothing selected"}
+	}
+	summary := fmt.Sprintf("Selected %s · %d tok reclaimed", pluralSegments(len(plan.Items)), plan.Tokens)
+	if plan.Priced {
+		summary += fmt.Sprintf(" (%s%s)", plan.Currency, strconv.FormatFloat(plan.CostUSD, 'f', 4, 64))
+	}
+	return command.SelectPreview{Summary: summary, Warnings: plan.Warnings}
+}
+
+// cleanSelectApply commits the selector's checked items as one removal through
+// the existing clean.Apply path — a single appended exclusion event (AS-068 AC2)
+// — and returns the result line the face surfaces.
+func (s *chatSession) cleanSelectApply(values []string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
+	plan := clean.Preview(proj, s.pricing, s.model, time.Now(), values)
+	event, ok := clean.Apply(plan)
+	if !ok {
+		return "Nothing to remove — no live segment matched the selection."
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return "Couldn't apply the removal: " + err.Error()
+	}
+	return fmt.Sprintf("Removed %s from the window, reclaiming %d tokens. Restore with /clean --undo.",
+		pluralSegments(len(plan.Items)), plan.Tokens)
+}
+
+// cleanSelectRestore re-includes a single excluded block from the archive
+// (AS-068 AC3) through clean.RestoreBlock, leaving every other removal in place.
+func (s *chatSession) cleanSelectRestore(value string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	restore, ok := clean.RestoreBlock(s.sess.Log.Events(), value)
+	if !ok {
+		return "That block isn't excluded, so there's nothing to restore."
+	}
+	for _, e := range restore {
+		if _, err := s.sess.Log.Append(e); err != nil {
+			return "Couldn't restore the block: " + err.Error()
+		}
+	}
+	return "Restored 1 segment to the window."
 }
 
 // cleanPreview stages a removal: it projects the live window, builds the plan,
@@ -312,6 +427,8 @@ func pluralSegments(n int) string {
 
 const cleanUsage = `/clean removes segments from the model's context window.
 
+  /clean             open the interactive selector (TUI): pick segments to remove
+                     and restore excluded ones, with a live reclaim preview
   /clean <handle>…   preview removing the named segments (handles come from /context)
   /clean --apply     confirm the previewed removal
   /clean --undo      restore the most recent removal

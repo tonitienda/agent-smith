@@ -81,6 +81,77 @@ func liveContains(t *testing.T, ctl *chatSession, id string) bool {
 	return false
 }
 
+// TestCleanSelectorBuildsAndApplies covers AS-068: the no-arg /clean exposes an
+// interactive selector whose live segments are selectable, whose Apply commits
+// the selection as one exclusion through the same engine, and whose Restore
+// re-includes a single excluded block from the archive.
+func TestCleanSelectorBuildsAndApplies(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserTextID(t, ctl, "blk_keepme00", "keep this one")
+	appendUserTextID(t, ctl, "blk_dropme00", strings.Repeat("drop this content ", 20))
+
+	out, err := ctl.cmdClean(context.TODO(), nil)
+	if err != nil {
+		t.Fatalf("/clean (no args): %v", err)
+	}
+	if out.Selector == nil {
+		t.Fatal("no-arg /clean did not offer an interactive selector")
+	}
+	// The live segments are selectable items (no archive yet).
+	var dropValue string
+	for _, it := range out.Selector.Items {
+		if it.Value == "blk_dropme00" {
+			dropValue = it.Value
+		}
+	}
+	if dropValue == "" {
+		t.Fatalf("selector items missing blk_dropme00: %+v", out.Selector.Items)
+	}
+
+	// Preview is live and mutates nothing.
+	before := ctl.sess.Log.Len()
+	prev := out.Selector.Preview([]string{dropValue})
+	if !strings.Contains(prev.Summary, "tok reclaimed") {
+		t.Fatalf("preview summary = %q, want a reclaim figure", prev.Summary)
+	}
+	if ctl.sess.Log.Len() != before {
+		t.Fatal("Preview mutated the log")
+	}
+
+	// Apply removes the block via one appended exclusion.
+	msg := out.Selector.Apply([]string{dropValue})
+	if !strings.Contains(msg, "Removed") {
+		t.Fatalf("apply result = %q", msg)
+	}
+	if liveContains(t, ctl, "blk_dropme00") {
+		t.Fatal("blk_dropme00 still live after selector apply")
+	}
+	if ctl.sess.Log.Len() != before+1 {
+		t.Fatalf("apply appended %d events, want 1", ctl.sess.Log.Len()-before)
+	}
+
+	// The excluded block now appears in a fresh selector's archive and restores.
+	out2, err := ctl.cmdClean(context.TODO(), nil)
+	if err != nil {
+		t.Fatalf("/clean (no args) after apply: %v", err)
+	}
+	var archived bool
+	for _, it := range out2.Selector.Archive {
+		if it.Value == "blk_dropme00" {
+			archived = true
+		}
+	}
+	if !archived {
+		t.Fatalf("excluded block missing from archive: %+v", out2.Selector.Archive)
+	}
+	if rmsg := out2.Selector.Restore("blk_dropme00"); !strings.Contains(rmsg, "Restored") {
+		t.Fatalf("restore result = %q", rmsg)
+	}
+	if !liveContains(t, ctl, "blk_dropme00") {
+		t.Fatal("blk_dropme00 not restored to the window")
+	}
+}
+
 // TestCleanPreviewApplyUndo covers the /clean wiring (AS-028): a preview stages
 // the removal without touching the log, --apply drops the block from the window
 // via an appended exclusion, and --undo restores it exactly.
