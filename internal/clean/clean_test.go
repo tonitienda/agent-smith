@@ -173,6 +173,15 @@ func TestResolveByPrefix(t *testing.T) {
 	if p := preview(events, "abc1"); len(p.Items) != 1 || p.Items[0].ID != "blk_abc1" {
 		t.Errorf("prefix abc1 -> %v, want blk_abc1", p.IDs())
 	}
+	// An exact ID that is also a prefix of a longer ID still wins outright.
+	exact := []schema.Block{
+		text("blk_abc12", schema.RoleUser, 40, 30),
+		text("blk_abc123", schema.RoleAssistant, 80, 25),
+	}
+	if p := preview(exact, "abc12"); len(p.Items) != 1 || p.Items[0].ID != "blk_abc12" {
+		t.Errorf("exact handle abc12 -> %v, want blk_abc12", p.IDs())
+	}
+
 	// Ambiguous prefix matches two blocks: rejected, reported unknown.
 	p := preview(events, "ab")
 	if !p.Empty() {

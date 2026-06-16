@@ -116,18 +116,22 @@ func Preview(proj *projection.Projection, table *cost.Table, model string, now t
 		}
 	}
 
+	// direct records the IDs a selector named, so an item pulled in only to keep a
+	// pair atomic is flagged Paired without re-resolving the selectors per item.
+	direct := make(map[string]bool, len(selectors))
 	for _, sel := range selectors {
 		id, ok := resolve(sel, comp.Segments)
 		if !ok {
 			plan.Unknown = append(plan.Unknown, sel)
 			continue
 		}
+		direct[id] = true
 		add(id, false)
 	}
 
 	for _, id := range order {
 		s := live[id]
-		it := Item{ID: id, Kind: s.Kind, Origin: s.Origin, Tokens: s.Tokens, CostUSD: s.CostUSD, Age: s.Age, Paired: !chosenDirectly(id, selectors, comp.Segments)}
+		it := Item{ID: id, Kind: s.Kind, Origin: s.Origin, Tokens: s.Tokens, CostUSD: s.CostUSD, Age: s.Age, Paired: !direct[id]}
 		plan.Items = append(plan.Items, it)
 		plan.Tokens += s.Tokens
 		plan.CostUSD += s.CostUSD
@@ -142,17 +146,6 @@ func Preview(proj *projection.Projection, table *cost.Table, model string, now t
 		}
 	}
 	return plan
-}
-
-// chosenDirectly reports whether id was named by a selector (vs pulled in to
-// keep a pair atomic), so the preview can mark partner blocks.
-func chosenDirectly(id string, selectors []string, segs []composition.Segment) bool {
-	for _, sel := range selectors {
-		if got, ok := resolve(sel, segs); ok && got == id {
-			return true
-		}
-	}
-	return false
 }
 
 // Apply builds the exclusion event that removes the plan's blocks from the
@@ -258,8 +251,11 @@ func resolve(selector string, segs []composition.Segment) (string, bool) {
 	var match string
 	n := 0
 	for _, s := range segs {
-		if s.ID == sel {
-			return s.ID, true // exact wins outright
+		// An exact ID (with or without the blk_ prefix) wins outright, even when
+		// it is also a prefix of a longer ID — otherwise a fully-typed handle that
+		// happens to prefix another segment would read as ambiguous.
+		if s.ID == sel || s.ID == idPrefix+sel {
+			return s.ID, true
 		}
 		if strings.HasPrefix(s.ID, sel) || strings.HasPrefix(s.ID, idPrefix+sel) {
 			match = s.ID
