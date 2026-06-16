@@ -308,8 +308,12 @@ func resolvePrompt(c *cli.Context, file string) (string, error) {
 }
 
 // readTrim reads r fully and trims surrounding whitespace; an empty result is
-// allowed (callers decide whether emptiness is an error).
+// allowed (callers decide whether emptiness is an error). A nil reader is treated
+// as empty rather than panicking, so a face that leaves Stdin unset is safe.
 func readTrim(r io.Reader) (string, error) {
+	if r == nil {
+		return "", nil
+	}
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return "", fmt.Errorf("read prompt: %w", err)
