@@ -1,7 +1,7 @@
 ---
 id: AS-070
 title: "smith <cmd> --help omits command-specific flags"
-status: ready-to-implement
+status: done
 github_issue: 115
 depends_on: [AS-065]
 area: faces
@@ -11,7 +11,7 @@ source: AS-065 follow-on; Copilot review on PR #111
 
 # AS-070 · `smith <cmd> --help` omits command-specific flags
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -29,12 +29,12 @@ already covers) so they aren't listed twice. The same data should feed the
 
 ## Acceptance criteria
 
-- [ ] `smith run --help` lists `-f`; `smith tui --help` lists `--resume` and
+- [x] `smith run --help` lists `-f`; `smith tui --help` lists `--resume` and
   `--no-splash`; `smith config set --help` lists `--user`.
-- [ ] Command-specific flags render in their own block, distinct from the global
+- [x] Command-specific flags render in their own block, distinct from the global
   flags, with no duplication of the globals.
-- [ ] `--help --output json` includes the command-specific flags.
-- [ ] A test asserts a leaf with custom flags shows them in both text and JSON help.
+- [x] `--help --output json` includes the command-specific flags.
+- [x] A test asserts a leaf with custom flags shows them in both text and JSON help.
 
 ## Dependencies
 
