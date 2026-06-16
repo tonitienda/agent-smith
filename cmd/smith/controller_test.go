@@ -56,6 +56,111 @@ func appendUserText(t *testing.T, ctl *chatSession, text string) {
 	}
 }
 
+// appendUserTextID writes a user text block with a chosen ID so a test can name
+// the /clean handle to select.
+func appendUserTextID(t *testing.T, ctl *chatSession, id, text string) {
+	t.Helper()
+	_, err := ctl.sess.Log.Append(schema.Block{
+		ID:   id,
+		Kind: schema.KindText,
+		Role: schema.RoleUser,
+		Text: &schema.TextBody{Text: text, Subtype: schema.TextSubtypeNormal},
+	})
+	if err != nil {
+		t.Fatalf("append: %v", err)
+	}
+}
+
+func liveContains(t *testing.T, ctl *chatSession, id string) bool {
+	t.Helper()
+	for _, b := range projection.Project(ctl.sess.Log.Events(), projection.Options{}).Live() {
+		if b.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// TestCleanPreviewApplyUndo covers the /clean wiring (AS-028): a preview stages
+// the removal without touching the log, --apply drops the block from the window
+// via an appended exclusion, and --undo restores it exactly.
+func TestCleanPreviewApplyUndo(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserTextID(t, ctl, "blk_keepme00", "keep this one")
+	appendUserTextID(t, ctl, "blk_dropme00", strings.Repeat("drop this content ", 20))
+
+	before := ctl.sess.Log.Len()
+	out, err := ctl.cmdClean(context.TODO(), []string{"blk_dropme00"})
+	if err != nil {
+		t.Fatalf("/clean preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Preview") || !strings.Contains(out.Text, "reclaim") {
+		t.Errorf("preview missing its summary:\n%s", out.Text)
+	}
+	if ctl.sess.Log.Len() != before {
+		t.Fatal("/clean preview must not append to the log")
+	}
+	if ctl.pendingClean == nil {
+		t.Fatal("/clean preview did not stage a pending plan")
+	}
+
+	if _, err := ctl.cmdClean(context.TODO(), []string{"--apply"}); err != nil {
+		t.Fatalf("/clean --apply: %v", err)
+	}
+	if liveContains(t, ctl, "blk_dropme00") {
+		t.Error("block still live after /clean --apply")
+	}
+	if !liveContains(t, ctl, "blk_keepme00") {
+		t.Error("unrelated block dropped by /clean --apply")
+	}
+	if ctl.pendingClean != nil {
+		t.Error("pending plan not cleared after apply")
+	}
+
+	if _, err := ctl.cmdClean(context.TODO(), []string{"--undo"}); err != nil {
+		t.Fatalf("/clean --undo: %v", err)
+	}
+	if !liveContains(t, ctl, "blk_dropme00") {
+		t.Error("block not restored after /clean --undo")
+	}
+}
+
+// TestCleanCancelAndInvalidation covers the staging guards: --cancel discards a
+// preview, and a session swap (/clear) invalidates a staged plan so --apply can
+// never remove blocks from the wrong log.
+func TestCleanCancelAndInvalidation(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserTextID(t, ctl, "blk_target00", strings.Repeat("content ", 20))
+
+	if _, err := ctl.cmdClean(context.TODO(), []string{"blk_target00"}); err != nil {
+		t.Fatalf("/clean preview: %v", err)
+	}
+	if _, err := ctl.cmdClean(context.TODO(), []string{"--cancel"}); err != nil {
+		t.Fatalf("/clean --cancel: %v", err)
+	}
+	if ctl.pendingClean != nil {
+		t.Error("--cancel did not clear the pending plan")
+	}
+
+	// Stage again, then swap sessions; --apply must refuse the stale plan.
+	if _, err := ctl.cmdClean(context.TODO(), []string{"blk_target00"}); err != nil {
+		t.Fatalf("/clean preview: %v", err)
+	}
+	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
+		t.Fatalf("/clear: %v", err)
+	}
+	out, err := ctl.cmdClean(context.TODO(), []string{"--apply"})
+	if err != nil {
+		t.Fatalf("/clean --apply after /clear: %v", err)
+	}
+	if !strings.Contains(out.Text, "no longer valid") {
+		t.Errorf("stale apply should be refused, got:\n%s", out.Text)
+	}
+	if ctl.sess.Log.Len() != 0 {
+		t.Error("stale --apply must not append to the fresh session log")
+	}
+}
+
 // TestContextComposition covers the /context wiring (AS-026): the command runs
 // over the live session log with no model call and renders the composition panel
 // reflecting what was appended.
