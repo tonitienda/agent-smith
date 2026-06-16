@@ -1,7 +1,7 @@
 ---
 id: AS-040
 title: /goal — explicit session objective that anchors insights
-status: ready-to-implement
+status: done
 github_issue: 40
 depends_on: [AS-006, AS-022]
 area: commands
@@ -11,7 +11,7 @@ source: PRD.md §7.16, Appendix A
 
 # AS-040 · /goal
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -23,10 +23,16 @@ New power command (§7.16): set/track an explicit objective that anchors the ses
 
 ## Acceptance criteria
 
-- [ ] Goal is visible in the status line and to the model (verifiable: the model can state the goal when asked).
-- [ ] Goal changes are events with timestamps — full history reconstructable.
-- [ ] The pinned goal block does not break cache prefix stability when set mid-session (it appends; it doesn't reorder existing blocks).
-- [ ] Goal data is exposed in the session metadata for AS-045 to consume.
+- [x] Goal is visible in the status line and to the model (verifiable: the model can state the goal when asked). The goal is a `system`-role text block that projects live into the window; `TestGoalBlockIsLiveAndModelFacing` asserts it, and `goalLabel` renders it persistently in the TUI status line.
+- [x] Goal changes are events with timestamps — full history reconstructable. Setting appends a goal block; replacing/`done` append an exclusion that retires the prior goal. `goal.History` rebuilds the full ordered history from the log alone.
+- [x] The pinned goal block does not break cache prefix stability when set mid-session (it appends; it doesn't reorder existing blocks). `TestSetAppendsWithoutReorder` asserts earlier live blocks are unmoved.
+- [x] Goal data is exposed in the session metadata for AS-045 to consume — via `goal.Current` / `goal.History` over the event log, **not** a stored `Metadata` field. The session `Metadata` deliberately holds only fields that are *not* reconstructible from the event stream (see `internal/session`); the goal is reconstructable, so the event log is its source of truth and the `goal` package is the API AS-045 reads.
+
+## Implementation notes
+
+- New `internal/goal` package: `Set` (append a `Session goal: …` system text block), `Retire` (exclusion event), `Current`/`History`/`Render` (pure functions over the event log, deriving liveness from the projection).
+- `/goal` registered in `cmd/smith` (`cmdGoal`); `"<objective>"` sets/replaces, no-arg shows current + history, `done` completes. Exactly one goal stays live at a time; D3 keeps all history on the log.
+- Status line: `tui.Meta.Goal` + `goalLabel` (truncated) in `internal/tui`.
 
 ## Dependencies
 

@@ -73,6 +73,9 @@ type Meta struct {
 	// Project labels the working context in the startup header (D-TUI-10); empty
 	// is fine and is simply omitted.
 	Project string
+	// Goal is the active session objective (AS-040), shown persistently in the
+	// status line; empty when no goal is set, and simply omitted then.
+	Goal string
 }
 
 // MetaFunc yields the current session identity for the status line. It is

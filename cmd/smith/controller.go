@@ -14,6 +14,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/projection"
@@ -74,6 +75,14 @@ type chatSession struct {
 	meterLen   int
 	meterModel string
 	meterCache tui.Meter
+
+	// goal memo: the active session objective (AS-040), recomputed only when the
+	// active log or its length changes. Meta() runs on every token delta (via
+	// refreshMeter), so without this the goal projection would re-run dozens of
+	// times a second; this keeps that refresh O(1) like the meter.
+	goalLog   *eventlog.Log
+	goalLen   int
+	goalCache string
 }
 
 // newChatSession builds the controller over an already-opened session, wiring
@@ -143,7 +152,76 @@ func (s *chatSession) Run(ctx context.Context, userText string) (loop.Result, er
 func (s *chatSession) Meta() tui.Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return tui.Meta{Provider: s.provName, Model: s.model, Session: shortID(s.sess.ID), Project: s.project}
+	return tui.Meta{
+		Provider: s.provName,
+		Model:    s.model,
+		Session:  shortID(s.sess.ID),
+		Project:  s.project,
+		Goal:     s.currentGoal(),
+	}
+}
+
+// currentGoal returns the active session objective for the status line (AS-040),
+// memoized on the active log and its length so the per-delta status refresh
+// (refreshMeter → Meta) stays O(1); the goal projection only re-runs when the
+// log grows or is swapped (/clear, /resume). Callers must hold s.mu.
+func (s *chatSession) currentGoal() string {
+	log := s.sess.Log
+	if log == s.goalLog && log.Len() == s.goalLen {
+		return s.goalCache
+	}
+	objective := ""
+	if g, ok := goal.Current(log.Events()); ok {
+		objective = g.Objective
+	}
+	s.goalLog, s.goalLen, s.goalCache = log, log.Len(), objective
+	return objective
+}
+
+// cmdGoal sets, shows, or completes the session objective (AS-040 /goal). The
+// goal lives on the event log as a model-facing block (D3): setting it appends a
+// goal block, replacing it or `/goal done` retires the prior goal with an
+// exclusion, and the whole history is reconstructable from events — so /insights
+// (AS-045) reads it straight from the session with no separate stored state.
+//
+//   - /goal "<objective>"  set (or replace) the session goal
+//   - /goal                show the current goal and its history
+//   - /goal done           mark the goal complete (retires it from the window)
+func (s *chatSession) cmdGoal(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+
+	if len(args) == 0 {
+		return command.Output{Text: goal.Render(events)}, nil
+	}
+
+	if len(args) == 1 && strings.EqualFold(args[0], "done") {
+		cur, ok := goal.Current(events)
+		if !ok {
+			return command.Output{Text: "No active goal to complete."}, nil
+		}
+		if _, err := s.sess.Log.Append(goal.Retire(cur.BlockID)); err != nil {
+			return command.Output{}, fmt.Errorf("record goal completion: %w", err)
+		}
+		return command.Output{Text: "Goal completed: " + cur.Objective}, nil
+	}
+
+	objective := strings.TrimSpace(strings.Join(args, " "))
+	if objective == "" {
+		return command.Output{}, fmt.Errorf(`/goal needs an objective, e.g. /goal "ship the parser"`)
+	}
+	// Retire the active goal first so exactly one goal stays live in the window;
+	// the retired block remains on the log (history is never mutated, D3).
+	if cur, ok := goal.Current(events); ok {
+		if _, err := s.sess.Log.Append(goal.Retire(cur.BlockID)); err != nil {
+			return command.Output{}, fmt.Errorf("retire previous goal: %w", err)
+		}
+	}
+	if _, err := s.sess.Log.Append(goal.Set(objective)); err != nil {
+		return command.Output{}, fmt.Errorf("record goal: %w", err)
+	}
+	return command.Output{Text: "Goal set: " + objective}, nil
 }
 
 // Meter computes the context/cost snapshot for the status line (tui.MeterFunc)
