@@ -20,6 +20,10 @@ import (
 // (the command wiring closes over the session), so this surface holds only data
 // and never imports the projection/clean packages (the AS-021 boundary).
 type selector struct {
+	// cmd is the originating command's name, captured when the surface opens, so
+	// the applied/restored result renders under the right header even though
+	// command.Selector is a generic surface (not tied to /clean).
+	cmd     string
 	sel     command.Selector
 	cursor  int                   // index across Items then Archive
 	checked map[string]bool       // selected Item Values
@@ -29,10 +33,11 @@ type selector struct {
 // selectorOpen reports whether an interactive selector is showing.
 func (m model) selectorOpen() bool { return m.selector != nil }
 
-// openSelector shows s as the interactive selection surface and seeds the live
-// preview for the empty (nothing selected yet) state.
-func (m *model) openSelector(s command.Selector) {
-	sl := &selector{sel: s, checked: map[string]bool{}}
+// openSelector shows s as the interactive selection surface for the command
+// named cmdName and seeds the live preview for the empty (nothing selected yet)
+// state.
+func (m *model) openSelector(cmdName string, s command.Selector) {
+	sl := &selector{cmd: cmdName, sel: s, checked: map[string]bool{}}
 	if s.Preview != nil {
 		sl.preview = s.Preview(nil)
 	}
@@ -119,8 +124,9 @@ func (m model) applySelection() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	result := s.sel.Apply(vals)
+	name := s.cmd
 	m.closeSelector()
-	m.appendSegment(segment{kind: segCommand, toolName: "clean", text: result, done: true})
+	m.appendSegment(segment{kind: segCommand, toolName: name, text: result, done: true})
 	return m, nil
 }
 
@@ -133,8 +139,9 @@ func (m model) restoreUnderCursor() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	result := s.sel.Restore(s.sel.Archive[i].Value)
+	name := s.cmd
 	m.closeSelector()
-	m.appendSegment(segment{kind: segCommand, toolName: "clean", text: result, done: true})
+	m.appendSegment(segment{kind: segCommand, toolName: name, text: result, done: true})
 	return m, nil
 }
 

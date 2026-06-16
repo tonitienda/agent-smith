@@ -230,7 +230,7 @@ func (m model) finishCommand(msg commandDoneMsg) model {
 	// A face shows it instead of the command's text; a non-interactive face would
 	// have ignored Selector and rendered Text.
 	if msg.out.Selector != nil && (len(msg.out.Selector.Items) > 0 || len(msg.out.Selector.Archive) > 0) {
-		m.openSelector(*msg.out.Selector)
+		m.openSelector(msg.cmd.Name, *msg.out.Selector)
 		return m
 	}
 	// A session-resetting command (/clear, /resume) rebuilds the transcript from
