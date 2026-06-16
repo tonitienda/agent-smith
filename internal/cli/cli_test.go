@@ -239,6 +239,46 @@ func TestCommandSpecificFlag(t *testing.T) {
 	}
 }
 
+func TestCommandHelpShowsCommandSpecificFlags(t *testing.T) {
+	app, out, _, _ := newTestApp(false, false)
+	app.Commands = append(app.Commands, &Command{
+		Name:    "tag",
+		Summary: "tag something",
+		Flags: func(fs *flag.FlagSet) {
+			fs.String("name", "", "a name")
+			fs.Bool("force", false, "skip confirmation")
+		},
+		Run: func(*Context) error { return nil },
+	})
+
+	// Text help lists the command flags in their own block, distinct from globals.
+	if code := app.Run([]string{"tag", "--help"}); code != ExitOK {
+		t.Fatalf("tag --help exit = %d", code)
+	}
+	text := out.String()
+	for _, want := range []string{"\nFlags:\n", "--name", "a name", "--force", "skip confirmation", "Global flags:"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text help missing %q:\n%s", want, text)
+		}
+	}
+	// The globals must not be duplicated into the command block.
+	if strings.Count(text, "--output") != 1 {
+		t.Errorf("globals duplicated into command flags:\n%s", text)
+	}
+
+	// JSON help carries the same flags.
+	out.Reset()
+	if code := app.Run([]string{"tag", "--help", "--output", "json"}); code != ExitOK {
+		t.Fatalf("tag --help --output json exit = %d", code)
+	}
+	js := out.String()
+	for _, want := range []string{`"flags"`, `"name": "name"`, `"name": "force"`, `"default": "false"`} {
+		if !strings.Contains(js, want) {
+			t.Errorf("json help missing %q:\n%s", want, js)
+		}
+	}
+}
+
 func TestColorAutoRespectsTTYAndNoColor(t *testing.T) {
 	// Off a TTY → no color even on auto.
 	app, _, _, _ := newTestApp(false, false)

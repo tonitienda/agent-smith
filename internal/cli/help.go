@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"strings"
 )
@@ -51,6 +52,7 @@ func (a *App) commandHelp(cmd *Command, path string) string {
 			fmt.Fprintf(&b, "  %s\n", ex)
 		}
 	}
+	b.WriteString(commandFlagsHelp(cmd))
 	b.WriteString("\nGlobal flags:\n")
 	b.WriteString(globalFlagsHelp())
 	return b.String()
@@ -69,6 +71,17 @@ type helpEntry struct {
 	Reason        string   `json:"reason,omitempty"`
 	OutputSchema  string   `json:"outputSchema,omitempty"`
 	Examples      []string `json:"examples,omitempty"`
+	// Flags lists the command-specific flags (globals are documented once, on the
+	// root help — they're not repeated per command, AS-070).
+	Flags []flagEntry `json:"flags,omitempty"`
+}
+
+// flagEntry is one command-specific flag in `--help --output json`. Name is the
+// bare flag (no dashes); Default is the stringified zero value, omitted when empty.
+type flagEntry struct {
+	Name    string `json:"name"`
+	Usage   string `json:"usage"`
+	Default string `json:"default,omitempty"`
 }
 
 // writeCommandHelpJSON emits the command's registry entry as JSON to stdout.
@@ -82,7 +95,54 @@ func (a *App) writeCommandHelpJSON(cmd *Command, path string) error {
 		OutputSchema:  cmd.OutputSchema,
 		Examples:      cmd.Examples,
 	}
+	for _, f := range commandFlags(cmd) {
+		_, usage := flag.UnquoteUsage(f)
+		entry.Flags = append(entry.Flags, flagEntry{Name: f.Name, Usage: usage, Default: f.DefValue})
+	}
 	return writeJSON(a.Stdout, entry, "  ")
+}
+
+// commandFlags collects a leaf's command-specific flags by registering them on a
+// throwaway FlagSet — the globals (registerGlobals) are documented separately, so
+// only the command's own Flags are visited here.
+func commandFlags(cmd *Command) []*flag.Flag {
+	if cmd.Flags == nil {
+		return nil
+	}
+	fs := flag.NewFlagSet(cmd.Name, flag.ContinueOnError)
+	cmd.Flags(fs)
+	var out []*flag.Flag
+	fs.VisitAll(func(f *flag.Flag) { out = append(out, f) })
+	return out
+}
+
+// commandFlagsHelp renders the command-specific flags block, or "" when the
+// command has none. A single-rune flag prints as -f, longer names as --resume.
+func commandFlagsHelp(cmd *Command) string {
+	flags := commandFlags(cmd)
+	if len(flags) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nFlags:\n")
+	for _, f := range flags {
+		name, usage := flag.UnquoteUsage(f)
+		left := flagDash(f.Name)
+		if name != "" {
+			left += " " + name
+		}
+		fmt.Fprintf(&b, "  %-33s %s\n", left, usage)
+	}
+	return b.String()
+}
+
+// flagDash prefixes a flag name with the dash count its length implies: -h for a
+// single rune, --help otherwise.
+func flagDash(name string) string {
+	if len([]rune(name)) == 1 {
+		return "-" + name
+	}
+	return "--" + name
 }
 
 // writeCommandList prints an aligned "name  summary" block for a command set.
