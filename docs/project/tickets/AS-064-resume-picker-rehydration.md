@@ -1,7 +1,7 @@
 ---
 id: AS-064
 title: "/resume interactive picker + transcript rehydration"
-status: ready-to-implement
+status: done
 github_issue: 97
 depends_on: [AS-023, AS-024]
 area: tui
@@ -37,13 +37,27 @@ rendering surface (AS-024) gives a place to hang rehydrated history:
 
 ## Acceptance criteria
 
-- [ ] `/resume` with no arg opens an interactive list; Enter loads the highlighted
+- [x] `/resume` with no arg opens an interactive list; Enter loads the highlighted
   session; Esc cancels without changing the active session.
-- [ ] After resume, the transcript shows the loaded session's prior turns rendered
+- [x] After resume, the transcript shows the loaded session's prior turns rendered
   the same way they were live (text, tool calls, diffs).
-- [ ] The ID forms (`/resume <id>`, `smith --resume <id>`) still work unchanged.
-- [ ] Rehydration is pure projection (no model calls) and the post-resume meter
+- [x] The ID forms (`/resume <id>`, `smith --resume <id>`) still work unchanged.
+- [x] Rehydration is pure projection (no model calls) and the post-resume meter
   matches the restored session's last live state.
+
+## Implementation notes
+
+- The no-arg `/resume` handler now returns both the scriptable text listing
+  (Output.Text, for `smith session list`) and an additive `command.Picker`
+  (Output.Picker). A non-interactive face ignores the picker; the TUI opens it
+  as a single-select list bound to the originating command, so choosing an item
+  re-dispatches the exact `/resume <id>` path — no new load logic.
+- Transcript rehydration is a `RehydrateFunc` seam (`tui.WithRehydrate`) that
+  yields the active session's projected **live** blocks. `segmentsFromBlocks`
+  folds those blocks into transcript segments the same way the live loop does
+  (reusing the AS-024 tool-card pairing), and `ResetView` plus a `--resume`
+  launch both rebuild the visible transcript through it. Pure projection at the
+  active model — no model calls — so the meter already matches.
 
 ## Dependencies
 

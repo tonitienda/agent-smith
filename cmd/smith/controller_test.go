@@ -323,6 +323,62 @@ func TestResumeListingAndUnknownID(t *testing.T) {
 	}
 }
 
+// TestResumeOffersPicker covers AC1's data path: the no-arg /resume returns an
+// interactive Picker alongside the scriptable text listing, with one item per
+// session whose Value is the full session ID to re-dispatch (the TUI turns the
+// list into a keyboard-navigable picker; the headless face renders the text).
+func TestResumeOffersPicker(t *testing.T) {
+	ctl := newTestController(t)
+	first := ctl.sess.ID
+	appendUserText(t, ctl, "first session work")
+	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
+		t.Fatalf("/clear: %v", err)
+	}
+	second := ctl.sess.ID
+
+	out := ctl.resumeList()
+	if out.Picker == nil {
+		t.Fatal("/resume offered no picker")
+	}
+	if len(out.Picker.Items) != 2 {
+		t.Fatalf("picker has %d items, want 2 sessions", len(out.Picker.Items))
+	}
+	got := map[string]bool{}
+	for _, it := range out.Picker.Items {
+		if it.Value == "" {
+			t.Error("picker item has empty Value; nothing to re-dispatch /resume with")
+		}
+		got[it.Value] = true
+	}
+	if !got[first] || !got[second] {
+		t.Errorf("picker missing a session: items=%v, want %s and %s", got, first, second)
+	}
+	if out.Text == "" {
+		t.Error("/resume dropped the scriptable text listing")
+	}
+}
+
+// TestRehydrateMatchesLiveProjection covers the rehydration data source (AC2/AC4):
+// the blocks the face replays are exactly the active session's live projection,
+// so a resumed transcript matches its last live state and a fresh session
+// rehydrates to nothing.
+func TestRehydrateMatchesLiveProjection(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserText(t, ctl, "a turn worth replaying")
+	want := projection.Project(ctl.sess.Log.Events(), projection.Options{TargetModel: ctl.model}).Live()
+	got := ctl.rehydrate()
+	if !blocksEqual(got, want) {
+		t.Errorf("rehydrate returned %d blocks, want the %d live blocks", len(got), len(want))
+	}
+
+	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
+		t.Fatalf("/clear: %v", err)
+	}
+	if fresh := ctl.rehydrate(); len(fresh) != 0 {
+		t.Errorf("a fresh session rehydrated %d blocks, want none", len(fresh))
+	}
+}
+
 // TestModelRejectsWildcardPattern guards that a pricing-table family pattern
 // can't become the active model (it would fail on the next turn).
 func TestModelRejectsWildcardPattern(t *testing.T) {

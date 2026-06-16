@@ -46,6 +46,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/schema"
 )
 
 // eventBuffer bounds the channel that carries loop UIEvents into the program.
@@ -84,11 +85,12 @@ type MetaFunc func() Meta
 // App owns the Bubble Tea program and the bridge that carries loop events into
 // it. Build it with New, hand Observer to the loop engine, then call Run.
 type App struct {
-	meta     MetaFunc
-	events   chan loop.UIEvent
-	commands *command.Registry
-	meter    MeterFunc
-	splash   bool
+	meta      MetaFunc
+	events    chan loop.UIEvent
+	commands  *command.Registry
+	meter     MeterFunc
+	splash    bool
+	rehydrate RehydrateFunc
 
 	// mu guards prog, which is set when Run starts the program. The permission
 	// Asker (Ask) runs on the turn goroutine and reads prog to deliver a prompt
@@ -105,6 +107,18 @@ type Option func(*App)
 // once it lands, serious mode (AS-053).
 func WithoutSplash() Option {
 	return func(a *App) { a.splash = false }
+}
+
+// RehydrateFunc returns the active session's projected live blocks so the face
+// can rebuild its visible transcript after a session swap (/clear, /resume) and
+// on a `--resume <id>` launch (AS-064). It is pure projection — no model calls —
+// and a nil RehydrateFunc simply leaves the transcript blank on a swap.
+type RehydrateFunc func() []schema.Block
+
+// WithRehydrate wires the projected-blocks source the face replays into its
+// transcript on a session swap and at launch (AS-064).
+func WithRehydrate(f RehydrateFunc) Option {
+	return func(a *App) { a.rehydrate = f }
 }
 
 // New builds an App for the given session-identity source and slash-command
@@ -141,7 +155,7 @@ func (a *App) Observer() loop.Observer {
 // until the user quits. It uses the alternate screen and mouse support so
 // scrollback and resize behave like a full-screen app.
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	a.mu.Lock()
 	a.prog = p

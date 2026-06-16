@@ -117,6 +117,70 @@ func (m *model) apply(ev loop.UIEvent) {
 	}
 }
 
+// segmentsFromBlocks rebuilds the visible transcript from a session's projected
+// live blocks, so a resumed (or relaunched-with --resume) session shows its
+// prior turns rendered exactly as they were live: user/assistant text,
+// reasoning, and tool calls paired with their results in the AS-024 card. It is
+// pure projection — no model calls — and mirrors apply's live folding so a
+// rehydrated turn is indistinguishable from one that just streamed (AS-064).
+func segmentsFromBlocks(blocks []schema.Block) []segment {
+	segs := make([]segment, 0, len(blocks))
+	for i := range blocks {
+		b := blocks[i]
+		switch b.Kind {
+		case schema.KindText:
+			if b.Text == nil || b.Text.Text == "" {
+				continue
+			}
+			kind := segAssistant
+			if b.Role == schema.RoleUser {
+				kind = segUser
+			}
+			segs = append(segs, segment{kind: kind, text: b.Text.Text, done: true})
+
+		case schema.KindReasoning:
+			if b.Reasoning == nil || b.Reasoning.Text == "" {
+				continue // encrypted/redacted reasoning has no visible body to replay
+			}
+			segs = append(segs, segment{kind: segReasoning, text: b.Reasoning.Text, done: true})
+
+		case schema.KindToolCall:
+			if b.ToolCall == nil {
+				continue
+			}
+			segs = append(segs, segment{
+				kind:     segTool,
+				toolName: b.ToolCall.Name,
+				toolID:   b.ToolCall.ToolUseID,
+				toolArgs: summarizeToolArgs(b.ToolCall.Arguments),
+			})
+
+		case schema.KindToolResult:
+			if b.ToolResult != nil {
+				foldToolResult(segs, b.ToolResult)
+			}
+		}
+	}
+	return segs
+}
+
+// foldToolResult attaches a recorded tool result to its pending call card,
+// mirroring apply's UIToolFinished handling so a replayed result settles the
+// card exactly as a live one does. A result with no matching call card (e.g. a
+// fused server-tool result) is ignored, as it is live.
+func foldToolResult(segs []segment, r *schema.ToolResultBody) {
+	for i := range segs {
+		s := &segs[i]
+		if s.kind == segTool && s.toolID == r.ToolUseID && !s.toolSettled {
+			s.toolDone = true
+			s.toolSettled = true
+			s.toolError = r.IsError
+			s.toolResult = toolResultText(r)
+			return
+		}
+	}
+}
+
 // toolIdentity pulls the tool name and call ID out of a tool event, tolerating a
 // nil payload.
 func toolIdentity(ev loop.UIEvent) (name, id string) {

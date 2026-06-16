@@ -68,6 +68,31 @@ type Output struct {
 	// the view reflects the fresh context rather than the previous session's.
 	// It is advisory and additive (D2): a face with no transcript may ignore it.
 	ResetView bool
+	// Picker, when non-nil, asks an interactive face to present a single-select
+	// list and, on choice, re-dispatch this same command with the chosen item's
+	// Value as its sole argument (AS-064 /resume picker). A non-interactive face
+	// (headless/CLI) ignores it and renders Text instead, so a handler returns
+	// both: the scriptable listing in Text and the interactive list in Picker.
+	// Advisory and additive (D2).
+	Picker *Picker
+}
+
+// Picker is an interactive single-select list a Handler offers to interactive
+// faces (AS-064). Choosing an item re-runs the originating command with the
+// item's Value as its only argument, so the picker is pure sugar over the
+// command's existing argument form (e.g. /resume <id>) — no new handler path.
+type Picker struct {
+	// Title labels the selection list.
+	Title string
+	// Items are the choices in display order.
+	Items []PickerItem
+}
+
+// PickerItem is one choice in a Picker: Label is the one-line display text and
+// Value is the argument handed back to the command when the item is chosen.
+type PickerItem struct {
+	Label string
+	Value string
 }
 
 // Handler runs a command with its parsed arguments and returns what to render.

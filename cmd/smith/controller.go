@@ -424,7 +424,7 @@ func (s *chatSession) modelListing() string {
 // the session last used so the window and cost meter match.
 func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Output, error) {
 	if len(args) == 0 {
-		return command.Output{Text: s.resumeListing()}, nil
+		return s.resumeList(), nil
 	}
 	id := strings.TrimSpace(args[0])
 	opened, err := s.store.Open(id)
@@ -460,17 +460,20 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 	}, nil
 }
 
-// resumeListing renders the project's sessions newest-first with the full ID to
-// pass to /resume, plus title, age, cost, size, and the models used (the shape
-// the ticket specifies). Cost is derived from each session's log through the
-// same accounting source as /cost.
-func (s *chatSession) resumeListing() string {
+// resumeList renders the project's sessions newest-first for both faces: a text
+// listing (the scriptable `smith session list`, with the full ID to pass to
+// /resume) and an interactive Picker the TUI opens so a session can be chosen
+// with the arrow keys and Enter instead of copy-pasting an ID (AS-064). Both are
+// built from the same per-session detail line, so the listing and the picker can
+// never disagree. Cost is derived from each session's log through the same
+// accounting source as /cost.
+func (s *chatSession) resumeList() command.Output {
 	summaries, err := s.store.List()
 	if err != nil {
-		return "Couldn't list sessions: " + err.Error()
+		return command.Output{Text: "Couldn't list sessions: " + err.Error()}
 	}
 	if len(summaries) == 0 {
-		return "No sessions yet for this project."
+		return command.Output{Text: "No sessions yet for this project."}
 	}
 
 	s.mu.Lock()
@@ -480,24 +483,49 @@ func (s *chatSession) resumeListing() string {
 	var b strings.Builder
 	b.WriteString("Sessions for this project (newest first) — /resume <id> to load one:\n\n")
 	now := time.Now()
+	items := make([]command.PickerItem, 0, len(summaries))
 	for _, sum := range summaries {
+		detail := s.sessionDetail(sum, now)
 		marker := "  "
+		label := shortID(sum.ID) + " · " + detail
 		if sum.ID == currentID {
 			marker = "▸ "
+			label += " (current)"
 		}
-		models := strings.Join(sum.Models, ", ")
-		if models == "" {
-			models = "—"
-		}
-		title := sum.Title
-		if title == "" {
-			title = "(untitled)"
-		}
-		fmt.Fprintf(&b, "%s%s\n", marker, sum.ID)
-		fmt.Fprintf(&b, "    %s · %d events · %s · %s · %s · %s\n",
-			title, sum.EventCount, humanAge(now.Sub(sum.UpdatedAt)), s.sessionCostLabel(sum.ID), humanBytes(sum.SizeBytes), models)
+		fmt.Fprintf(&b, "%s%s\n    %s\n", marker, sum.ID, detail)
+		items = append(items, command.PickerItem{Label: label, Value: sum.ID})
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return command.Output{
+		Text:   strings.TrimRight(b.String(), "\n"),
+		Picker: &command.Picker{Title: "Resume a session", Items: items},
+	}
+}
+
+// sessionDetail formats a session's one-line summary — title, event count, age,
+// cost, size, and the models used — shared by the /resume text listing and the
+// interactive picker so the two surfaces describe a session identically.
+func (s *chatSession) sessionDetail(sum session.Summary, now time.Time) string {
+	models := strings.Join(sum.Models, ", ")
+	if models == "" {
+		models = "—"
+	}
+	title := sum.Title
+	if title == "" {
+		title = "(untitled)"
+	}
+	return fmt.Sprintf("%s · %d events · %s · %s · %s · %s",
+		title, sum.EventCount, humanAge(now.Sub(sum.UpdatedAt)), s.sessionCostLabel(sum.ID), humanBytes(sum.SizeBytes), models)
+}
+
+// rehydrate returns the active session's projected live blocks for the face to
+// rebuild its visible transcript after a /clear or /resume (AS-064). It is pure
+// projection at the active model — no model calls — so a resumed session shows
+// its prior turns exactly as the window holds them, and a freshly cleared
+// session yields no blocks (an empty transcript).
+func (s *chatSession) rehydrate() []schema.Block {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model}).Live()
 }
 
 // sessionCostLabel computes a session's accrued cost for the /resume listing
