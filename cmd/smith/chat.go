@@ -26,10 +26,10 @@ import (
 // the starting model with SMITH_MODEL.
 const defaultModel = "claude-opus-4-8"
 
-// interactiveTerminal reports whether stdin and stdout are both a terminal, so
-// the full-screen chat face can run.
-func interactiveTerminal() bool {
-	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+// isTerminal reports whether f is attached to a terminal, used for TTY detection
+// (the bare-invocation TUI launch and output auto-detection, D-CLI-2/D-CLI-4).
+func isTerminal(f *os.File) bool {
+	return term.IsTerminal(int(f.Fd()))
 }
 
 // startChat wires the substrate — a persisted session log, the configured
