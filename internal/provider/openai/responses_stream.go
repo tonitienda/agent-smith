@@ -84,6 +84,11 @@ type responsesFrame struct {
 	// Top-level error event fields (type == "error").
 	Message string `json:"message"`
 	Code    string `json:"code"`
+	Error   *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    string `json:"code"`
+	} `json:"error"`
 }
 
 type responsesItem struct {

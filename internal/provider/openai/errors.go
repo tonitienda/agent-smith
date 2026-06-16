@@ -63,8 +63,17 @@ func mapChatErrorChunk(errType, errCode, errMsg string) *provider.Error {
 // mapResponsesErrorEvent builds a typed *provider.Error from a top-level
 // Responses "error" event.
 func mapResponsesErrorEvent(f *responsesFrame) *provider.Error {
-	kind := classify(0, "", f.Code, f.Message)
-	return provider.New(kind, "%s", errMessage("", f.Message, 0))
+	var errType, code, msg string
+	if f != nil && f.Error != nil {
+		errType = f.Error.Type
+		code = firstNonEmpty(f.Error.Code, f.Code)
+		msg = firstNonEmpty(f.Error.Message, f.Message)
+	} else if f != nil {
+		code = f.Code
+		msg = f.Message
+	}
+	kind := classify(0, errType, code, msg)
+	return provider.New(kind, "%s", errMessage(errType, msg, 0))
 }
 
 // mapResponsesFailure builds a typed *provider.Error from a "response.failed"

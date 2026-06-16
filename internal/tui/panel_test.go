@@ -23,6 +23,20 @@ func key(name string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyRight}
 	case "ctrl+g":
 		return tea.KeyMsg{Type: tea.KeyCtrlG}
+	case "ctrl+j":
+		return tea.KeyMsg{Type: tea.KeyCtrlJ}
+	case "ctrl+k":
+		return tea.KeyMsg{Type: tea.KeyCtrlK}
+	case "ctrl+n":
+		return tea.KeyMsg{Type: tea.KeyCtrlN}
+	case "ctrl+p":
+		return tea.KeyMsg{Type: tea.KeyCtrlP}
+	case "alt+enter":
+		return tea.KeyMsg{Type: tea.KeyEnter, Alt: true}
+	case "alt+j":
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j"), Alt: true}
+	case "alt+k":
+		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k"), Alt: true}
 	}
 	// Single-rune keys ("h", "$", …) arrive as KeyRunes.
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(name)}

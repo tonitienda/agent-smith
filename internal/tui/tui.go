@@ -155,11 +155,12 @@ func (a *App) Observer() loop.Observer {
 }
 
 // Run starts the interactive program driving turns through runner, and blocks
-// until the user quits. It uses the alternate screen and mouse support so
-// scrollback and resize behave like a full-screen app.
+// until the user quits. It uses the alternate screen so scrollback and resize
+// behave like a full-screen app. Mouse reporting stays off in V1 so terminal
+// text selection/copy keeps working (docs/project/TUI-UX.md D-TUI-12).
 func (a *App) Run(runner Runner) error {
 	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	a.mu.Lock()
 	a.prog = p
 	a.mu.Unlock()

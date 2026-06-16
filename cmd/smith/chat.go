@@ -54,6 +54,12 @@ func startChat(resumeID string, noSplash bool) error {
 	if err != nil {
 		return err
 	}
+	debugLog, err := openDebugLog(sess.Dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = debugLog.Close() }()
+	debugLog.Printf("interactive session start id=%s project=%q cwd=%q", sess.ID, wd, wd)
 
 	reg := tool.NewRegistry()
 	fs, err := builtin.NewFS(wd)
@@ -78,10 +84,10 @@ func startChat(resumeID string, noSplash bool) error {
 		return fmt.Errorf("load pricing table: %w", err)
 	}
 
-	providers := map[string]provider.Provider{
+	providers := wrapProvidersWithDebugLog(map[string]provider.Provider{
 		"anthropic": anthropic.New(""),
 		"openai":    openai.New(""),
-	}
+	}, debugLog)
 	// A resumed session keeps the model it last used so its window/cost meter
 	// matches; otherwise start on the configured default (Anthropic). The model is
 	// adopted only when its provider is configured, so the provider and model never

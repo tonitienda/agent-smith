@@ -226,6 +226,38 @@ func TestBuildResponsesInvalidToolArguments(t *testing.T) {
 	}
 }
 
+func TestBuildResponsesOrphanToolResultDegradesToMessage(t *testing.T) {
+	req := provider.Request{
+		Model: "gpt-5",
+		Context: []schema.Block{
+			{ID: "t1", Kind: schema.KindToolResult, Role: schema.RoleTool, ToolResult: &schema.ToolResultBody{
+				ToolUseID: "call_missing", Content: []schema.Part{{Type: "text", Text: "file body"}},
+			}},
+		},
+	}
+	w, err := buildResponsesRequest(req)
+	if err != nil {
+		t.Fatalf("buildResponsesRequest: %v", err)
+	}
+	if len(w.Input) != 1 {
+		t.Fatalf("input = %d items, want 1", len(w.Input))
+	}
+	msg, ok := w.Input[0].(responsesMessage)
+	if !ok {
+		t.Fatalf("input[0] = %#v, want responsesMessage", w.Input[0])
+	}
+	if msg.Role != "user" || len(msg.Content) != 1 {
+		t.Fatalf("message = %#v, want one user content part", msg)
+	}
+	part, ok := msg.Content[0].(responsesInputText)
+	if !ok {
+		t.Fatalf("content[0] = %#v, want responsesInputText", msg.Content[0])
+	}
+	if part.Text != "Tool result:\nfile body" {
+		t.Fatalf("text = %q, want degraded tool result text", part.Text)
+	}
+}
+
 // --- Responses streaming end-to-end ----------------------------------------
 
 func TestResponsesStreamTextTurn(t *testing.T) {

@@ -19,6 +19,9 @@ import (
 const (
 	inputHeight  = 3
 	statusHeight = 1
+	// transcriptScrollStep is the line delta for modifier-based transcript
+	// scrolling in work mode; page keys still scroll by a viewport page.
+	transcriptScrollStep = 3
 )
 
 // markdownRenderer renders final assistant text as a terminal-styled string.
@@ -142,13 +145,14 @@ func defaultPanelHotkeys() map[string]string {
 // shows the startup header.
 func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc) model {
 	ta := textarea.New()
-	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
+	ta.Placeholder = "Send a message (Enter to send, Alt+Enter for newline)…"
 	ta.Prompt = "┃ "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.SetHeight(inputHeight)
-	// Enter is reserved for submit (handled in Update); newlines go on Ctrl+J.
-	ta.KeyMap.InsertNewline.SetKeys("ctrl+j")
+	// Enter is reserved for submit (handled in Update); newline uses Alt+Enter
+	// because terminals don't reliably distinguish Shift+Enter from Enter.
+	ta.KeyMap.InsertNewline.SetKeys("alt+enter")
 	ta.Focus()
 
 	sp := spinner.New()
@@ -336,6 +340,14 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.viewport, cmd = m.viewport.Update(msg)
 		return m, cmd
+
+	case "alt+k", "ctrl+p", "ctrl+k":
+		m.viewport.ScrollUp(transcriptScrollStep)
+		return m, nil
+
+	case "alt+j", "ctrl+n", "ctrl+j":
+		m.viewport.ScrollDown(transcriptScrollStep)
+		return m, nil
 	}
 
 	var cmd tea.Cmd

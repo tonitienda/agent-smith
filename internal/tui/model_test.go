@@ -274,3 +274,100 @@ func TestViewRendersStatusAndTranscript(t *testing.T) {
 		}
 	}
 }
+
+func TestAltJKScrollTranscript(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.segs = append(m.segs, segment{
+		kind: segAssistant,
+		text: strings.Repeat("line\n", 80),
+		done: true,
+	})
+	m.refresh()
+	m.viewport.GotoBottom()
+	start := m.viewport.YOffset
+	if start == 0 {
+		t.Fatal("expected a scrollable transcript")
+	}
+
+	m = update(t, m, key("alt+k"))
+	if got := m.viewport.YOffset; got >= start {
+		t.Fatalf("alt+k did not scroll up: start=%d got=%d", start, got)
+	}
+
+	afterUp := m.viewport.YOffset
+	m = update(t, m, key("alt+j"))
+	if got := m.viewport.YOffset; got <= afterUp {
+		t.Fatalf("alt+j did not scroll down: afterUp=%d got=%d", afterUp, got)
+	}
+}
+
+func TestCtrlNPScrollTranscript(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.segs = append(m.segs, segment{
+		kind: segAssistant,
+		text: strings.Repeat("line\n", 80),
+		done: true,
+	})
+	m.refresh()
+	m.viewport.GotoBottom()
+	start := m.viewport.YOffset
+	if start == 0 {
+		t.Fatal("expected a scrollable transcript")
+	}
+
+	m = update(t, m, key("ctrl+p"))
+	if got := m.viewport.YOffset; got >= start {
+		t.Fatalf("ctrl+p did not scroll up: start=%d got=%d", start, got)
+	}
+
+	afterUp := m.viewport.YOffset
+	m = update(t, m, key("ctrl+n"))
+	if got := m.viewport.YOffset; got <= afterUp {
+		t.Fatalf("ctrl+n did not scroll down: afterUp=%d got=%d", afterUp, got)
+	}
+}
+
+func TestCtrlJKScrollTranscript(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.segs = append(m.segs, segment{
+		kind: segAssistant,
+		text: strings.Repeat("line\n", 80),
+		done: true,
+	})
+	m.refresh()
+	m.viewport.GotoBottom()
+	start := m.viewport.YOffset
+	if start == 0 {
+		t.Fatal("expected a scrollable transcript")
+	}
+
+	m = update(t, m, key("ctrl+k"))
+	if got := m.viewport.YOffset; got >= start {
+		t.Fatalf("ctrl+k did not scroll up: start=%d got=%d", start, got)
+	}
+
+	afterUp := m.viewport.YOffset
+	m = update(t, m, key("ctrl+j"))
+	if got := m.viewport.YOffset; got <= afterUp {
+		t.Fatalf("ctrl+j did not scroll down: afterUp=%d got=%d", afterUp, got)
+	}
+}
+
+func TestAltEnterInsertsNewline(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.textarea.SetValue("first")
+	m = update(t, m, key("alt+enter"))
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("o")})
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	m = update(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+
+	if got := m.textarea.Value(); got != "first\nsecond" {
+		t.Fatalf("alt+enter did not insert a newline: %q", got)
+	}
+	if m.busy {
+		t.Fatal("alt+enter should not submit the prompt")
+	}
+}

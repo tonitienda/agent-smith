@@ -1,0 +1,22 @@
+{
+  "allow": [
+    {
+      "tool": "glob"
+    },
+    {
+      "tool": "read",
+      "pattern": "README.md"
+    },
+    {
+      "tool": "grep"
+    },
+    {
+      "tool": "glob",
+      "pattern": "."
+    },
+    {
+      "tool": "grep",
+      "pattern": "."
+    }
+  ]
+}

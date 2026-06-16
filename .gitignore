@@ -8,3 +8,5 @@
 
 # Local tool cache
 /.cache/
+
+.env

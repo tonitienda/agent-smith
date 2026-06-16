@@ -109,6 +109,7 @@ func buildResponsesRequest(req provider.Request) (*responsesRequest, error) {
 	if r := req.Params.Reasoning; r != nil && r.Effort != "" {
 		w.Reasoning = &responsesReasoning{Effort: r.Effort, Summary: "auto"}
 	}
+	seenToolCalls := make(map[string]bool)
 
 	tools, err := buildResponsesTools(req.Tools)
 	if err != nil {
@@ -125,9 +126,27 @@ func buildResponsesRequest(req provider.Request) (*responsesRequest, error) {
 			}
 			continue
 		}
-		items, err := responsesInputFor(b)
-		if err != nil {
-			return nil, err
+		var items []any
+		switch b.Kind {
+		case schema.KindToolCall:
+			items, err = responsesToolCallItem(b)
+			if err != nil {
+				return nil, err
+			}
+			if b.ToolCall != nil && b.ToolCall.ToolUseID != "" {
+				seenToolCalls[b.ToolCall.ToolUseID] = true
+			}
+		case schema.KindToolResult:
+			if b.ToolResult != nil && seenToolCalls[b.ToolResult.ToolUseID] {
+				items = responsesToolResultItem(b)
+			} else {
+				items = responsesOrphanToolResultItem(b)
+			}
+		default:
+			items, err = responsesInputFor(b)
+			if err != nil {
+				return nil, err
+			}
 		}
 		w.Input = append(w.Input, items...)
 	}
@@ -258,6 +277,29 @@ func responsesToolResultItem(b *schema.Block) []any {
 		Type:   "function_call_output",
 		CallID: body.ToolUseID,
 		Output: toolResultText(body),
+	}}
+}
+
+// responsesOrphanToolResultItem renders a tool result as plain user-visible text
+// when its paired tool_call is no longer in the projected context. The
+// Responses API rejects a bare function_call_output with no matching call in the
+// same request, so degraded text is safer than emitting an invalid shape.
+func responsesOrphanToolResultItem(b *schema.Block) []any {
+	body := b.ToolResult
+	if body == nil {
+		return nil
+	}
+	text := toolResultText(body)
+	if text == "" {
+		text = "(empty tool result)"
+	}
+	return []any{responsesMessage{
+		Type: "message",
+		Role: "user",
+		Content: []any{responsesInputText{
+			Type: "input_text",
+			Text: "Tool result:\n" + text,
+		}},
 	}}
 }
 

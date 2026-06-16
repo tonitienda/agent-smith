@@ -104,6 +104,12 @@ func (m model) handlePermKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
+		case "alt+k", "ctrl+p", "ctrl+k":
+			m.viewport.ScrollUp(transcriptScrollStep)
+			return m, nil
+		case "alt+j", "ctrl+n", "ctrl+j":
+			m.viewport.ScrollDown(transcriptScrollStep)
+			return m, nil
 		}
 	}
 	// Focus stays on the decision: any other key is swallowed, never leaking to

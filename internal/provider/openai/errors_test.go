@@ -146,6 +146,25 @@ func TestResponsesStreamFailedEvent(t *testing.T) {
 	}
 }
 
+func TestResponsesStreamNestedErrorEvent(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"r","model":"gpt-5"}}`,
+		``,
+		`data: {"type":"error","error":{"type":"invalid_request_error","code":"model_not_found","message":"model ` + "gpt-5.4-mini" + ` not found"}}`,
+		``,
+	}, "\n")
+	p := sseServer(t, SurfaceResponses, body, nil)
+	s, err := p.Stream(context.Background(), provider.Request{Model: "gpt-5.4-mini"})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	if _, err := provider.Collect(s); provider.KindOf(err) != provider.ErrInvalidRequest {
+		t.Fatalf("kind = %v, want invalid_request", provider.KindOf(err))
+	} else if !strings.Contains(err.Error(), "model gpt-5.4-mini not found") {
+		t.Fatalf("error = %v, want nested provider message", err)
+	}
+}
+
 func TestResponsesStreamMalformedFrame(t *testing.T) {
 	body := strings.Join([]string{
 		`data: {"type":"response.created","response":{"id":"r"}}`,
