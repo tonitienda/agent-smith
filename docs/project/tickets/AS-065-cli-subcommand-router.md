@@ -1,7 +1,7 @@
 ---
 id: AS-065
 title: CLI subcommand router + arg/output/exit-code contract
-status: ready-to-implement
+status: done
 github_issue: 102
 depends_on: [AS-018, AS-021, AS-022]
 area: faces
@@ -10,6 +10,33 @@ source: CLI-UX.md (D-CLI-1..10), UX.md §3.2/§9.3/§17, PRD.md §7.18
 ---
 
 # AS-065 · CLI subcommand router + arg/output/exit-code contract
+
+**Status: done** — the router spine lives in [`internal/cli`](../../../internal/cli)
+and is wired in [`cmd/smith`](../../../cmd/smith) (`cli.go`). The headless feature
+set (stream-json, budgets, `--auto`/allowlist permission posture) builds on top in
+AS-051; full slash↔subcommand parity is AS-066.
+
+## What landed
+
+- **Router (`internal/cli`).** `App.Run` parses argv into a noun-grouped verb
+  tree (`run`, `session list|resume`, `context show`, `cost`, `config get|set`,
+  `tui`), permuting flags ahead of positionals so `smith run "…" --output json`
+  works, and maps handler results to the D-CLI-7 exit codes (0/1/2).
+- **Shared handlers (D-CLI-10).** `cost`, `context show`, and `session
+  list|resume` dispatch through the same `command.Registry` the TUI palette
+  renders (`chatCommands`) — one handler set, two faces.
+- **Bare/output/streams.** Bare `smith` launches the TUI on a TTY and is a usage
+  error off one (D-CLI-2); `--output plain|json|stream-json`, `--color`, and
+  `NO_COLOR` are honored (D-CLI-4); data goes to stdout, diagnostics to stderr
+  (D-CLI-5).
+- **Config precedence (D-CLI-6).** A focused resolver (flag > project > user >
+  `SMITH_*` env > default) plus `smith config get|set`. The full layered system
+  is AS-031.
+- **Discoverability (D-CLI-10).** `--version`, per-command `--help` with runnable
+  examples, `--help --output json` (registry entry), and "did you mean…?" on
+  unknown commands/verbs.
+
+## Original description
 
 **Status: ready to implement**
 

@@ -151,6 +151,14 @@ func (r *Registry) Suggest(name string) (string, bool) {
 	return nearest(strings.ToLower(name), r.names())
 }
 
+// Nearest returns the candidate closest to name, for a "did you mean …?" hint
+// over an arbitrary name set (e.g. the CLI router's subcommands, AS-065). ok is
+// false when nothing is close enough. It shares the registry's scoring so the
+// slash palette and the CLI suggest identically.
+func Nearest(name string, candidates []string) (string, bool) {
+	return nearest(strings.ToLower(name), candidates)
+}
+
 // names returns the registered command names (unsorted).
 func (r *Registry) names() []string {
 	out := make([]string, 0, len(r.byName))
