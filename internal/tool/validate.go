@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 )
 
-// validateArgs checks a model's raw arguments against the slice of JSON Schema
+// validateArgs checks a model's raw arguments against the subset of JSON Schema
 // this validator understands, returning a model-readable error describing the
 // first problem it finds, or nil when the arguments are acceptable.
 //
@@ -44,11 +44,11 @@ func validateArgs(schemaJSON, args json.RawMessage) error {
 	return s.checkObject(fields, "")
 }
 
-// schemaNode is the slice of a (possibly nested) JSON Schema this validator
-// understands. The whole tree is parsed once by parseSchema — subschemas into
-// child *schemaNodes and "pattern" into a compiled *regexp.Regexp — so
-// validation does no repeated JSON parsing or regex compilation, however many
-// array elements or nested values it visits.
+// schemaNode is one node of a parsed schema, holding the subset of JSON Schema
+// keywords this validator understands. The whole tree is parsed once by
+// parseSchema — subschemas into child *schemaNodes and "pattern" into a compiled
+// *regexp.Regexp — so validation does no repeated JSON parsing or regex
+// compilation, however many array elements or nested values it visits.
 type schemaNode struct {
 	Types                []string
 	Required             []string
