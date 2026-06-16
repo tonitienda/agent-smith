@@ -10,6 +10,16 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cli"
 )
 
+// writeTemp writes content to a fresh temp file and returns its path.
+func writeTemp(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "prompt")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 // testApp builds the production command tree over captured buffers, so the tests
 // exercise the real router wiring without launching the TUI or touching argv.
 func testApp(stdinTTY, stdoutTTY bool) (*cli.App, *bytes.Buffer, *bytes.Buffer) {
@@ -156,6 +166,18 @@ func TestResolvePromptSources(t *testing.T) {
 			name:    "no prompt on a TTY is an error",
 			ctx:     &cli.Context{StdinTTY: true},
 			wantErr: true,
+		},
+		{
+			name: "non-TTY with empty stdin falls back to -f",
+			ctx:  &cli.Context{Stdin: strings.NewReader(""), StdinTTY: false},
+			file: writeTemp(t, "from file\n"),
+			want: "from file",
+		},
+		{
+			name: "piped stdin beats -f",
+			ctx:  &cli.Context{Stdin: strings.NewReader("from pipe"), StdinTTY: false},
+			file: writeTemp(t, "from file\n"),
+			want: "from pipe",
 		},
 	}
 	for _, tc := range cases {
