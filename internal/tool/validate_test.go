@@ -77,6 +77,7 @@ func TestValidateArgs(t *testing.T) {
 		// AS-062: unmodeled keywords still never falsely reject.
 		{name: "unknown keyword ignored", schema: `{"type":"object","properties":{"x":{"type":"string","format":"email","oneOf":[{"const":"a"}]}}}`, args: `{"x":"anything"}`},
 		{name: "boolean subschema ignored", schema: `{"type":"object","properties":{"x":true}}`, args: `{"x":{"deep":1}}`},
+		{name: "declared boolean property not unexpected under additionalProperties false", schema: `{"type":"object","additionalProperties":false,"properties":{"x":true}}`, args: `{"x":42}`},
 	}
 
 	for _, tc := range cases {
