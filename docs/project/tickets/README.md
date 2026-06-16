@@ -72,7 +72,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | ready | 006, 022 |
 | [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | ready | 006, 022 |
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
-| [AS-040](AS-040-goal.md) | `/goal` session objective | commands | ready | 006, 022 |
+| [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | ready | 020, 022, 031 |
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | **needs clarification** | 008, 031, 044 |
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | **needs clarification** | 006, 027, 028 |

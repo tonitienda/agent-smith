@@ -198,6 +198,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdModel,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "goal",
+		Summary:       "Set, show, or complete the session objective",
+		Args:          `["<objective>" | done]`,
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{`smith goal "ship the parser"`, "smith goal", "smith goal done"},
+		Run:           ctl.cmdGoal,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "resume",
 		Summary:       "List recent sessions, or load one by ID",
 		Args:          "[id]",

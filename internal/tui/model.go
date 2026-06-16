@@ -596,7 +596,7 @@ func (m model) View() string {
 // statusLine renders provider · model · session on the left and, on the right,
 // the always-visible context meter followed by the working/ready state.
 func (m model) statusLine() string {
-	left := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model, m.meta.Session), " · ")
+	left := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model, m.meta.Session, goalLabel(m.meta.Goal)), " · ")
 	state := "ready"
 	if m.busy {
 		state = m.spinner.View() + "working… (Esc to cancel)"
@@ -610,6 +610,21 @@ func (m model) statusLine() string {
 		gap = 1
 	}
 	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + right)
+}
+
+// goalLabel formats the active session goal (AS-040) for the status line,
+// truncated so a long objective cannot crowd out the rest of the bar. Empty
+// stays empty so nonEmpty omits the segment entirely.
+func goalLabel(goal string) string {
+	goal = strings.TrimSpace(goal)
+	if goal == "" {
+		return ""
+	}
+	const max = 48
+	if r := []rune(goal); len(r) > max {
+		goal = string(r[:max-1]) + "…"
+	}
+	return "goal: " + goal
 }
 
 // nonEmpty returns the non-empty values among its arguments, preserving order.
