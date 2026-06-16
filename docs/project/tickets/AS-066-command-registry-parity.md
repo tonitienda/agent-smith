@@ -1,7 +1,7 @@
 ---
 id: AS-066
 title: Shared command registry — slash ↔ subcommand parity metadata
-status: ready-to-implement
+status: done
 github_issue: 103
 depends_on: [AS-022, AS-065]
 area: commands
@@ -45,13 +45,20 @@ Scope:
 
 ## Acceptance criteria
 
-- [ ] Every registered command declares its scriptability (interactive-only |
+- [x] Every registered command declares its scriptability (interactive-only |
   scriptable | both) and, where it emits structured output, an output schema.
-- [ ] The slash form and subcommand form of a shared command come from one
-  descriptor (no parallel definitions).
-- [ ] A parity table is generated from the registry and matches UX.md §17.5.
-- [ ] Interactive-only commands carry a stated reason; a test asserts none are
-  silently interactive-only.
+  (`command.Scriptability` + `OutputSchema`/`Reason`/`Examples` on the descriptor;
+  every built-in still routes through the shared `{text}` envelope, so per-command
+  `OutputSchema` is the additive AS-051 seam and is left empty today, documented.)
+- [x] The slash form and subcommand form of a shared command come from one
+  descriptor (no parallel definitions). The 1:1 verbs (`cost`, `context show`)
+  source summary/usage/examples/scriptability via `registryLeaf`; `/resume` fans
+  out into `session list|resume`, which share the descriptor's scriptability.
+- [x] A parity table is generated from the registry and matches UX.md §17.5
+  (`command.ParityTable`; `docs/project/command-parity.md` is generated and
+  guarded by `TestCommandParityDocInSync`).
+- [x] Interactive-only commands carry a stated reason; `Register` rejects a
+  reasonless interactive-only command and `TestNoSilentInteractiveOnly` asserts it.
 
 ## Dependencies
 

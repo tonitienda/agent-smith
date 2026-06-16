@@ -57,22 +57,30 @@ func (a *App) commandHelp(cmd *Command, path string) string {
 }
 
 // helpEntry is the machine-readable registry entry `--help --output json` dumps
-// (D-CLI-10), so tooling and docs read the same source the palette does. Fields
-// are additive (D2): scriptability and output schema join in AS-066/AS-051.
+// (D-CLI-10), so tooling and docs read the same source the palette does. For
+// shared verbs every field is sourced from the command.Registry descriptor
+// (AS-066), so the JSON help can't drift from the slash command. Fields are
+// additive (D2): output schema fills in per-command as commands grow one (AS-051).
 type helpEntry struct {
-	Name     string   `json:"name"`
-	Summary  string   `json:"summary"`
-	Usage    string   `json:"usage"`
-	Examples []string `json:"examples,omitempty"`
+	Name          string   `json:"name"`
+	Summary       string   `json:"summary"`
+	Usage         string   `json:"usage"`
+	Scriptability string   `json:"scriptability,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
+	OutputSchema  string   `json:"outputSchema,omitempty"`
+	Examples      []string `json:"examples,omitempty"`
 }
 
 // writeCommandHelpJSON emits the command's registry entry as JSON to stdout.
 func (a *App) writeCommandHelpJSON(cmd *Command, path string) error {
 	entry := helpEntry{
-		Name:     strings.TrimSpace(path),
-		Summary:  cmd.Summary,
-		Usage:    cmd.Usage,
-		Examples: cmd.Examples,
+		Name:          strings.TrimSpace(path),
+		Summary:       cmd.Summary,
+		Usage:         cmd.Usage,
+		Scriptability: cmd.Scriptability,
+		Reason:        cmd.Reason,
+		OutputSchema:  cmd.OutputSchema,
+		Examples:      cmd.Examples,
 	}
 	return writeJSON(a.Stdout, entry, "  ")
 }
@@ -97,7 +105,7 @@ func writeCommandList(b *strings.Builder, cmds []*Command) {
 
 // globalFlagsHelp is the static block describing the shared flags.
 func globalFlagsHelp() string {
-	return "  --output plain|json|stream-json   result format (default: auto by TTY)\n" +
+	return "  --output plain|json|stream-json   result format (default: plain)\n" +
 		"  --color auto|always|never         color (honors NO_COLOR; default auto)\n" +
 		"  -q, --quiet / -v, --verbose       tune stderr diagnostics\n" +
 		"  --config <path>                   config file (overrides the default chain)\n" +
