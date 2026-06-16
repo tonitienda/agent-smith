@@ -59,6 +59,16 @@ type Command struct {
 	Usage string
 	// Examples are runnable invocations shown under the command's help (D-CLI-10).
 	Examples []string
+	// Scriptability is the command's parity classification (UX.md §17.5):
+	// "interactive-only" | "scriptable" | "both". Shared verbs copy it from the
+	// command.Registry descriptor (cmd/smith) so the two faces can't disagree; it
+	// surfaces in `--help --output json`. Empty is treated as unstated.
+	Scriptability string
+	// Reason explains an interactive-only command (UX.md §17.5); shown in JSON help.
+	Reason string
+	// OutputSchema names the per-command structured output beyond the shared
+	// `{text}` envelope, where one exists; empty otherwise (additive, AS-051).
+	OutputSchema string
 	// Flags registers command-specific flags (e.g. -f on `run`) onto the parse
 	// set; the global flags are always registered too. Optional.
 	Flags func(*flag.FlagSet)

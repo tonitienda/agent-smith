@@ -154,47 +154,57 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		},
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "cost",
-		Summary: "Show token & cost accounting for this session",
-		Mode:    command.FullScreen,
+		Name:          "cost",
+		Summary:       "Show token & cost accounting for the session",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith cost", "smith cost --output json"},
 		Run: func(context.Context, []string) (command.Output, error) {
 			summary := cost.Summarize(ctl.events(), ctl.pricing)
 			return command.Output{Text: cost.Render(summary)}, nil
 		},
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "context",
-		Summary: "Show what's filling the window: /context [size|age|type]",
-		Args:    "[size|age|type]",
-		Mode:    command.FullScreen,
-		Run:     ctl.cmdContext,
+		Name:          "context",
+		Summary:       "Show what's filling the context window",
+		Args:          "[size|age|type]",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith context show", "smith context show age"},
+		Run:           ctl.cmdContext,
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "clean",
-		Summary: "Remove segments from the window: /clean <handle>… | --apply | --undo | --cancel",
-		Args:    "<handle>… | --apply | --undo | --cancel",
-		Mode:    command.FullScreen,
-		Run:     ctl.cmdClean,
+		Name:          "clean",
+		Summary:       "Remove segments from the context window",
+		Args:          "<handle>… | --apply | --undo | --cancel",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Run:           ctl.cmdClean,
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "clear",
-		Summary: "Start a fresh session (the old one stays in /resume)",
-		Mode:    command.Inline,
-		Run:     ctl.cmdClear,
+		Name:          "clear",
+		Summary:       "Start a fresh session (the old one stays in /resume)",
+		Mode:          command.Inline,
+		Scriptability: command.InteractiveOnly,
+		Reason:        "clears the active session in place; a headless run is already a fresh session, so there is nothing to clear",
+		Run:           ctl.cmdClear,
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "model",
-		Summary: "List models, or switch the active model: /model <id>",
-		Args:    "[id]",
-		Mode:    command.Inline,
-		Run:     ctl.cmdModel,
+		Name:          "model",
+		Summary:       "List models, or switch the active model",
+		Args:          "[id]",
+		Mode:          command.Inline,
+		Scriptability: command.Both,
+		Run:           ctl.cmdModel,
 	})
 	mustRegisterCommand(reg, command.Command{
-		Name:    "resume",
-		Summary: "List recent sessions, or load one: /resume <id>",
-		Args:    "[id]",
-		Mode:    command.Inline,
-		Run:     ctl.cmdResume,
+		Name:          "resume",
+		Summary:       "List recent sessions, or load one by ID",
+		Args:          "[id]",
+		Mode:          command.Inline,
+		Scriptability: command.Both,
+		Examples:      []string{"smith session list", "smith session resume <id>"},
+		Run:           ctl.cmdResume,
 	})
 	return reg
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
+	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
@@ -27,18 +28,38 @@ import (
 // its subcommand share one handler (D-CLI-10). The richer headless behaviour —
 // streaming output, budgets, permission posture — lands on top in AS-051.
 func commands() []*cli.Command {
+	// reg is a metadata-only view of the shared registry (no controller needed to
+	// read names/summaries/scriptability); registryLeaf reads the descriptors so
+	// shared verbs can't drift from their slash twins (AS-066).
+	reg := chatCommands(nil)
 	return []*cli.Command{
 		runCommand(),
-		sessionCommand(),
-		contextCommand(),
-		{
-			Name:     "cost",
-			Summary:  "Show token & cost accounting for the session",
-			Examples: []string{"smith cost", "smith cost --output json"},
-			Run:      registryCommand("cost", nil),
-		},
+		sessionCommand(reg),
+		contextCommand(reg),
+		registryLeaf(reg, "cost", "cost", nil),
 		configCommand(),
 		tuiCommand(),
+	}
+}
+
+// registryLeaf builds a CLI leaf whose parity metadata — summary, usage (the arg
+// spec), examples, scriptability, output schema — comes entirely from the shared
+// command descriptor regName, so the slash command and its subcommand are one
+// source of truth (AS-066). pickArgs maps the CLI positionals to the handler's
+// args (nil passes none); the handler itself is the shared registry handler.
+func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(*cli.Context) []string) *cli.Command {
+	desc, ok := reg.Lookup(regName)
+	if !ok {
+		panic(fmt.Sprintf("AS-066: CLI verb %q references unregistered command %q", cliName, regName))
+	}
+	return &cli.Command{
+		Name:          cliName,
+		Summary:       desc.Summary,
+		Usage:         desc.Args,
+		Examples:      desc.Examples,
+		Scriptability: desc.Scriptability.String(),
+		OutputSchema:  desc.OutputSchema,
+		Run:           registryCommand(regName, pickArgs),
 	}
 }
 
@@ -51,8 +72,10 @@ func tuiCommand() *cli.Command {
 	var resume string
 	var noSplash bool
 	return &cli.Command{
-		Name:    "tui",
-		Summary: "Launch the interactive TUI explicitly",
+		Name:          "tui",
+		Summary:       "Launch the interactive TUI explicitly",
+		Scriptability: command.InteractiveOnly.String(),
+		Reason:        "launches the interactive terminal UI; use `smith run` to script a task",
 		Flags: func(fs *flag.FlagSet) {
 			fs.StringVar(&resume, "resume", "", "resume a session by ID")
 			fs.BoolVar(&noSplash, "no-splash", false, "hide the startup header")
@@ -61,46 +84,56 @@ func tuiCommand() *cli.Command {
 	}
 }
 
-// sessionCommand groups the session verbs. Both dispatch through the registry's
-// /resume handler (no args lists, an ID loads), so the CLI and slash command stay
-// one implementation. (The interactive resume picker is AS-064.)
-func sessionCommand() *cli.Command {
+// sessionCommand groups the session verbs. The slash `/resume` fans out into two
+// CLI verbs — `list` (no arg) and `resume <id>` — so they share the descriptor's
+// scriptability (one source of truth, AS-066) while each carries its own usage and
+// examples for the split. Both dispatch through the shared /resume handler, so the
+// CLI and slash command stay one implementation. (Interactive picker is AS-064;
+// `smith session resume <id>` is the canonical scriptable form, superseding the
+// legacy `smith --resume <id>` flag.)
+func sessionCommand(reg *command.Registry) *cli.Command {
+	resumable := scriptability(reg, "resume")
 	return &cli.Command{
 		Name:    "session",
 		Summary: "Inspect and resume sessions",
 		Sub: []*cli.Command{
 			{
-				Name:     "list",
-				Summary:  "List this project's sessions",
-				Examples: []string{"smith session list"},
-				Run:      registryCommand("resume", func(*cli.Context) []string { return nil }),
+				Name:          "list",
+				Summary:       "List this project's sessions",
+				Examples:      []string{"smith session list"},
+				Scriptability: resumable,
+				Run:           registryCommand("resume", func(*cli.Context) []string { return nil }),
 			},
 			{
-				Name:     "resume",
-				Summary:  "Resume a session non-interactively",
-				Usage:    "<id>",
-				Examples: []string{"smith session resume 1a2b3c4d"},
-				Run:      registryCommand("resume", firstArg),
+				Name:          "resume",
+				Summary:       "Resume a session non-interactively",
+				Usage:         "<id>",
+				Examples:      []string{"smith session resume 1a2b3c4d"},
+				Scriptability: resumable,
+				Run:           registryCommand("resume", firstArg),
 			},
 		},
 	}
 }
 
-// contextCommand groups the context verbs. `show` reuses the /context handler.
-func contextCommand() *cli.Command {
+// contextCommand groups the context verbs. `show` is a 1:1 mapping of /context, so
+// it sources all of its parity metadata from the shared descriptor (AS-066).
+func contextCommand(reg *command.Registry) *cli.Command {
 	return &cli.Command{
 		Name:    "context",
 		Summary: "Inspect the model's context window",
-		Sub: []*cli.Command{
-			{
-				Name:     "show",
-				Summary:  "Show what is filling the window",
-				Usage:    "[size|age|type]",
-				Examples: []string{"smith context show", "smith context show age"},
-				Run:      registryCommand("context", allArgs),
-			},
-		},
+		Sub:     []*cli.Command{registryLeaf(reg, "context", "show", allArgs)},
 	}
+}
+
+// scriptability returns the registered command's scriptability string, panicking
+// if it isn't registered — the verb tree is static, so a miss is a wiring bug.
+func scriptability(reg *command.Registry, name string) string {
+	desc, ok := reg.Lookup(name)
+	if !ok {
+		panic(fmt.Sprintf("AS-066: command %q is not registered", name))
+	}
+	return desc.Scriptability.String()
 }
 
 // firstArg passes only the first positional through to the shared handler.
@@ -214,9 +247,10 @@ func defaultProviders() map[string]provider.Provider {
 func runCommand() *cli.Command {
 	var file string
 	return &cli.Command{
-		Name:    "run",
-		Summary: "Run a single task non-interactively",
-		Usage:   "<prompt>",
+		Name:          "run",
+		Summary:       "Run a single task non-interactively",
+		Usage:         "<prompt>",
+		Scriptability: command.Scriptable.String(),
 		Examples: []string{
 			`smith run "fix the failing test"`,
 			`echo "summarize CHANGELOG" | smith run`,
@@ -371,17 +405,19 @@ func configCommand() *cli.Command {
 		Summary: "Read and write layered configuration",
 		Sub: []*cli.Command{
 			{
-				Name:     "get",
-				Summary:  "Resolve a config key through the precedence chain",
-				Usage:    "<key>",
-				Examples: []string{"smith config get model"},
-				Run:      configGet,
+				Name:          "get",
+				Summary:       "Resolve a config key through the precedence chain",
+				Usage:         "<key>",
+				Examples:      []string{"smith config get model"},
+				Scriptability: command.Scriptable.String(),
+				Run:           configGet,
 			},
 			{
-				Name:     "set",
-				Summary:  "Set a config key (project scope by default)",
-				Usage:    "<key> <value>",
-				Examples: []string{"smith config set model claude-opus-4-8", "smith config set model gpt-4o --user"},
+				Name:          "set",
+				Summary:       "Set a config key (project scope by default)",
+				Usage:         "<key> <value>",
+				Examples:      []string{"smith config set model claude-opus-4-8", "smith config set model gpt-4o --user"},
+				Scriptability: command.Scriptable.String(),
 				Flags: func(fs *flag.FlagSet) {
 					fs.BoolVar(&user, "user", false, "write to user config instead of the project")
 				},

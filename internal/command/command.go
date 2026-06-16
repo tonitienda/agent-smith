@@ -31,6 +31,34 @@ const (
 	FullScreen
 )
 
+// Scriptability says which faces a command is meant for (UX.md §9.3, §17.5): the
+// interactive TUI, the headless/CLI face, or both. A face and the parity table
+// (AS-066) read it from the one descriptor, so the slash command and its CLI
+// subcommand can't disagree about whether the command can be scripted. The zero
+// value is Both, the common case.
+type Scriptability int
+
+const (
+	// Both runs interactively and when scripted (the default, zero value).
+	Both Scriptability = iota
+	// Scriptable is headless/CLI only.
+	Scriptable
+	// InteractiveOnly is TUI only; it must carry a Reason (UX.md §17.5).
+	InteractiveOnly
+)
+
+// String renders the scriptability for help, JSON, and the parity table.
+func (s Scriptability) String() string {
+	switch s {
+	case Scriptable:
+		return "scriptable"
+	case InteractiveOnly:
+		return "interactive-only"
+	default:
+		return "both"
+	}
+}
+
 // Output is what a Handler produces for a face to render. It is intentionally
 // plain text for V1; richer payloads (tables, diffs) are additive later (D2).
 type Output struct {
@@ -58,6 +86,22 @@ type Command struct {
 	Args string
 	// Mode is how the output renders (Inline or FullScreen).
 	Mode Mode
+	// Scriptability declares which faces the command serves (UX.md §17.5). The
+	// zero value is Both; an InteractiveOnly command must set Reason.
+	Scriptability Scriptability
+	// Reason explains why an InteractiveOnly command can't be scripted; it is
+	// required for InteractiveOnly and ignored otherwise (UX.md §17.5).
+	Reason string
+	// Examples are runnable invocations shown in help (D-CLI-10). They are
+	// face-neutral text shared by every face that renders examples; the CLI
+	// router reads them so a verb's `--help` and the slash command agree.
+	Examples []string
+	// OutputSchema names the per-command structured output emitted under
+	// `--output json`, where one exists beyond the shared `{text}` envelope
+	// (internal/cli Emit). Empty today for every built-in — richer per-command
+	// schemas are additive in AS-051 (D2) — but exposed now so help and the
+	// parity table surface it the moment a command grows one.
+	OutputSchema string
 	// Run executes the command. A nil Run is rejected at registration.
 	Run Handler
 }
@@ -89,6 +133,10 @@ func (r *Registry) Register(c Command) error {
 		return fmt.Errorf("command %q: name must not contain whitespace", name)
 	case c.Run == nil:
 		return fmt.Errorf("command %q: nil handler", name)
+	case c.Scriptability == InteractiveOnly && strings.TrimSpace(c.Reason) == "":
+		// UX.md §17.5: an interactive-only command must say why it can't be
+		// scripted, so the parity table never lists a silent interactive-only one.
+		return fmt.Errorf("command %q: interactive-only command must state a Reason", name)
 	}
 	if _, dup := r.byName[name]; dup {
 		return fmt.Errorf("command %q: already registered", name)

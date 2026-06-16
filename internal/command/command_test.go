@@ -29,6 +29,7 @@ func TestRegisterRejectsBadCommands(t *testing.T) {
 		{"leading slash", Command{Name: "/cost", Run: noop}},
 		{"whitespace", Command{Name: "co st", Run: noop}},
 		{"nil handler", Command{Name: "cost"}},
+		{"interactive-only without reason", Command{Name: "clear", Scriptability: InteractiveOnly, Run: noop}},
 	}
 	for _, tc := range cases {
 		if err := r.Register(tc.cmd); err == nil {
@@ -179,6 +180,36 @@ func TestHelpCommandListsRegistry(t *testing.T) {
 	for _, want := range []string{"/help", "/cost", "Show token and dollar accounting"} {
 		if !strings.Contains(out.Text, want) {
 			t.Errorf("help output missing %q:\n%s", want, out.Text)
+		}
+	}
+}
+
+func TestScriptabilityString(t *testing.T) {
+	for s, want := range map[Scriptability]string{
+		Both:            "both",
+		Scriptable:      "scriptable",
+		InteractiveOnly: "interactive-only",
+	} {
+		if got := s.String(); got != want {
+			t.Errorf("Scriptability(%d).String() = %q, want %q", s, got, want)
+		}
+	}
+}
+
+func TestParityTable(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r,
+		Command{Name: "cost", Summary: "costs", Run: noop},
+		Command{Name: "clear", Scriptability: InteractiveOnly, Reason: "fresh session each run", Run: noop},
+	)
+	table := ParityTable(r)
+	for _, want := range []string{
+		"| Command | Scriptability | Notes |",
+		"| `/clear` | interactive-only | fresh session each run |",
+		"| `/cost` | both |",
+	} {
+		if !strings.Contains(table, want) {
+			t.Errorf("ParityTable missing %q:\n%s", want, table)
 		}
 	}
 }
