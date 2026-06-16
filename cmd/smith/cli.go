@@ -11,6 +11,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
@@ -176,20 +177,18 @@ func readonlyController() (*chatSession, func(), error) {
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
 
-// latestSession opens the project's most recently updated session, or creates a
-// fresh empty one when none exists yet (so `smith cost` on a clean project shows
-// an empty session rather than erroring).
+// latestSession opens the project's most recently updated session for the
+// read-only inspection verbs. When none exist yet it returns an ephemeral,
+// in-memory session so `smith cost`/`context show`/`session list` render an empty
+// state *without* creating a `.smith` session on disk — a read must never mutate
+// the project.
 func latestSession(store *session.Store) (*session.Session, error) {
 	summaries, err := store.List()
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
 	if len(summaries) == 0 {
-		sess, err := store.Create("")
-		if err != nil {
-			return nil, fmt.Errorf("create session: %w", err)
-		}
-		return sess, nil
+		return &session.Session{Log: eventlog.New()}, nil
 	}
 	sess, err := store.Open(summaries[0].ID) // List is newest-first
 	if err != nil {
@@ -398,7 +397,7 @@ func configGet(c *cli.Context) error {
 	if len(c.Args) != 1 {
 		return cli.Usagef("config get: want exactly one key")
 	}
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(c.Globals.Config)
 	if err != nil {
 		return err
 	}
@@ -412,26 +411,47 @@ func configGet(c *cli.Context) error {
 	return c.Emit(value)
 }
 
-// configSet writes a key=value to the project file (or the user file with
-// --user), per D-CLI-6 / CLI-UX open-question 4 (project default).
+// configSet writes a key=value to the explicit --config file when given,
+// otherwise the project file (or the user file with --user), per D-CLI-6 /
+// CLI-UX open-question 4 (project default). The confirmation line is a
+// diagnostic, so --quiet suppresses it (D-CLI-5).
 func configSet(c *cli.Context, user bool) error {
 	if len(c.Args) != 2 {
 		return cli.Usagef("config set: want <key> <value>")
 	}
-	path, err := configPath(user)
-	if err != nil {
-		return err
+	path := c.Globals.Config
+	if path == "" {
+		p, err := configPath(user)
+		if err != nil {
+			return err
+		}
+		path = p
 	}
 	if err := cli.SaveConfigValue(path, c.Args[0], c.Args[1]); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
-	_, _ = fmt.Fprintf(c.Stderr, "set %s = %s in %s\n", c.Args[0], c.Args[1], path)
+	if !c.Globals.Quiet {
+		_, _ = fmt.Fprintf(c.Stderr, "set %s = %s in %s\n", c.Args[0], c.Args[1], path)
+	}
 	return nil
 }
 
-// loadConfig assembles the precedence chain from the project and user files plus
-// SMITH_* env and the built-in defaults (D-CLI-6).
-func loadConfig() (cli.Config, error) {
+// loadConfig assembles the precedence chain (D-CLI-6). An explicit --config path
+// (override != "") replaces the default project+user files with that single file
+// — it "overrides the default chain" — while env and the built-in defaults still
+// apply beneath it.
+func loadConfig(override string) (cli.Config, error) {
+	if override != "" {
+		m, err := cli.LoadConfigFile(override)
+		if err != nil {
+			return cli.Config{}, fmt.Errorf("read config %q: %w", override, err)
+		}
+		return cli.Config{
+			Project:  m,
+			Getenv:   os.Getenv,
+			Defaults: map[string]string{"model": defaultModel},
+		}, nil
+	}
 	projectPath, err := configPath(false)
 	if err != nil {
 		return cli.Config{}, err

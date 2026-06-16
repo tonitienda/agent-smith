@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -92,6 +94,38 @@ func TestRunHelpJSONDumpsRegistryEntry(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("help json missing %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestConfigGetRespectsConfigFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "explicit")
+	if err := os.WriteFile(path, []byte("model = from-explicit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app, out, _ := testApp(false, false)
+	if code := app.Run([]string{"config", "get", "model", "--config", path}); code != cli.ExitOK {
+		t.Fatalf("config get --config exit = %d", code)
+	}
+	if got := strings.TrimSpace(out.String()); got != "from-explicit" {
+		t.Errorf("config get --config = %q, want from-explicit", got)
+	}
+}
+
+func TestConfigSetQuietWritesWithoutDiagnostic(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out")
+	app, _, errb := testApp(false, false)
+	if code := app.Run([]string{"config", "set", "model", "gpt-4o", "--config", path, "--quiet"}); code != cli.ExitOK {
+		t.Fatalf("config set --quiet exit = %d", code)
+	}
+	if errb.Len() != 0 {
+		t.Errorf("--quiet still wrote to stderr: %q", errb.String())
+	}
+	m, err := cli.LoadConfigFile(path)
+	if err != nil {
+		t.Fatalf("LoadConfigFile: %v", err)
+	}
+	if m["model"] != "gpt-4o" {
+		t.Errorf("config set wrote %v, want model=gpt-4o", m)
 	}
 }
 
