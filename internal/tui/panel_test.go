@@ -225,7 +225,7 @@ func TestPaletteFitsTinyWindow(t *testing.T) {
 func TestStartupHeaderRendersAndSuppresses(t *testing.T) {
 	meta := staticMeta(Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s", Project: "agent-smith"})
 
-	on := newModel(&fakeRunner{}, meta, make(chan loop.UIEvent), nil, nil, nil, true)
+	on := newModel(&fakeRunner{}, meta, make(chan loop.UIEvent), nil, nil, nil, true, nil)
 	on = update(t, on, tea.WindowSizeMsg{Width: 80, Height: 24})
 	view := on.View()
 	if !strings.Contains(view, "AGENT SMITH") {
@@ -235,7 +235,7 @@ func TestStartupHeaderRendersAndSuppresses(t *testing.T) {
 		t.Fatalf("header missing project label:\n%s", view)
 	}
 
-	off := newModel(&fakeRunner{}, meta, make(chan loop.UIEvent), nil, nil, nil, false)
+	off := newModel(&fakeRunner{}, meta, make(chan loop.UIEvent), nil, nil, nil, false, nil)
 	off = update(t, off, tea.WindowSizeMsg{Width: 80, Height: 24})
 	if strings.Contains(off.View(), "AGENT SMITH") {
 		t.Fatalf("startup header shown with splash off:\n%s", off.View())

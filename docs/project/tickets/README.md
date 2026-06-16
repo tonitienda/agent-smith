@@ -55,7 +55,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-061](AS-061-json-schema-publication.md) | Publish the block schema as JSON Schema (+ Go↔schema divergence guard) | schema | ready | 003, 004, 060 |
 | [AS-062](AS-062-tool-arg-schema-validation.md) | Fuller JSON-Schema validation for tool arguments | tools | done | 013 |
 | [AS-063](AS-063-per-block-token-estimates.md) | Per-block token estimates for window composition pricing | cost | done | 020, 006 |
-| [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | ready | 023, 024 |
+| [AS-064](AS-064-resume-picker-rehydration.md) | `/resume` interactive picker + transcript rehydration | tui | done | 023, 024 |
 | [AS-065](AS-065-cli-subcommand-router.md) | CLI subcommand router + arg/output/exit-code contract | faces | done | 018, 021, 022 |
 | [AS-067](AS-067-tui-panel-framework.md) | TUI inspect-mode panel framework + focus/hotkey routing | tui | done | 021, 022 |
 

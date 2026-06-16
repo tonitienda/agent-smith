@@ -96,7 +96,7 @@ func startChat(resumeID string, noSplash bool) error {
 	}
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, filepath.Base(wd))
-	var opts []tui.Option
+	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate)}
 	if noSplash {
 		opts = append(opts, tui.WithoutSplash())
 	}

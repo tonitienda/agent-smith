@@ -117,6 +117,102 @@ func (m *model) apply(ev loop.UIEvent) {
 	}
 }
 
+// segmentsFromBlocks rebuilds the visible transcript from a session's projected
+// live blocks, so a resumed (or relaunched-with --resume) session shows its
+// prior turns rendered exactly as they were live: user/assistant text,
+// reasoning, and tool calls paired with their results in the AS-024 card. It is
+// pure projection — no model calls — and mirrors apply's live folding so a
+// rehydrated turn is indistinguishable from one that just streamed (AS-064).
+func segmentsFromBlocks(blocks []schema.Block) []segment {
+	segs := make([]segment, 0, len(blocks))
+	for i := range blocks {
+		b := blocks[i]
+		switch b.Kind {
+		case schema.KindText:
+			// Only user and assistant text is conversation the user sees; system and
+			// harness text blocks are model-facing context, not transcript.
+			if b.Text == nil || b.Text.Text == "" {
+				continue
+			}
+			switch b.Role {
+			case schema.RoleUser:
+				segs = append(segs, segment{kind: segUser, text: b.Text.Text, done: true})
+			case schema.RoleAssistant:
+				segs = appendMerged(segs, segAssistant, b.Text.Text)
+			}
+
+		case schema.KindReasoning:
+			// Only visible assistant reasoning replays: redacted/encrypted spans carry
+			// no Text, and non-assistant reasoning is never shown live.
+			if b.Reasoning == nil || b.Reasoning.Text == "" || b.Role != schema.RoleAssistant {
+				continue
+			}
+			segs = appendMerged(segs, segReasoning, b.Reasoning.Text)
+
+		case schema.KindToolCall:
+			// Server tool calls are provider-internal — the live loop never opens a
+			// card for them (no UIToolStarted), so a replay must not conjure a ghost
+			// card either.
+			if b.ToolCall == nil || b.ToolCall.ToolKind == schema.ToolKindServer {
+				continue
+			}
+			segs = append(segs, segment{
+				kind:     segTool,
+				toolName: b.ToolCall.Name,
+				toolID:   b.ToolCall.ToolUseID,
+				toolArgs: summarizeToolArgs(b.ToolCall.Arguments),
+			})
+
+		case schema.KindToolResult:
+			if b.ToolResult != nil {
+				foldToolResult(segs, b.ToolResult)
+			}
+		}
+	}
+	// A tool card left without a recorded result is an interrupted call (the turn
+	// ended before the result landed); mark it done+error so a resumed transcript
+	// never shows a permanently-pending (⋯) tool — the rehydration analogue of
+	// markPendingToolsInterrupted.
+	for i := range segs {
+		if s := &segs[i]; s.kind == segTool && !s.toolDone {
+			s.toolDone = true
+			s.toolError = true
+		}
+	}
+	return segs
+}
+
+// appendMerged adds text as a kind segment, merging into the immediately
+// preceding segment when it is already the same kind — so consecutive assistant
+// (or reasoning) blocks render under one header, the way the live loop folds
+// consecutive deltas into a single segment. A tool card or a role change between
+// two text blocks breaks the adjacency, exactly as it does live.
+func appendMerged(segs []segment, kind segKind, text string) []segment {
+	if n := len(segs); n > 0 && segs[n-1].kind == kind {
+		segs[n-1].text += "\n\n" + text
+		segs[n-1].rendered = "" // invalidate any cached markdown render
+		return segs
+	}
+	return append(segs, segment{kind: kind, text: text, done: true})
+}
+
+// foldToolResult attaches a recorded tool result to its pending call card,
+// mirroring apply's UIToolFinished handling so a replayed result settles the
+// card exactly as a live one does. A result with no matching call card (e.g. a
+// fused server-tool result) is ignored, as it is live.
+func foldToolResult(segs []segment, r *schema.ToolResultBody) {
+	for i := range segs {
+		s := &segs[i]
+		if s.kind == segTool && s.toolID == r.ToolUseID && !s.toolSettled {
+			s.toolDone = true
+			s.toolSettled = true
+			s.toolError = r.IsError
+			s.toolResult = toolResultText(r)
+			return
+		}
+	}
+}
+
 // toolIdentity pulls the tool name and call ID out of a tool event, tolerating a
 // nil payload.
 func toolIdentity(ev loop.UIEvent) (name, id string) {

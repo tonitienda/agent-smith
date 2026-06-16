@@ -218,10 +218,23 @@ func (m model) finishCommand(msg commandDoneMsg) model {
 		m.appendSegment(segment{kind: segError, text: "/" + msg.cmd.Name + ": " + msg.err.Error(), done: true})
 		return m
 	}
-	// A session-resetting command (/clear, /resume) clears the transcript so the
-	// view reflects the fresh context rather than the previous session's history.
+	// An interactive picker takes over the screen until the user chooses an item
+	// (which re-dispatches this command with the choice) or cancels (AS-064). A
+	// face shows the picker instead of the command's text listing.
+	if msg.out.Picker != nil && len(msg.out.Picker.Items) > 0 {
+		m.openPicker(msg.cmd, *msg.out.Picker)
+		return m
+	}
+	// A session-resetting command (/clear, /resume) rebuilds the transcript from
+	// the now-active session's projected blocks, so the view reflects the restored
+	// conversation (a resume replays prior turns; a fresh /clear replays nothing,
+	// AS-064). Without a rehydrate seam it simply clears.
 	if msg.out.ResetView {
-		m.segs = nil
+		if m.rehydrate != nil {
+			m.segs = segmentsFromBlocks(m.rehydrate())
+		} else {
+			m.segs = nil
+		}
 		m.curAssistant, m.curReasoning = -1, -1
 	}
 	switch msg.cmd.Mode {

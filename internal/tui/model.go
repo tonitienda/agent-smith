@@ -56,6 +56,11 @@ type model struct {
 	newRend  rendererFactory
 	renderer markdownRenderer
 	commands *command.Registry
+	// rehydrate yields the active session's projected live blocks; the face
+	// replays them into the transcript on a session swap (/clear, /resume) and at
+	// launch, so a resumed session shows its prior turns (AS-064). nil leaves the
+	// transcript blank on a swap.
+	rehydrate RehydrateFunc
 
 	// meter computes the context/cost snapshot for the status line; nil disables
 	// it. meterState caches the most recent snapshot so the status line renders
@@ -90,6 +95,9 @@ type model struct {
 	// modal, when non-nil, is the blocking permission overlay (D-TUI-8); it traps
 	// focus and is rendered instead of the transcript until dismissed.
 	modal *modal
+	// picker, when non-nil, is the interactive single-select list a command
+	// offered (AS-064 /resume); it traps focus like a panel until a choice or Esc.
+	picker *picker
 	// perm is the permission prompt currently shown (AS-024); permQueue holds
 	// further prompts awaiting their turn, since parallel tool calls (AS-019) can
 	// prompt concurrently but the user decides them one at a time. A non-destructive
@@ -128,7 +136,7 @@ func defaultPanelHotkeys() map[string]string {
 // rendering (the transcript then shows raw text); commands may be nil to run
 // without any slash commands; meter may be nil to hide the context meter; splash
 // shows the startup header.
-func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool) model {
+func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Ctrl+J for newline)…"
 	ta.Prompt = "┃ "
@@ -149,6 +157,7 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 		newRend:      newRend,
 		commands:     commands,
 		meter:        meter,
+		rehydrate:    rehydrate,
 		panelHotkeys: defaultPanelHotkeys(),
 		splash:       splash,
 		textarea:     ta,
@@ -159,6 +168,12 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 	}
 	if meta != nil {
 		m.meta = meta()
+	}
+	// Replay the active session's prior turns at launch, so a `--resume <id>`
+	// start shows the conversation rather than a blank screen (AS-064). A fresh
+	// session projects to no blocks, leaving the transcript empty.
+	if rehydrate != nil {
+		m.segs = segmentsFromBlocks(rehydrate())
 	}
 	m.refreshMeter()
 	return m
@@ -241,6 +256,10 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// the user resolves it before typing or scrolling away (D-TUI-8).
 	if m.permActive() {
 		return m.handlePermKey(msg)
+	}
+	// An interactive picker captures navigation/selection until a choice or Esc.
+	if m.pickerOpen() {
+		return m.handlePickerKey(msg)
 	}
 	// A full-screen command panel captures navigation until dismissed.
 	if m.panelOpen() {
@@ -506,6 +525,19 @@ func (m model) View() string {
 	// (D-TUI-8); a normal one renders inline below, in the work-mode stack.
 	if m.permActive() && m.perm.prompt.Destructive {
 		return m.permModalView()
+	}
+	if m.pickerOpen() {
+		// The picker uses the same pinned-status + footer chrome as an inspect
+		// panel (D-TUI-3/D-TUI-11), so it degrades identically on a short terminal.
+		sections := make([]string, 0, 3)
+		if m.statusRows() > 0 {
+			sections = append(sections, m.statusLine())
+		}
+		sections = append(sections, m.pickerView())
+		if m.panelFooterRows() > 0 {
+			sections = append(sections, m.pickerFooter())
+		}
+		return strings.Join(sections, "\n")
 	}
 	if m.panelOpen() {
 		// Inspect mode: the status line is pinned above the panel body (D-TUI-3),
