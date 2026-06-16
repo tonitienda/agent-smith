@@ -34,6 +34,12 @@ Scope:
   `/clean`↔`context clean`, `/cost`↔`cost`, `/clear`, `/model`, `/resume`↔
   `session resume`, etc.), including a reason on any interactive-only command.
 - Generate the parity table (UX.md §17.5) from the registry so docs can't drift.
+- **Source the CLI's `--help --output json` (D-CLI-10) from the shared
+  descriptor.** AS-065 ships a local `helpEntry` (name/summary/usage/examples) in
+  `internal/cli/help.go` that can drift from `internal/command` metadata for the
+  shared verbs (`cost`, `context show`, `session resume`); this ticket plumbs the
+  registry descriptor into the CLI command tree so the machine-readable help is
+  truly registry-sourced. (Raised on PR #110.)
 - Reconcile the legacy flag forms in AS-051/AS-064 (e.g. `smith --resume <id>`)
   to the noun-grouped form (`smith session resume <id>`) as the canonical path.
 
