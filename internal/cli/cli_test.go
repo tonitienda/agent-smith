@@ -248,6 +248,9 @@ func TestCommandHelpShowsCommandSpecificFlags(t *testing.T) {
 			fs.String("name", "", "a name")
 			fs.Bool("force", false, "skip confirmation")
 			fs.Int("limit", 20, "max items")
+			// A zero Duration stringifies as "0s", not "0" — the case a hardcoded
+			// zero-string list would wrongly surface; isZeroFlag handles it by type.
+			fs.Duration("wait", 0, "how long to wait")
 		},
 		Run: func(*Context) error { return nil },
 	})
@@ -267,8 +270,8 @@ func TestCommandHelpShowsCommandSpecificFlags(t *testing.T) {
 	if strings.Count(text, "--output") != 1 {
 		t.Errorf("globals duplicated into command flags:\n%s", text)
 	}
-	// Zero-value defaults stay implicit.
-	if strings.Contains(text, "(default: false)") || strings.Contains(text, "(default: )") {
+	// Zero-value defaults stay implicit — including a Duration's "0s".
+	if strings.Contains(text, "(default: false)") || strings.Contains(text, "(default: )") || strings.Contains(text, "(default: 0s)") {
 		t.Errorf("zero-value default shown in help:\n%s", text)
 	}
 

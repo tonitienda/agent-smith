@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -131,14 +132,31 @@ func commandFlagsHelp(cmd *Command) string {
 		if name != "" {
 			left += " " + name
 		}
-		// Show a meaningful default, matching the global flags block; zero values
-		// (empty string, false, 0) add no information so they stay implicit.
-		if d := f.DefValue; d != "" && d != "false" && d != "0" {
-			usage += fmt.Sprintf(" (default: %s)", d)
+		// Show a meaningful default, matching the global flags block; a zero value
+		// adds no information so it stays implicit.
+		if !isZeroFlag(f) {
+			usage += fmt.Sprintf(" (default: %s)", f.DefValue)
 		}
 		fmt.Fprintf(&b, "  %-33s %s\n", left, usage)
 	}
 	return b.String()
+}
+
+// isZeroFlag reports whether a flag's default is the zero value for its type, so
+// help omits an uninformative "(default: …)". It mirrors the standard library's
+// own (unexported) flag.isZeroValue: build a fresh zero of the flag.Value's type
+// and compare its String() to the recorded default, so every type is handled by
+// its own formatting — e.g. a time.Duration zero is "0s", not "0" — instead of a
+// hardcoded list of zero strings.
+func isZeroFlag(f *flag.Flag) bool {
+	typ := reflect.TypeOf(f.Value)
+	var z reflect.Value
+	if typ.Kind() == reflect.Pointer {
+		z = reflect.New(typ.Elem())
+	} else {
+		z = reflect.Zero(typ)
+	}
+	return f.DefValue == z.Interface().(flag.Value).String()
 }
 
 // flagDash prefixes a flag name with the dash count its length implies: -h for a
