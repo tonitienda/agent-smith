@@ -251,3 +251,84 @@ func blockLive(p *projection.Projection, id string) bool {
 	}
 	return false
 }
+
+// TestRestoreBlockRestoresOneLeavesOthers covers AS-068 AC3: a single block is
+// restored from a multi-block removal while its co-removed siblings stay
+// excluded.
+func TestRestoreBlockRestoresOneLeavesOthers(t *testing.T) {
+	events := []schema.Block{
+		text("blk_aaa1", schema.RoleUser, 40, 30),
+		text("blk_bbb2", schema.RoleAssistant, 200, 25),
+		text("blk_ccc3", schema.RoleUser, 160, 20),
+	}
+	// Remove b and c together in one exclusion event.
+	apply, _ := clean.Apply(preview(events, "blk_bbb2", "blk_ccc3"))
+	events = append(events, apply)
+	p := project(events)
+	if blockLive(p, "blk_bbb2") || blockLive(p, "blk_ccc3") {
+		t.Fatal("b and c should be excluded after the removal")
+	}
+
+	restore, ok := clean.RestoreBlock(events, "blk_bbb2")
+	if !ok {
+		t.Fatal("RestoreBlock found nothing to restore")
+	}
+	events = append(events, restore...)
+
+	p = project(events)
+	if !blockLive(p, "blk_aaa1") {
+		t.Error("a should stay live")
+	}
+	if !blockLive(p, "blk_bbb2") {
+		t.Error("b should be restored to the window")
+	}
+	if blockLive(p, "blk_ccc3") {
+		t.Error("c should remain excluded — only b was restored")
+	}
+}
+
+// TestRestoreBlockChained covers the correctness the two-event design protects:
+// restoring the siblings one at a time never reactivates the original removal
+// (which would re-drop an already-restored block).
+func TestRestoreBlockChained(t *testing.T) {
+	events := []schema.Block{
+		text("blk_aaa1", schema.RoleUser, 40, 30),
+		text("blk_bbb2", schema.RoleAssistant, 200, 25),
+		text("blk_ccc3", schema.RoleUser, 160, 20),
+	}
+	apply, _ := clean.Apply(preview(events, "blk_bbb2", "blk_ccc3"))
+	events = append(events, apply)
+
+	r1, ok := clean.RestoreBlock(events, "blk_bbb2")
+	if !ok {
+		t.Fatal("restore b failed")
+	}
+	events = append(events, r1...)
+
+	r2, ok := clean.RestoreBlock(events, "blk_ccc3")
+	if !ok {
+		t.Fatal("restore c failed")
+	}
+	events = append(events, r2...)
+
+	p := project(events)
+	for _, id := range []string{"blk_aaa1", "blk_bbb2", "blk_ccc3"} {
+		if !blockLive(p, id) {
+			t.Errorf("%s should be live after restoring both siblings", id)
+		}
+	}
+}
+
+// TestRestoreBlockRejectsLiveOrUnknown covers the guard: a live or unknown block
+// has nothing to restore.
+func TestRestoreBlockRejectsLiveOrUnknown(t *testing.T) {
+	events := []schema.Block{
+		text("blk_aaa1", schema.RoleUser, 40, 30),
+	}
+	if _, ok := clean.RestoreBlock(events, "blk_aaa1"); ok {
+		t.Error("a live block is not restorable")
+	}
+	if _, ok := clean.RestoreBlock(events, "blk_missing"); ok {
+		t.Error("an unknown block is not restorable")
+	}
+}

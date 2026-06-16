@@ -225,6 +225,14 @@ func (m model) finishCommand(msg commandDoneMsg) model {
 		m.openPicker(msg.cmd, *msg.out.Picker)
 		return m
 	}
+	// An interactive multi-select surface (AS-068 /clean): the user selects
+	// segments and applies, or restores an excluded block, without typing handles.
+	// A face shows it instead of the command's text; a non-interactive face would
+	// have ignored Selector and rendered Text.
+	if msg.out.Selector != nil && (len(msg.out.Selector.Items) > 0 || len(msg.out.Selector.Archive) > 0) {
+		m.openSelector(msg.cmd.Name, *msg.out.Selector)
+		return m
+	}
 	// A session-resetting command (/clear, /resume) rebuilds the transcript from
 	// the now-active session's projected blocks, so the view reflects the restored
 	// conversation (a resume replays prior turns; a fresh /clear replays nothing,

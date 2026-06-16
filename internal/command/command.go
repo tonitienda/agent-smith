@@ -75,6 +75,15 @@ type Output struct {
 	// both: the scriptable listing in Text and the interactive list in Picker.
 	// Advisory and additive (D2).
 	Picker *Picker
+	// Selector, when non-nil, asks an interactive face to present a multi-select
+	// list with a live preview and a confirm action (AS-068 /clean in-panel
+	// selection). The handler supplies the selectable items, the archived items
+	// that can be restored one at a time, and the closures that compute the live
+	// preview and commit a selection — so the face drives the selection without
+	// importing the engine behind it (mirrors how handlers close over session
+	// state). A non-interactive face ignores it and renders Text instead. Advisory
+	// and additive (D2).
+	Selector *Selector
 }
 
 // Picker is an interactive single-select list a Handler offers to interactive
@@ -93,6 +102,47 @@ type Picker struct {
 type PickerItem struct {
 	Label string
 	Value string
+}
+
+// Selector is an interactive multi-select surface a Handler offers to
+// interactive faces (AS-068): the user toggles a selection over Items, sees the
+// running reclaim preview, and confirms to apply — and can restore an Archive
+// item one at a time. The engine work stays in the closures (the handler closes
+// over the session), so the face holds only data and functions and never imports
+// the projection/clean packages (the AS-021 boundary).
+type Selector struct {
+	// Title labels the selection surface.
+	Title string
+	// Items are the selectable rows in display order (e.g. the live /context
+	// segments, largest first).
+	Items []SelectItem
+	// Archive are rows that can be restored individually rather than selected
+	// (e.g. blocks already excluded from the window). May be empty.
+	Archive []SelectItem
+	// Preview computes the live reclaim summary for the currently selected item
+	// Values; the face calls it as the selection changes. It must be pure (no log
+	// mutation). A nil Preview yields no live preview.
+	Preview func(values []string) SelectPreview
+	// Apply commits the selected item Values as one removal and returns a result
+	// line for the face to surface. A nil Apply makes the surface read-only.
+	Apply func(values []string) string
+	// Restore re-includes a single Archive item by Value and returns a result
+	// line. A nil Restore disables per-item restore.
+	Restore func(value string) string
+}
+
+// SelectItem is one row in a Selector: Label is the one-line display text and
+// Value is the key handed back to Preview/Apply/Restore (e.g. a block handle).
+type SelectItem struct {
+	Label string
+	Value string
+}
+
+// SelectPreview is the live feedback a Selector shows for the current selection:
+// a one-line Summary (count and tokens/$ reclaimed) and any soft Warnings.
+type SelectPreview struct {
+	Summary  string
+	Warnings []string
 }
 
 // Handler runs a command with its parsed arguments and returns what to render.

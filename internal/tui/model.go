@@ -98,6 +98,10 @@ type model struct {
 	// picker, when non-nil, is the interactive single-select list a command
 	// offered (AS-064 /resume); it traps focus like a panel until a choice or Esc.
 	picker *picker
+	// selector, when non-nil, is the interactive multi-select surface a command
+	// offered (AS-068 /clean in-panel selection); it traps focus like the picker
+	// until the user applies a selection, restores an archive block, or presses Esc.
+	selector *selector
 	// perm is the permission prompt currently shown (AS-024); permQueue holds
 	// further prompts awaiting their turn, since parallel tool calls (AS-019) can
 	// prompt concurrently but the user decides them one at a time. A non-destructive
@@ -260,6 +264,11 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// An interactive picker captures navigation/selection until a choice or Esc.
 	if m.pickerOpen() {
 		return m.handlePickerKey(msg)
+	}
+	// An interactive selector captures navigation/selection/restore until the user
+	// applies, restores, or presses Esc.
+	if m.selectorOpen() {
+		return m.handleSelectorKey(msg)
 	}
 	// A full-screen command panel captures navigation until dismissed.
 	if m.panelOpen() {
@@ -536,6 +545,19 @@ func (m model) View() string {
 		sections = append(sections, m.pickerView())
 		if m.panelFooterRows() > 0 {
 			sections = append(sections, m.pickerFooter())
+		}
+		return strings.Join(sections, "\n")
+	}
+	if m.selectorOpen() {
+		// The selector shares the picker's pinned-status + footer chrome so it
+		// degrades identically on a short terminal (D-TUI-3/D-TUI-11).
+		sections := make([]string, 0, 3)
+		if m.statusRows() > 0 {
+			sections = append(sections, m.statusLine())
+		}
+		sections = append(sections, m.selectorView())
+		if m.panelFooterRows() > 0 {
+			sections = append(sections, m.selectorFooter())
 		}
 		return strings.Join(sections, "\n")
 	}
