@@ -99,7 +99,13 @@ func History(events []schema.Block) []State {
 // Current returns the session's active goal — the most recent goal block still
 // live in the projection — and whether one is set.
 func Current(events []schema.Block) (State, bool) {
-	hist := History(events)
+	return latestActive(History(events))
+}
+
+// latestActive returns the most recent active goal in an already-computed
+// history, so callers that already hold the history (Render) need not project
+// the log again.
+func latestActive(hist []State) (State, bool) {
 	for i := len(hist) - 1; i >= 0; i-- {
 		if hist[i].Active {
 			return hist[i], true
@@ -116,8 +122,10 @@ func Render(events []schema.Block) string {
 	if len(hist) == 0 {
 		return `No goal set. Use /goal "<objective>" to set one.`
 	}
+	// Reuse the history we just projected to find the active goal rather than
+	// calling Current (which would project the log a second time).
 	var b strings.Builder
-	if cur, ok := Current(events); ok {
+	if cur, ok := latestActive(hist); ok {
 		fmt.Fprintf(&b, "Current goal: %s\n", cur.Objective)
 	} else {
 		b.WriteString("No active goal (the last one was completed).\n")

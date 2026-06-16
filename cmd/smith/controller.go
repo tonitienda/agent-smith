@@ -75,6 +75,14 @@ type chatSession struct {
 	meterLen   int
 	meterModel string
 	meterCache tui.Meter
+
+	// goal memo: the active session objective (AS-040), recomputed only when the
+	// active log or its length changes. Meta() runs on every token delta (via
+	// refreshMeter), so without this the goal projection would re-run dozens of
+	// times a second; this keeps that refresh O(1) like the meter.
+	goalLog   *eventlog.Log
+	goalLen   int
+	goalCache string
 }
 
 // newChatSession builds the controller over an already-opened session, wiring
@@ -144,11 +152,30 @@ func (s *chatSession) Run(ctx context.Context, userText string) (loop.Result, er
 func (s *chatSession) Meta() tui.Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	m := tui.Meta{Provider: s.provName, Model: s.model, Session: shortID(s.sess.ID), Project: s.project}
-	if g, ok := goal.Current(s.sess.Log.Events()); ok {
-		m.Goal = g.Objective
+	return tui.Meta{
+		Provider: s.provName,
+		Model:    s.model,
+		Session:  shortID(s.sess.ID),
+		Project:  s.project,
+		Goal:     s.currentGoal(),
 	}
-	return m
+}
+
+// currentGoal returns the active session objective for the status line (AS-040),
+// memoized on the active log and its length so the per-delta status refresh
+// (refreshMeter → Meta) stays O(1); the goal projection only re-runs when the
+// log grows or is swapped (/clear, /resume). Callers must hold s.mu.
+func (s *chatSession) currentGoal() string {
+	log := s.sess.Log
+	if log == s.goalLog && log.Len() == s.goalLen {
+		return s.goalCache
+	}
+	objective := ""
+	if g, ok := goal.Current(log.Events()); ok {
+		objective = g.Objective
+	}
+	s.goalLog, s.goalLen, s.goalCache = log, log.Len(), objective
+	return objective
 }
 
 // cmdGoal sets, shows, or completes the session objective (AS-040 /goal). The
