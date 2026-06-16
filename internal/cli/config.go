@@ -95,6 +95,15 @@ func LoadConfigFile(path string) (map[string]string, error) {
 // directories and preserving the other entries. It rewrites the file from the
 // merged map (sorted) — fine for the small config files this targets.
 func SaveConfigValue(path, key, value string) error {
+	// Guard the line format: a key with '=' or a newline, or a value with a
+	// newline, would not survive the key=value round-trip and could corrupt the
+	// rest of the file.
+	if key == "" || strings.ContainsAny(key, "=\n\r") {
+		return fmt.Errorf("invalid config key %q: must be non-empty and contain no '=' or newline", key)
+	}
+	if strings.ContainsAny(value, "\n\r") {
+		return fmt.Errorf("invalid config value for %q: must contain no newline", key)
+	}
 	cur, err := LoadConfigFile(path)
 	if err != nil {
 		return err

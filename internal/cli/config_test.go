@@ -95,6 +95,35 @@ func TestConfigFileRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSaveConfigValueRejectsCorruptingInput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	bad := []struct {
+		name, key, value string
+	}{
+		{"empty key", "", "v"},
+		{"key with equals", "a=b", "v"},
+		{"key with newline", "a\nb", "v"},
+		{"value with newline", "k", "line1\nline2"},
+	}
+	for _, tc := range bad {
+		if err := SaveConfigValue(path, tc.key, tc.value); err == nil {
+			t.Errorf("%s: SaveConfigValue accepted corrupting input", tc.name)
+		}
+	}
+	// A rejected write must not have created the file (no partial state).
+	if _, err := LoadConfigFile(path); err != nil {
+		t.Fatalf("LoadConfigFile after rejected writes: %v", err)
+	}
+	// A value containing '=' is fine — only the first '=' splits on read.
+	if err := SaveConfigValue(path, "url", "k=v&x=y"); err != nil {
+		t.Fatalf("SaveConfigValue(value with '='): %v", err)
+	}
+	m, _ := LoadConfigFile(path)
+	if m["url"] != "k=v&x=y" {
+		t.Errorf("value with '=' round-trip = %q, want k=v&x=y", m["url"])
+	}
+}
+
 func TestConfigFileIgnoresCommentsAndQuotes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config")

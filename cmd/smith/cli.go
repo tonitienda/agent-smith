@@ -293,8 +293,12 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 	if err != nil {
 		return err
 	}
+	prov, model, err := headlessProvider()
+	if err != nil {
+		return err
+	}
 	rt := tool.NewRuntime(tools, sess.Log, tool.WithPermission(denyHeadless))
-	eng, err := loop.New(defaultProviders()["anthropic"], sess.Log, rt, tools, chatModel())
+	eng, err := loop.New(prov, sess.Log, rt, tools, model)
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
@@ -303,6 +307,30 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 		return err // runtime failure → exit 1
 	}
 	return c.Emit(res.FinalText)
+}
+
+// headlessProvider resolves the provider and model for a headless run from the
+// configured default model (SMITH_MODEL, else defaultModel), mapping the model
+// to its vendor through the pricing table — the same resolution readonlyController
+// uses — so `smith run` with an OpenAI SMITH_MODEL talks to the OpenAI provider
+// rather than failing against a hardcoded Anthropic one.
+func headlessProvider() (provider.Provider, string, error) {
+	pricing, err := cost.Default()
+	if err != nil {
+		return nil, "", fmt.Errorf("load pricing table: %w", err)
+	}
+	providers := defaultProviders()
+	provName, model := "anthropic", chatModel()
+	if r, ok := pricing.Lookup(model); ok && r.Vendor != "" {
+		if _, ok := providers[r.Vendor]; ok {
+			provName = r.Vendor
+		}
+	}
+	prov, ok := providers[provName]
+	if !ok {
+		return nil, "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
+	}
+	return prov, model, nil
 }
 
 // denyHeadless refuses every tool call: headless mode never opens an interactive
