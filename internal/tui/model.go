@@ -621,8 +621,13 @@ func goalLabel(goal string) string {
 		return ""
 	}
 	const max = 48
-	if r := []rune(goal); len(r) > max {
-		goal = string(r[:max-1]) + "…"
+	// A string never has more runes than bytes, so only pay for the
+	// rune-accurate truncation when the byte length could exceed the cap —
+	// statusLine renders often, and the common short goal stays allocation-free.
+	if len(goal) > max {
+		if r := []rune(goal); len(r) > max {
+			goal = string(r[:max-1]) + "…"
+		}
 	}
 	return "goal: " + goal
 }
