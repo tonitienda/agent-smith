@@ -300,12 +300,19 @@ func resolvePrompt(c *cli.Context, file string) (string, error) {
 		if file != "" {
 			return readFile(file)
 		}
-		return nonEmptyPrompt(s)
+		// Non-TTY with nothing piped and no -f: the user supplied no prompt at
+		// all, so the standard no-prompt guidance is clearer than "empty prompt".
+		return "", errNoPrompt()
 	case file != "":
 		return readFile(file)
 	default:
-		return "", cli.Usagef("run: no prompt — pass it as an argument, pipe it on stdin, or use -f <file>")
+		return "", errNoPrompt()
 	}
+}
+
+// errNoPrompt is the usage error for `run` invoked with no prompt source.
+func errNoPrompt() error {
+	return cli.Usagef("run: no prompt — pass it as an argument, pipe it on stdin, or use -f <file>")
 }
 
 // readTrim reads r fully and trims surrounding whitespace; an empty result is

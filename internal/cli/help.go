@@ -131,6 +131,11 @@ func commandFlagsHelp(cmd *Command) string {
 		if name != "" {
 			left += " " + name
 		}
+		// Show a meaningful default, matching the global flags block; zero values
+		// (empty string, false, 0) add no information so they stay implicit.
+		if d := f.DefValue; d != "" && d != "false" && d != "0" {
+			usage += fmt.Sprintf(" (default: %s)", d)
+		}
 		fmt.Fprintf(&b, "  %-33s %s\n", left, usage)
 	}
 	return b.String()
