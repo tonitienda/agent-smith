@@ -108,8 +108,8 @@ func TestRunHelpJSONDumpsRegistryEntry(t *testing.T) {
 }
 
 func TestConfigGetRespectsConfigFlag(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "explicit")
-	if err := os.WriteFile(path, []byte("model = from-explicit\n"), 0o644); err != nil {
+	path := filepath.Join(t.TempDir(), "explicit.json")
+	if err := os.WriteFile(path, []byte(`{"model":"from-explicit"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	app, out, _ := testApp(false, false)
@@ -122,7 +122,7 @@ func TestConfigGetRespectsConfigFlag(t *testing.T) {
 }
 
 func TestConfigSetQuietWritesWithoutDiagnostic(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "out")
+	path := filepath.Join(t.TempDir(), "out.json")
 	app, _, errb := testApp(false, false)
 	if code := app.Run([]string{"config", "set", "model", "gpt-4o", "--config", path, "--quiet"}); code != cli.ExitOK {
 		t.Fatalf("config set --quiet exit = %d", code)
@@ -130,12 +130,13 @@ func TestConfigSetQuietWritesWithoutDiagnostic(t *testing.T) {
 	if errb.Len() != 0 {
 		t.Errorf("--quiet still wrote to stderr: %q", errb.String())
 	}
-	m, err := cli.LoadConfigFile(path)
-	if err != nil {
-		t.Fatalf("LoadConfigFile: %v", err)
+	// The value round-trips through `config get` over the same explicit file.
+	app2, out, _ := testApp(false, false)
+	if code := app2.Run([]string{"config", "get", "model", "--config", path}); code != cli.ExitOK {
+		t.Fatalf("config get after set exit = %d", code)
 	}
-	if m["model"] != "gpt-4o" {
-		t.Errorf("config set wrote %v, want model=gpt-4o", m)
+	if got := strings.TrimSpace(out.String()); got != "gpt-4o" {
+		t.Errorf("config set then get = %q, want gpt-4o", got)
 	}
 }
 

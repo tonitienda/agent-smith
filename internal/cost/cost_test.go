@@ -319,3 +319,52 @@ func TestLatestAndContextTokens(t *testing.T) {
 		t.Errorf("ContextTokens = %d, want 9250 (900+8000+200+150)", got)
 	}
 }
+
+// TestDefaultWithLayersConfigSection checks the AS-071 pricing layering: a
+// config `pricing` section overrides the embedded defaults model-by-model, and a
+// $SMITH_PRICING file overrides the config section in turn, with each layer
+// falling back to the one below for models it does not name.
+func TestDefaultWithLayersConfigSection(t *testing.T) {
+	section := []byte(`{"version":1,"currency":"USD","models":[
+		{"model":"claude-opus-4-8","input_per_mtok":3.0,"output_per_mtok":4.0}
+	]}`)
+
+	// Config section alone overrides the embedded rate; other models fall back.
+	t.Setenv(cost.EnvPricingFile, "")
+	tbl, err := cost.DefaultWith(section)
+	if err != nil {
+		t.Fatalf("DefaultWith: %v", err)
+	}
+	if r, ok := tbl.Lookup("claude-opus-4-8"); !ok || r.InputPerMTok != 3.0 {
+		t.Errorf("config-section rate = %+v (ok=%v), want input 3", r, ok)
+	}
+	if _, ok := tbl.Lookup("gpt-4o"); !ok {
+		t.Error("a model absent from the config section should fall back to embedded")
+	}
+
+	// A $SMITH_PRICING file outranks the config section for the models it names.
+	path := filepath.Join(t.TempDir(), "pricing.json")
+	envFile := `{"version":1,"currency":"USD","models":[
+		{"model":"claude-opus-4-8","input_per_mtok":9.0,"output_per_mtok":9.0}
+	]}`
+	if err := os.WriteFile(path, []byte(envFile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(cost.EnvPricingFile, path)
+	tbl, err = cost.DefaultWith(section)
+	if err != nil {
+		t.Fatalf("DefaultWith with env file: %v", err)
+	}
+	if r, ok := tbl.Lookup("claude-opus-4-8"); !ok || r.InputPerMTok != 9.0 {
+		t.Errorf("env-file rate = %+v (ok=%v), want input 9 (env outranks config)", r, ok)
+	}
+}
+
+// TestDefaultWithInvalidSection ensures a malformed config pricing section is a
+// reported error, never a silent fall-through that misprices a session.
+func TestDefaultWithInvalidSection(t *testing.T) {
+	t.Setenv(cost.EnvPricingFile, "")
+	if _, err := cost.DefaultWith([]byte(`{"version":2,"models":[]}`)); err == nil {
+		t.Error("a version-2 pricing section should be rejected")
+	}
+}
