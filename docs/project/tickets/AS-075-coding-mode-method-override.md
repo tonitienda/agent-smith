@@ -2,7 +2,7 @@
 id: AS-075
 title: Coding Mode project-level method override (via memory files)
 status: ready-to-implement
-github_issue: null
+github_issue: 125
 depends_on: [AS-032, AS-072]
 area: coding-mode
 priority: P1

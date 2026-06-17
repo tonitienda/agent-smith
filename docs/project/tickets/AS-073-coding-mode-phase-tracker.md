@@ -2,7 +2,7 @@
 id: AS-073
 title: Coding Mode phase tracker panel + mode presentation
 status: needs-clarification
-github_issue: null
+github_issue: 123
 depends_on: [AS-067, AS-072]
 area: coding-mode
 priority: P1

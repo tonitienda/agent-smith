@@ -2,7 +2,7 @@
 id: AS-076
 title: Coding Mode reflect-phase artifacts (success metric, instrumentation, check-back ticket)
 status: needs-clarification
-github_issue: null
+github_issue: 126
 depends_on: [AS-045, AS-048, AS-072]
 area: coding-mode
 priority: P1

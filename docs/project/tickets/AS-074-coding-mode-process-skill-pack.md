@@ -2,7 +2,7 @@
 id: AS-074
 title: Coding Mode process skill pack (bundled, auto-enabled per phase)
 status: ready-to-implement
-github_issue: null
+github_issue: 124
 depends_on: [AS-034, AS-072]
 area: coding-mode
 priority: P1

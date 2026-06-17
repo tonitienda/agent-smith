@@ -2,7 +2,7 @@
 id: AS-072
 title: Coding Mode shell — /feature & /mode entry/exit + phase-as-block
 status: needs-clarification
-github_issue: null
+github_issue: 122
 depends_on: [AS-006, AS-033, AS-040]
 area: coding-mode
 priority: P1
