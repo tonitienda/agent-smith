@@ -1,8 +1,10 @@
 package memory_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tonitienda/agent-smith/internal/memory"
@@ -140,6 +142,133 @@ func TestSkipsEmpty(t *testing.T) {
 	}
 	if _, ok := blockFor(blocks, emptyPath); ok {
 		t.Fatalf("whitespace-only file %s should have been skipped", emptyPath)
+	}
+}
+
+// TestImportAttributed is AS-082 AC1: an @import pulls in the target's content
+// as its own block, attributed to the imported file's path (not folded into the
+// importer's segment).
+func TestImportAttributed(t *testing.T) {
+	wd := t.TempDir()
+	importPath := filepath.Join(wd, "shared.md")
+	write(t, importPath, "shared rule")
+	mainPath := filepath.Join(wd, "CLAUDE.md")
+	write(t, mainPath, "project rule\n@shared.md\n")
+
+	blocks, err := memory.Load("", wd)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	main, ok := blockFor(blocks, mainPath)
+	if !ok {
+		t.Fatalf("no block for importer %s", mainPath)
+	}
+	if main.Text == nil || main.Text.Text != "project rule\n@shared.md\n" {
+		t.Fatalf("importer content = %+v, want it kept intact", main.Text)
+	}
+	imp, ok := blockFor(blocks, importPath)
+	if !ok {
+		t.Fatalf("no block attributed to import %s (loaded %d blocks)", importPath, len(blocks))
+	}
+	if imp.Text == nil || imp.Text.Text != "shared rule" {
+		t.Fatalf("import content = %+v, want %q", imp.Text, "shared rule")
+	}
+}
+
+// TestImportCycleTerminates is AS-082 AC2: a cycle (A imports B, B imports A)
+// terminates, loading each file once.
+func TestImportCycleTerminates(t *testing.T) {
+	wd := t.TempDir()
+	aPath := filepath.Join(wd, "CLAUDE.md")
+	bPath := filepath.Join(wd, "b.md")
+	write(t, aPath, "A\n@b.md\n")
+	write(t, bPath, "B\n@CLAUDE.md\n")
+
+	blocks, err := memory.Load("", wd) // must return, not hang
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	count := 0
+	for _, b := range blocks {
+		if src, ok := memory.Source(b); ok && (src == aPath || src == bPath) {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("loaded %d cycle blocks, want each of A,B once", count)
+	}
+}
+
+// TestImportDepthBounded is AS-082 AC2: a deep import chain stops at
+// MaxImportDepth rather than following indefinitely.
+func TestImportDepthBounded(t *testing.T) {
+	wd := t.TempDir()
+	// Build a chain f0 -> f1 -> ... longer than the depth limit.
+	total := memory.MaxImportDepth + 3
+	for i := 0; i < total; i++ {
+		name := filepath.Join(wd, fmt.Sprintf("f%d.md", i))
+		body := fmt.Sprintf("level %d", i)
+		if i < total-1 {
+			body += fmt.Sprintf("\n@f%d.md\n", i+1)
+		}
+		write(t, name, body)
+	}
+	// Load f0 directly by naming it CLAUDE.md content via a thin entry file.
+	entry := filepath.Join(wd, "CLAUDE.md")
+	write(t, entry, "@f0.md\n")
+
+	blocks, err := memory.Load("", wd)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	deepest := filepath.Join(wd, fmt.Sprintf("f%d.md", total-1))
+	if _, ok := blockFor(blocks, deepest); ok {
+		t.Fatalf("deepest file %s loaded past depth limit %d", deepest, memory.MaxImportDepth)
+	}
+}
+
+// TestImportHomeExpansion checks that an @~/path import resolves against the
+// user home dir (AS-082), not the filesystem root.
+func TestImportHomeExpansion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	importPath := filepath.Join(home, "global.md")
+	write(t, importPath, "home rule")
+
+	wd := t.TempDir()
+	write(t, filepath.Join(wd, "CLAUDE.md"), "@~/global.md\n")
+
+	blocks, err := memory.Load("", wd)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	imp, ok := blockFor(blocks, importPath)
+	if !ok {
+		t.Fatalf("no block for home-expanded import %s (loaded %d)", importPath, len(blocks))
+	}
+	if imp.Text == nil || imp.Text.Text != "home rule" {
+		t.Fatalf("content = %+v, want %q", imp.Text, "home rule")
+	}
+}
+
+// TestImportMissingNote is AS-082 AC3: a missing import surfaces a visible note
+// attributed to the target path and does not abort the load.
+func TestImportMissingNote(t *testing.T) {
+	wd := t.TempDir()
+	mainPath := filepath.Join(wd, "CLAUDE.md")
+	write(t, mainPath, "rule\n@nope.md\n")
+	missing := filepath.Join(wd, "nope.md")
+
+	blocks, err := memory.Load("", wd)
+	if err != nil {
+		t.Fatalf("load must not abort on missing import: %v", err)
+	}
+	note, ok := blockFor(blocks, missing)
+	if !ok {
+		t.Fatalf("no note block for missing import %s", missing)
+	}
+	if note.Text == nil || !strings.Contains(note.Text.Text, "not found") {
+		t.Fatalf("note content = %+v, want a 'not found' note", note.Text)
 	}
 }
 

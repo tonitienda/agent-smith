@@ -14,7 +14,16 @@
 // Discovery walks user → project → directory, lowest precedence first: the
 // user-level dir, then every ancestor directory of the working path from the
 // outermost down to the working directory, so a deeper (more specific) file
-// loads last. @import-style includes are out of scope here — see AS-082.
+// loads last.
+//
+// A memory file may pull in another with an @import directive (AS-082): a line
+// whose only content is @<path>, resolved relative to the including file's
+// directory (with ~ for the home dir). The imported file becomes its own block,
+// attributed to its own path, so /context shows where each chunk came from
+// rather than folding it into the importer's segment. Imports are deduplicated
+// across a load (so a file pulled in twice loads once, and a cycle terminates)
+// and nesting is capped at MaxImportDepth; a missing or unreadable import
+// degrades to a visible note block instead of aborting session start.
 package memory
 
 import (
@@ -36,6 +45,12 @@ const Producer = "memory"
 // is the schema's forward-compat escape hatch (schema.Block.Ext), so attaching
 // the origin path here needs no schema change.
 const extPath = "memory_path"
+
+// MaxImportDepth caps how many levels of @import nesting are followed from a
+// discovered memory file (the file itself is depth 0; its imports are depth 1).
+// Combined with cross-load deduplication it guarantees termination even for a
+// cyclic or pathologically deep include graph.
+const MaxImportDepth = 8
 
 // Filenames are the memory-file conventions honored at each directory level, in
 // the deterministic order applied when several coexist in one directory. All
@@ -102,6 +117,7 @@ func Discover(userDir, wd string) []string {
 func Load(userDir, wd string) ([]schema.Block, error) {
 	paths := Discover(userDir, wd)
 	var blocks []schema.Block
+	seen := map[string]bool{}
 	for _, p := range paths {
 		data, err := os.ReadFile(p)
 		if err != nil {
@@ -110,13 +126,87 @@ func Load(userDir, wd string) ([]schema.Block, error) {
 			}
 			return nil, fmt.Errorf("read memory file %s: %w", p, err)
 		}
-		content := string(data)
-		if strings.TrimSpace(content) == "" {
+		if seen[absClean(p)] {
 			continue
 		}
-		blocks = append(blocks, Block(p, content))
+		seen[absClean(p)] = true
+		expand(&blocks, p, string(data), 0, seen)
 	}
 	return blocks, nil
+}
+
+// expand appends the block for content (skipping empty/whitespace-only files so
+// they never add an empty segment) and then, depth permitting, follows its
+// @import directives — each imported file becoming its own attributed block.
+// seen tracks already-loaded absolute paths so a file pulled in twice loads
+// once and a cycle terminates; depth is bounded by MaxImportDepth.
+func expand(blocks *[]schema.Block, path, content string, depth int, seen map[string]bool) {
+	if strings.TrimSpace(content) != "" {
+		*blocks = append(*blocks, Block(path, content))
+	}
+	if depth >= MaxImportDepth {
+		return
+	}
+	for _, imp := range imports(content) {
+		target := resolveImport(path, imp)
+		key := absClean(target)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		data, err := os.ReadFile(target)
+		if err != nil {
+			// A missing or unreadable import is a visible note attributed to the
+			// path it would have come from, not a hard failure (AS-082).
+			*blocks = append(*blocks, Block(target, fmt.Sprintf("[memory import not found: %s]", target)))
+			continue
+		}
+		expand(blocks, target, string(data), depth+1, seen)
+	}
+}
+
+// imports returns the import targets referenced by content: each line whose only
+// non-blank content is @<path> (a single token, no embedded whitespace). The
+// conservative whole-line rule keeps a stray "@" mid-sentence — e.g. an email or
+// a code sample — from being treated as a directive.
+func imports(content string) []string {
+	var out []string
+	for _, line := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(line)
+		if len(t) < 2 || t[0] != '@' {
+			continue
+		}
+		p := t[1:]
+		if strings.ContainsAny(p, " \t") {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// resolveImport turns an import target into a filesystem path: ~ (or ~/...)
+// expands to the home dir, an absolute path is used as-is, and a relative path
+// is resolved against the including file's directory.
+func resolveImport(includingPath, imp string) string {
+	if imp == "~" || strings.HasPrefix(imp, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, strings.TrimPrefix(imp, "~"))
+		}
+	}
+	if filepath.IsAbs(imp) {
+		return filepath.Clean(imp)
+	}
+	return filepath.Join(filepath.Dir(includingPath), imp)
+}
+
+// absClean returns an absolute, cleaned form of path for use as a dedup key, so
+// the same file reached by different relative routes is recognized as one.
+func absClean(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return filepath.Clean(path)
 }
 
 // Block builds a model-facing memory block carrying content, attributed to its
