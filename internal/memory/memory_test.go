@@ -227,6 +227,30 @@ func TestImportDepthBounded(t *testing.T) {
 	}
 }
 
+// TestImportHomeExpansion checks that an @~/path import resolves against the
+// user home dir (AS-082), not the filesystem root.
+func TestImportHomeExpansion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	importPath := filepath.Join(home, "global.md")
+	write(t, importPath, "home rule")
+
+	wd := t.TempDir()
+	write(t, filepath.Join(wd, "CLAUDE.md"), "@~/global.md\n")
+
+	blocks, err := memory.Load("", wd)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	imp, ok := blockFor(blocks, importPath)
+	if !ok {
+		t.Fatalf("no block for home-expanded import %s (loaded %d)", importPath, len(blocks))
+	}
+	if imp.Text == nil || imp.Text.Text != "home rule" {
+		t.Fatalf("content = %+v, want %q", imp.Text, "home rule")
+	}
+}
+
 // TestImportMissingNote is AS-082 AC3: a missing import surfaces a visible note
 // attributed to the target path and does not abort the load.
 func TestImportMissingNote(t *testing.T) {
