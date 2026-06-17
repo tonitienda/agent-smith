@@ -79,7 +79,7 @@ func startChat(resumeID string, noSplash bool) error {
 		return fmt.Errorf("register shell tool: %w", err)
 	}
 
-	pricing, err := cost.Default()
+	pricing, err := sessionPricing()
 	if err != nil {
 		return fmt.Errorf("load pricing table: %w", err)
 	}

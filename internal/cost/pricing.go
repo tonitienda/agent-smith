@@ -161,22 +161,42 @@ func LoadFile(path string) (*Table, error) {
 	return t, nil
 }
 
-// Default returns the pricing table to use for a session: the embedded defaults,
-// optionally overlaid with the override file named by $SMITH_PRICING. A missing
-// env var yields the embedded table; a set-but-unreadable/invalid file is a
-// reported error so a typo'd override never silently misprices a session.
-func Default() (*Table, error) {
-	base := Embedded()
-	path := strings.TrimSpace(os.Getenv(EnvPricingFile))
-	if path == "" {
-		return base, nil
+// ParseTable parses a pricing table from JSON bytes (the same `{version,
+// currency, models}` document the embedded table and override files use). It
+// lets a caller build a table from a pricing section read out of the unified
+// config (AS-071) without reaching into the cost package's internals.
+func ParseTable(b []byte) (*Table, error) { return parse(b) }
+
+// Default returns the session pricing table from the embedded defaults plus the
+// $SMITH_PRICING escape hatch (DefaultWith with no config section).
+func Default() (*Table, error) { return DefaultWith(nil) }
+
+// DefaultWith returns the pricing table to use for a session, layered low-to-high:
+// the embedded defaults, then the unified config's `pricing` section (section,
+// the marshaled JSON of that subtree — empty when unset), then the override file
+// named by $SMITH_PRICING. Each higher layer overrides matching models and falls
+// back to the layer below for the rest, so a config or env override needs no
+// recompile. A set-but-unreadable/invalid section or file is a reported error so
+// a typo never silently misprices a session.
+func DefaultWith(section []byte) (*Table, error) {
+	tbl := Embedded()
+	if len(strings.TrimSpace(string(section))) > 0 {
+		override, err := ParseTable(section)
+		if err != nil {
+			return nil, fmt.Errorf("cost: parse pricing config section: %w", err)
+		}
+		override.parent = tbl
+		tbl = override
 	}
-	override, err := LoadFile(path)
-	if err != nil {
-		return nil, err
+	if path := strings.TrimSpace(os.Getenv(EnvPricingFile)); path != "" {
+		override, err := LoadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		override.parent = tbl
+		tbl = override
 	}
-	override.parent = base
-	return override, nil
+	return tbl, nil
 }
 
 // supportedVersion is the only pricing-schema version this build understands.

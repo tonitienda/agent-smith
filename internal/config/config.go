@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -245,6 +246,133 @@ func (c *Config) Strings(path string) (value []string, source Source, ok bool) {
 	default:
 		return nil, s, false
 	}
+}
+
+// subtree walks the effective tree to the value at a dotted path, returning
+// interior objects as well as leaves (unlike lookup, which only resolves leaves
+// via the source index). An empty path returns the whole tree.
+func (c *Config) subtree(path string) (any, bool) {
+	if path == "" {
+		return c.tree, true
+	}
+	cur := any(c.tree)
+	for _, seg := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[seg]
+		if !ok {
+			return nil, false
+		}
+	}
+	return cur, true
+}
+
+// Value resolves a dotted path to its effective value — the data behind `config
+// get`. A leaf carries the Source that won it; an interior object resolves with
+// an empty Source (no single layer owns a whole section). ok is false when no
+// layer sets the path.
+func (c *Config) Value(path string) (value any, source Source, ok bool) {
+	if v, s, ok := c.lookup(path); ok {
+		return v, s, true
+	}
+	if v, ok := c.subtree(path); ok {
+		return v, Source{}, true
+	}
+	return nil, Source{}, false
+}
+
+// Decode JSON-round-trips the effective config subtree at path into v, so a
+// consumer (permissions, pricing) reads its section as a typed struct instead of
+// parsing its own file. An empty path decodes the whole tree. ok is false when
+// the path is unset, leaving v untouched.
+func (c *Config) Decode(path string, v any) (ok bool, err error) {
+	sub, ok := c.subtree(path)
+	if !ok {
+		return false, nil
+	}
+	b, err := json.Marshal(sub)
+	if err != nil {
+		return false, fmt.Errorf("config: encode %q: %w", path, err)
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		return false, fmt.Errorf("config: decode %q: %w", path, err)
+	}
+	return true, nil
+}
+
+// SetFileValue upserts the dotted key to value in the JSON config file at path,
+// creating the file (and parent directories) if absent and preserving the other
+// keys. Nested segments are created as needed; a segment that currently holds a
+// scalar where an object is needed is replaced. The write is atomic (temp file +
+// rename) so an interrupted write cannot corrupt an existing config. It backs
+// `config set`, which stores values as strings.
+func SetFileValue(path, key string, value any) error {
+	segs := strings.Split(key, ".")
+	for _, seg := range segs {
+		if seg == "" {
+			return fmt.Errorf("invalid config key %q: empty path segment", key)
+		}
+	}
+
+	root := map[string]any{}
+	data, err := os.ReadFile(path) //nolint:gosec // operator-specified config path
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("config: read %s: %w", path, err)
+	}
+	if len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("config: parse %s: %w", path, err)
+		}
+	}
+
+	m := root
+	for _, seg := range segs[:len(segs)-1] {
+		child, ok := m[seg].(map[string]any)
+		if !ok {
+			child = map[string]any{}
+			m[seg] = child
+		}
+		m = child
+	}
+	m[segs[len(segs)-1]] = value
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config: encode %s: %w", path, err)
+	}
+	out = append(out, '\n')
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("config: create dir for %s: %w", path, err)
+	}
+	return atomicWrite(path, out, 0o644)
+}
+
+// atomicWrite writes data to path via a sibling temp file and a rename, so an
+// interrupted write leaves any existing config intact rather than half-written.
+func atomicWrite(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	if err != nil {
+		return fmt.Errorf("config: create temp file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("config: write temp file: %w", err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("config: chmod temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("config: close temp file: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("config: replace %s: %w", path, err)
+	}
+	return nil
 }
 
 // Entry is one resolved leaf in the effective config.

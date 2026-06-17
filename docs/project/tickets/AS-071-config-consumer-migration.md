@@ -1,7 +1,7 @@
 ---
 id: AS-071
 title: "Migrate config consumers (flat key=value, permissions, pricing) onto the layered config substrate"
-status: ready-to-implement
+status: done
 github_issue: 119
 depends_on: [AS-031]
 area: foundation
@@ -11,7 +11,7 @@ source: AS-031 acceptance criteria (consumer migration), docs/design/adr-0002-co
 
 # AS-071 · Migrate config consumers onto the layered config substrate
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -46,16 +46,23 @@ silently breaking existing `permissions.json` / `.smith/config` files.
 
 ## Acceptance criteria
 
-- [ ] `config get`/`set` resolve through `internal/config` (no second flat
+- [x] `config get`/`set` resolve through `internal/config` (no second flat
       loader), with scriptable get/set behaviour and source reporting preserved.
-- [ ] Permission policy loads from the unified config's `permissions` section;
-      "always allow this" persistence and atomic writes still work; existing
-      `permissions.json` files keep loading (or a documented migration exists).
-- [ ] Pricing overrides load from the unified config's `pricing` section; the
-      embedded defaults and `$SMITH_PRICING` escape hatch still work.
-- [ ] `smith config show` reflects the migrated sections with correct sources.
-- [ ] No silent format break: existing user files either keep working or a
-      migration is documented (PRD D2 / D0).
+      The flat `internal/cli/config.go` loader was removed; `set` writes nested
+      JSON via `config.SetFileValue` (atomic), `get` resolves dotted keys via
+      `config.Value`.
+- [x] Permission policy loads from the unified config's `permissions` section
+      (`buildPolicy` → `config.Decode("permissions", …)`), merged with the legacy
+      layered `permissions.json` (still loaded). "Always allow this" persistence
+      and atomic writes are unchanged (still append to `permissions.json`).
+- [x] Pricing overrides load from the unified config's `pricing` section via
+      `cost.DefaultWith` (embedded ← config section ← `$SMITH_PRICING`); the
+      embedded defaults and the `$SMITH_PRICING` escape hatch still work.
+- [x] `smith config show` reflects the migrated `permissions`/`pricing` sections
+      with correct per-leaf sources.
+- [x] No silent format break: `permissions.json` and `$SMITH_PRICING` keep
+      working; the removed flat `.smith/config` is documented (ADR-0002) and a
+      leftover flat file triggers a `config show` warning (PRD D2 / D0).
 
 ## Dependencies
 

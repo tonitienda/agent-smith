@@ -62,12 +62,26 @@ config show` prints.
 ## Consequences
 
 - The config file is `.smith/config.json` (project) and
-  `<UserConfigDir>/smith/config.json` (user) — the `.json` sibling of the flat
-  `config` file that `config get`/`set` still use. The two config files coexist
-  until **AS-071** consolidates the flat chain, permissions, and pricing onto
-  this substrate.
+  `<UserConfigDir>/smith/config.json` (user). As of **AS-071** it is the single
+  config file: `config get`/`set` read and write it, and the permission and
+  pricing consumers read their sections (`permissions`, `pricing`) from it.
 - This ADR deviates from the AS-031 ticket's "YAML format" wording; the
   deviation and its rationale (stdlib-only, JSON superset) are recorded here per
   PRD D0 (no silent punts).
-- Migrating the permission and pricing consumers off their own loaders onto this
-  system is **out of scope** for AS-031 (lean core) and tracked as **AS-071**.
+
+## Migration: flat `key = value` → nested JSON (AS-071)
+
+AS-031 shipped a flat `key = value` file (`.smith/config`) for `config get`/`set`
+alongside the nested `.smith/config.json`. **AS-071 removed the flat loader**:
+the flat file is no longer read. The migration is mechanical — move each
+`key = value` line into the JSON object (`model = x` → `{"model": "x"}`) in the
+sibling `config.json`, or re-set it with `smith config set <key> <value>`, which
+now writes the nested file. To avoid a silent break (PRD D0/D2), `smith config
+show` warns when a leftover flat `.smith/config` (or the user equivalent) is
+present so its now-ignored keys are surfaced rather than dropped silently.
+
+Permissions and pricing keep their own files as a back-compat layer:
+`permissions.json` still loads (and remains the append target for "always allow"
+remembered rules, preserving its atomic write), and `$SMITH_PRICING` still
+overrides pricing. Each is now *also* readable as a section of the unified
+config, layered low-to-high: config-section, then the legacy file/env override.

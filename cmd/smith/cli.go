@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -195,7 +196,7 @@ func readonlyController() (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	pricing, err := cost.Default()
+	pricing, err := sessionPricing()
 	if err != nil {
 		return nil, nil, fmt.Errorf("load pricing table: %w", err)
 	}
@@ -406,7 +407,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 // uses — so `smith run` with an OpenAI SMITH_MODEL talks to the OpenAI provider
 // rather than failing against a hardcoded Anthropic one.
 func headlessProvider() (provider.Provider, string, error) {
-	pricing, err := cost.Default()
+	pricing, err := sessionPricing()
 	if err != nil {
 		return nil, "", fmt.Errorf("load pricing table: %w", err)
 	}
@@ -492,24 +493,39 @@ func configCommand() *cli.Command {
 	}
 }
 
-// configGet resolves a key and prints its value to stdout; with --verbose it
-// notes the source layer on stderr.
+// configGet resolves a dotted key through the layered config and prints its
+// value to stdout; with --verbose it notes the source layer on stderr. A leaf
+// prints as a scalar; an interior section prints as JSON.
 func configGet(c *cli.Context) error {
 	if len(c.Args) != 1 {
 		return cli.Usagef("config get: want exactly one key")
 	}
-	cfg, err := loadConfig(c.Globals.Config)
+	cfg, err := loadLayeredConfig(c.Globals.Config)
 	if err != nil {
 		return err
 	}
-	value, source, ok := cfg.Get(c.Args[0])
+	value, source, ok := cfg.Value(c.Args[0])
 	if !ok {
 		return fmt.Errorf("config: %q is not set", c.Args[0])
 	}
-	if c.Globals.Verbose {
+	if c.Globals.Verbose && source.Layer != "" {
 		_, _ = fmt.Fprintf(c.Stderr, "(from %s)\n", source)
 	}
-	return c.Emit(value)
+	return c.Emit(formatConfigValue(value))
+}
+
+// formatConfigValue renders a resolved config value for `config get`: a string
+// prints as-is, anything else (numbers, bools, objects from a nested section) as
+// JSON so the output round-trips.
+func formatConfigValue(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf("%v", v)
+	}
+	return string(b)
 }
 
 // knownConfigSections are the top-level config keys the binary recognizes.
@@ -536,7 +552,32 @@ func configShow(c *cli.Context) error {
 	for _, w := range cfg.Unknown(knownConfigSections...) {
 		_, _ = fmt.Fprintf(c.Stderr, "warning: %s\n", w)
 	}
+	if c.Globals.Config == "" {
+		warnLegacyFlatConfig(c.Stderr)
+	}
 	return c.Emit(strings.TrimRight(b.String(), "\n"))
+}
+
+// warnLegacyFlatConfig warns when a pre-AS-071 flat `key = value` config file
+// (the project ./.smith/config or the user <UserConfigDir>/smith/config) is
+// still present. AS-071 replaced the flat chain with nested `config.json`; the
+// flat file is no longer read, so without this warning its settings would be
+// silently ignored (PRD D0: punt explicitly, never silently). The migration is
+// to move the keys into the sibling `config.json`.
+func warnLegacyFlatConfig(stderr io.Writer) {
+	wd, err := os.Getwd()
+	if err == nil {
+		legacyFlatWarn(stderr, filepath.Join(wd, ".smith", "config"))
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		legacyFlatWarn(stderr, filepath.Join(dir, "smith", "config"))
+	}
+}
+
+func legacyFlatWarn(stderr io.Writer, path string) {
+	if _, err := os.Stat(path); err == nil {
+		_, _ = fmt.Fprintf(stderr, "warning: legacy flat config %s is no longer read; move its keys into %s.json (AS-071)\n", path, path)
+	}
 }
 
 // loadLayeredConfig builds the nested-JSON config chain (AS-031) in D-CLI-6
@@ -575,13 +616,31 @@ func loadLayeredConfig(override string) (*config.Config, error) {
 	return config.New(defaults, env, user, project), nil
 }
 
+// sessionPricing builds the pricing table from the embedded defaults overlaid
+// with the unified config's `pricing` section and the $SMITH_PRICING escape
+// hatch (AS-071). It reads the default config chain (no --config override),
+// which is the chain every session runs under.
+func sessionPricing() (*cost.Table, error) {
+	cfg, err := loadLayeredConfig("")
+	if err != nil {
+		return nil, err
+	}
+	var section []byte
+	if v, _, ok := cfg.Value("pricing"); ok {
+		if section, err = json.Marshal(v); err != nil {
+			return nil, fmt.Errorf("encode pricing config: %w", err)
+		}
+	}
+	return cost.DefaultWith(section)
+}
+
 // envConfigLayer maps recognized SMITH_* environment overrides into a config
 // layer so `config show` reflects the same effective values the runtime sees.
 // Only flat scalars are mapped today (e.g. SMITH_MODEL); richer env→nested-key
-// mapping lands with the consumer migration (AS-071).
+// mapping can grow here as sections gain env overrides.
 func envConfigLayer() config.Layer {
 	values := map[string]any{}
-	if v := strings.TrimSpace(os.Getenv(cli.EnvKey("model"))); v != "" {
+	if v := strings.TrimSpace(os.Getenv("SMITH_MODEL")); v != "" {
 		values["model"] = v
 	}
 	return config.MapLayer("env", "env", values)
@@ -605,84 +664,29 @@ func layeredConfigPath(user bool) (string, error) {
 	return filepath.Join(wd, ".smith", "config.json"), nil
 }
 
-// configSet writes a key=value to the explicit --config file when given,
+// configSet writes a dotted key to the explicit --config file when given,
 // otherwise the project file (or the user file with --user), per D-CLI-6 /
-// CLI-UX open-question 4 (project default). The confirmation line is a
-// diagnostic, so --quiet suppresses it (D-CLI-5).
+// CLI-UX open-question 4 (project default). The value is stored as a string in
+// the nested JSON config; typed values (pricing numbers, lists) are edited in
+// the file directly. The confirmation line is a diagnostic, so --quiet
+// suppresses it (D-CLI-5).
 func configSet(c *cli.Context, user bool) error {
 	if len(c.Args) != 2 {
 		return cli.Usagef("config set: want <key> <value>")
 	}
 	path := c.Globals.Config
 	if path == "" {
-		p, err := configPath(user)
+		p, err := layeredConfigPath(user)
 		if err != nil {
 			return err
 		}
 		path = p
 	}
-	if err := cli.SaveConfigValue(path, c.Args[0], c.Args[1]); err != nil {
+	if err := config.SetFileValue(path, c.Args[0], c.Args[1]); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	if !c.Globals.Quiet {
 		_, _ = fmt.Fprintf(c.Stderr, "set %s = %s in %s\n", c.Args[0], c.Args[1], path)
 	}
 	return nil
-}
-
-// loadConfig assembles the precedence chain (D-CLI-6). An explicit --config path
-// (override != "") replaces the default project+user files with that single file
-// — it "overrides the default chain" — while env and the built-in defaults still
-// apply beneath it.
-func loadConfig(override string) (cli.Config, error) {
-	if override != "" {
-		m, err := cli.LoadConfigFile(override)
-		if err != nil {
-			return cli.Config{}, fmt.Errorf("read config %q: %w", override, err)
-		}
-		return cli.Config{
-			Project:  m,
-			Getenv:   os.Getenv,
-			Defaults: map[string]string{"model": defaultModel},
-		}, nil
-	}
-	projectPath, err := configPath(false)
-	if err != nil {
-		return cli.Config{}, err
-	}
-	userPath, err := configPath(true)
-	if err != nil {
-		return cli.Config{}, err
-	}
-	project, err := cli.LoadConfigFile(projectPath)
-	if err != nil {
-		return cli.Config{}, fmt.Errorf("read project config: %w", err)
-	}
-	user, err := cli.LoadConfigFile(userPath)
-	if err != nil {
-		return cli.Config{}, fmt.Errorf("read user config: %w", err)
-	}
-	return cli.Config{
-		Project:  project,
-		User:     user,
-		Getenv:   os.Getenv,
-		Defaults: map[string]string{"model": defaultModel},
-	}, nil
-}
-
-// configPath returns the project (./.smith/config) or user
-// (<UserConfigDir>/smith/config) config file path.
-func configPath(user bool) (string, error) {
-	if user {
-		dir, err := os.UserConfigDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve user config dir: %w", err)
-		}
-		return filepath.Join(dir, "smith", "config"), nil
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve working directory: %w", err)
-	}
-	return filepath.Join(wd, ".smith", "config"), nil
 }

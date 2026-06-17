@@ -240,3 +240,91 @@ func TestEffectiveSorted(t *testing.T) {
 		}
 	}
 }
+
+func TestValueLeafAndSection(t *testing.T) {
+	c := New(
+		jsonLayer(t, "user", `{"model":"user-model","permissions":{"default_mode":"ask"}}`),
+		jsonLayer(t, "project", `{"permissions":{"default_mode":"allowlist"}}`),
+	)
+
+	// A leaf resolves with the winning layer's source.
+	v, src, ok := c.Value("permissions.default_mode")
+	if !ok || v != "allowlist" || src.Layer != "project" {
+		t.Fatalf("Value(leaf) = (%v, %q, %v); want (allowlist, project, true)", v, src.Layer, ok)
+	}
+
+	// An interior section resolves as the merged subtree with an empty source.
+	v, src, ok = c.Value("permissions")
+	if !ok || src.Layer != "" {
+		t.Fatalf("Value(section) ok=%v source=%q; want ok=true, empty source", ok, src.Layer)
+	}
+	if m, isMap := v.(map[string]any); !isMap || m["default_mode"] != "allowlist" {
+		t.Fatalf("Value(section) = %#v; want merged map with default_mode=allowlist", v)
+	}
+
+	// An unset path reports ok=false.
+	if _, _, ok := c.Value("nope"); ok {
+		t.Error("Value(unset) ok=true; want false")
+	}
+}
+
+func TestDecodeSection(t *testing.T) {
+	c := New(
+		jsonLayer(t, "user", `{"pricing":{"version":1,"currency":"USD"}}`),
+		jsonLayer(t, "project", `{"pricing":{"currency":"EUR"}}`),
+	)
+	var got struct {
+		Version  int    `json:"version"`
+		Currency string `json:"currency"`
+	}
+	ok, err := c.Decode("pricing", &got)
+	if err != nil || !ok {
+		t.Fatalf("Decode = (%v, %v); want (true, nil)", ok, err)
+	}
+	if got.Version != 1 || got.Currency != "EUR" {
+		t.Fatalf("Decode merged = %+v; want version=1 currency=EUR", got)
+	}
+
+	// An unset path leaves the target untouched and reports ok=false.
+	var unused struct{ X int }
+	if ok, err := c.Decode("absent", &unused); ok || err != nil {
+		t.Fatalf("Decode(absent) = (%v, %v); want (false, nil)", ok, err)
+	}
+}
+
+func TestSetFileValueRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "config.json")
+
+	// Create on first write, then a nested write must preserve the first key.
+	if err := SetFileValue(path, "model", "claude-opus-4-8"); err != nil {
+		t.Fatalf("SetFileValue(model): %v", err)
+	}
+	if err := SetFileValue(path, "permissions.default_mode", "allowlist"); err != nil {
+		t.Fatalf("SetFileValue(nested): %v", err)
+	}
+
+	l, err := FileLayer("project", path)
+	if err != nil {
+		t.Fatalf("FileLayer: %v", err)
+	}
+	c := New(l)
+	if v, _, ok := c.Value("model"); !ok || v != "claude-opus-4-8" {
+		t.Errorf("model = %v (ok=%v); want claude-opus-4-8", v, ok)
+	}
+	if v, _, ok := c.Value("permissions.default_mode"); !ok || v != "allowlist" {
+		t.Errorf("permissions.default_mode = %v (ok=%v); want allowlist", v, ok)
+	}
+}
+
+func TestSetFileValueRejectsEmptySegment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	for _, key := range []string{"", "a..b", ".a", "a."} {
+		if err := SetFileValue(path, key, "v"); err == nil {
+			t.Errorf("SetFileValue(%q) accepted an empty path segment", key)
+		}
+	}
+	// A rejected write must not have created the file.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("rejected write created the file: stat err = %v", err)
+	}
+}

@@ -3,24 +3,40 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/tui"
 )
 
-// buildPolicy loads the layered (user then project) permission config and builds
-// the approval policy for the session, routing prompts to the TUI and persisting
-// "always allow" rules to the project config (AS-016/AS-024). With no config file
-// the default is ModeAsk, so every tool call prompts — the conservative posture
-// of PRD D9 ("you approve actions"); a project can relax it with a
-// .smith/permissions.json (allowlist/auto, per-tool overrides).
+// buildPolicy builds the session approval policy from the unified config's
+// `permissions` section (AS-071) merged with the legacy layered permissions.json
+// files (AS-016), routing prompts to the TUI and persisting "always allow" rules
+// to the project permissions.json (AS-016/AS-024). With no config the default is
+// ModeAsk, so every tool call prompts — the conservative posture of PRD D9 ("you
+// approve actions"); a project can relax it under `permissions` in config.json
+// (or the still-honored .smith/permissions.json) with allowlist/auto and per-tool
+// overrides.
+//
+// The legacy files are merged on top of the config section, so an existing
+// permissions.json keeps working unchanged and remains the append target for
+// remembered rules (preserving its atomic-write path). Allow-lists concatenate,
+// so a remembered rule is never lost regardless of which source set the mode.
 func buildPolicy(root string, app *tui.App) (*permission.Policy, error) {
-	cfg, err := permission.LoadLayered(permission.UserConfigPath(), permission.ProjectConfigPath(root))
+	cfg, err := loadLayeredConfig("")
 	if err != nil {
 		return nil, err
 	}
-	return permission.New(cfg,
+	var unified permission.Config
+	if _, err := cfg.Decode("permissions", &unified); err != nil {
+		return nil, fmt.Errorf("load permissions config: %w", err)
+	}
+	legacy, err := permission.LoadLayered(permission.UserConfigPath(), permission.ProjectConfigPath(root))
+	if err != nil {
+		return nil, err
+	}
+	return permission.New(permission.Merge(unified, legacy),
 		permission.WithAsker(tuiAsker{app: app}),
 		permission.WithPersister(permission.FilePersister(permission.ProjectConfigPath(root))),
 	), nil

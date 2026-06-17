@@ -97,7 +97,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-068](AS-068-clean-interactive-selection.md) | `/clean` interactive multi-select + per-item archive restore | context-wedge | done | 028, 067 |
 | [AS-069](AS-069-headless-prompt-file-precedence.md) | `smith run -f <file>` shadowed by ambient stdin on a non-TTY | faces | done | 065 |
 | [AS-070](AS-070-leaf-help-command-flags.md) | `smith <cmd> --help` omits command-specific flags | faces | done | 065 |
-| [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | ready | 031 |
+| [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | done | 031 |
 | [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | **needs clarification** | 006, 033, 040 |
 | [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | **needs clarification** | 067, 072 |
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
