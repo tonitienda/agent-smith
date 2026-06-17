@@ -5,7 +5,9 @@ The full backlog derived from [PRD.md](../PRD.md), in two waves:
 - **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, **AS-064**, a `/resume` UX follow-on spun out of AS-023, **AS-065**, the CLI subcommand router/contract from the [CLI-UX.md](../CLI-UX.md) grilling, and **AS-067**, the TUI inspect-mode panel framework from the [TUI-UX.md](../TUI-UX.md) grilling.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes. (Plus **AS-066**, the shared slash↔subcommand command-registry follow-on from the [CLI-UX.md](../CLI-UX.md) grilling, **AS-068**, the interactive in-panel `/clean` selection spun out of AS-028, and **AS-072 … AS-076**, the Coding Mode orchestration layer from the [coding-mode.prd.md](../coding-mode.prd.md) grilling.)
 
-Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team config — PRD marks it "later" and it's too far out to spec honestly; AS-052 (ACP) and AS-059 (plugin trust) are its prerequisites anyway.
+- **AS-077 … AS-081 — GUI wave** (graphical faces over the face-agnostic core, post-V1): the `smith serve` JSON-RPC/WebSocket spine, a thin-client web GUI and a Viscose (VS Code) extension on top of it, a WASM read-only session inspector (the one place WASM genuinely pays off), and a flagged spike for the D9 collision around hosting a live agent for strangers. See those tickets for the full reasoning (browser can't run the live agent — no fs/shell/exec, no keychain, CORS; the GUI is a new *face* over `smith serve`, not a WASM rewrite).
+
+Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD marks it "later" and it's too far out to spec honestly; AS-059 (plugin trust) is a prerequisite. (The Desktop/editor UI itself is now ticketed as the GUI wave AS-077…AS-081, shipping on the AS-077 JSON-RPC fallback per §10 Q5 rather than waiting on AS-052/ACP.)
 
 ## Conventions
 
@@ -102,6 +104,11 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | ready | 032, 072 |
 | [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | **needs clarification** | 045, 048, 072 |
+| [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | ready | 018, 051 |
+| [AS-078](AS-078-web-gui-thin-client.md) | Web GUI — thin client over `smith serve` | faces | ready | 077 |
+| [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061 |
+| [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
+| [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
 
 ## Suggested build order
 
@@ -114,6 +121,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 7. **Fast-follow, wedge wave**: 044 → 045/046 → 047 → 048/049/050; 051 → 052/053; 066 (registry parity) alongside 051; 042/043 once clarified.
 8. **P2**: 054/055/057/058 as the async + analytics story matures.
 9. **Coding Mode** (orchestration layer, after the capability + wedge waves): 072 (shell) → 073 (phase tracker) / 074 (process skills) / 075 (method override) → 076 (reflect artifacts). 072/073/076 need their open questions answered first (see below); 074/075 are ready once 034/032 land.
+10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is independent — it only needs the substrate (005/006/020/061) and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is a flagged spike that must clear D9 before any stranger-facing live hosting; it likely closes in favour of 079.
 
 ## Needs clarification — decisions to make
 
@@ -133,8 +141,10 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-072](AS-072-coding-mode-shell.md) | coding-mode.prd.md Q1 (naming `/feature` vs `/mode`, mode primitive?), Q2 (phase-advancement trigger), Q4 (multi-feature interleaving) |
 | [AS-073](AS-073-coding-mode-phase-tracker.md) | coding-mode.prd.md Q5 (does Coding Mode mean anything headless/ACP, or TUI-only) |
 | [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Blocked on AS-048 (needs-clarification); reflect-artifact depth (scratch note vs synced check-back tickets) |
+| [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Is a live hosted demo in scope at all (vs AS-079 inspector)? If so: isolation model, key/cost model, tool subset (D9 collision) |
+| [AS-081](AS-081-viscose-vscode-extension.md) | How the extension reaches the core (bundle native binary / spawn user's `smith` / WASM-in-host); workspace integration depth; lifecycle; distribution |
 
-The two spikes (AS-056, AS-059) are themselves the clarification work for PRD open questions Q13 and Q12 — they're ready to start.
+The spikes (AS-056, AS-059, AS-080) are themselves the clarification work for PRD open questions (Q13, Q12, and the D9 hosted-execution collision) — AS-056/AS-059 are ready to start; AS-080's first question is whether it should exist.
 
 ## Syncing to GitHub issues
 
