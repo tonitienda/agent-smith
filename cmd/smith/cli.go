@@ -539,19 +539,22 @@ func configShow(c *cli.Context) error {
 	return c.Emit(strings.TrimRight(b.String(), "\n"))
 }
 
-// loadLayeredConfig builds the nested-JSON config chain (AS-031): built-in
-// defaults, then the user file, then the project file. An explicit --config
-// path replaces the user+project files with that single project-scoped file.
-// This is the structured sibling of the flat key=value chain (loadConfig); the
-// two consolidate in a follow-on (AS-071).
+// loadLayeredConfig builds the nested-JSON config chain (AS-031) in D-CLI-6
+// precedence, lowest to highest: built-in defaults, SMITH_* env, the user file,
+// then the project file. Env sits *below* the files on purpose, so a checked-in
+// repo config stays reproducible regardless of ambient environment (matching the
+// flat chain in loadConfig). An explicit --config path replaces the user+project
+// files with that single project-scoped file. The two chains consolidate in a
+// follow-on (AS-071).
 func loadLayeredConfig(override string) (*config.Config, error) {
 	defaults := config.MapLayer("default", "built-in", map[string]any{"model": defaultModel})
+	env := envConfigLayer()
 	if override != "" {
 		project, err := config.FileLayer("project", override)
 		if err != nil {
 			return nil, err
 		}
-		return config.New(defaults, project), nil
+		return config.New(defaults, env, project), nil
 	}
 	userPath, err := layeredConfigPath(true)
 	if err != nil {
@@ -569,7 +572,19 @@ func loadLayeredConfig(override string) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return config.New(defaults, user, project), nil
+	return config.New(defaults, env, user, project), nil
+}
+
+// envConfigLayer maps recognized SMITH_* environment overrides into a config
+// layer so `config show` reflects the same effective values the runtime sees.
+// Only flat scalars are mapped today (e.g. SMITH_MODEL); richer env→nested-key
+// mapping lands with the consumer migration (AS-071).
+func envConfigLayer() config.Layer {
+	values := map[string]any{}
+	if v := strings.TrimSpace(os.Getenv(cli.EnvKey("model"))); v != "" {
+		values["model"] = v
+	}
+	return config.MapLayer("env", "env", values)
 }
 
 // layeredConfigPath returns the project (./.smith/config.json) or user

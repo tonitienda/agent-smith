@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -25,8 +26,8 @@ import (
 
 // Source identifies which layer supplied a value.
 type Source struct {
-	// Layer is the precedence band: "default", "user", "project", "env", or
-	// "flag".
+	// Layer is the precedence band, lowest to highest: "default", "env", "user",
+	// "project", "flag" (the low→high reading of the D-CLI-6 chain).
 	Layer string
 	// Origin is the concrete provenance — a file path for file layers, or a
 	// short label like "env"/"flags"/"built-in" — so a warning can name where a
@@ -55,7 +56,7 @@ type Layer struct {
 // path either way, so warnings can name the file.
 func FileLayer(layer, path string) (Layer, error) {
 	l := Layer{Source: Source{Layer: layer, Origin: path}}
-	data, err := os.ReadFile(path) //nolint:gosec // path is a known config location, not user input
+	data, err := os.ReadFile(path) //nolint:gosec // reading an operator-specified config path (e.g. --config) is the intended behavior
 	if errors.Is(err, fs.ErrNotExist) {
 		return l, nil
 	}
@@ -203,11 +204,18 @@ func (c *Config) Float64(path string) (value float64, source Source, ok bool) {
 	}
 }
 
-// Int returns the integer at path. ok is false if unset, not a number, or not a
-// whole value.
+// maxSafeInt is 2^53 — the largest magnitude an integer keeps while staying
+// exactly representable as a float64 (JSON's only number type). Beyond it a
+// float64 can't distinguish consecutive integers and a float→int conversion is
+// implementation-specific, so out-of-range values are rejected rather than
+// silently truncated to a bogus int.
+const maxSafeInt = 1 << 53
+
+// Int returns the integer at path. ok is false if unset, not a number, not a
+// whole value, or outside the exactly-representable integer range.
 func (c *Config) Int(path string) (value int, source Source, ok bool) {
 	f, s, ok := c.Float64(path)
-	if !ok || f != float64(int(f)) {
+	if !ok || f != math.Trunc(f) || f < -maxSafeInt || f > maxSafeInt {
 		return 0, s, false
 	}
 	return int(f), s, true
@@ -270,24 +278,33 @@ func (w Warning) String() string {
 	return fmt.Sprintf("unknown config key %q in %s", w.Path, w.Source.Origin)
 }
 
-// Unknown returns a warning for every leaf whose first path segment is not in
-// known, sorted by path. Recognized sections register their top-level key (e.g.
+// Unknown returns one warning per unrecognized top-level section (per origin),
+// sorted by section. Recognized sections register their top-level key (e.g.
 // "model", "permissions", "subagents") so anything else surfaces as a warning
-// without being dropped.
+// without being dropped. Warnings are deduped to the section — a nested unknown
+// section with many leaves yields a single warning naming the section and the
+// file it came from, not one per leaf.
 func (c *Config) Unknown(known ...string) []Warning {
 	set := make(map[string]bool, len(known))
 	for _, k := range known {
 		set[k] = true
 	}
+	seen := make(map[string]bool) // top-level section + origin
 	var out []Warning
 	for path, src := range c.sources {
 		top := path
 		if i := strings.IndexByte(path, '.'); i >= 0 {
 			top = path[:i]
 		}
-		if !set[top] {
-			out = append(out, Warning{Path: path, Source: src})
+		if set[top] {
+			continue
 		}
+		key := top + "\x00" + src.Origin
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, Warning{Path: top, Source: src})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out

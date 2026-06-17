@@ -191,6 +191,19 @@ func TestUnknownKeysWarnNamingFileAndKey(t *testing.T) {
 	}
 }
 
+func TestUnknownNestedSectionWarnsOnce(t *testing.T) {
+	// An unknown top-level section with many leaves yields a single warning
+	// naming the section, not one per leaf.
+	c := New(jsonLayer(t, "user", `{"bogus":{"a":1,"b":2,"c":{"d":3}}}`))
+	warns := c.Unknown("model")
+	if len(warns) != 1 {
+		t.Fatalf("warnings = %+v; want exactly one for the bogus section", warns)
+	}
+	if warns[0].Path != "bogus" {
+		t.Fatalf("warning path = %q; want the section name bogus", warns[0].Path)
+	}
+}
+
 func TestMissingFileIsEmptyLayer(t *testing.T) {
 	l, err := FileLayer("user", filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {

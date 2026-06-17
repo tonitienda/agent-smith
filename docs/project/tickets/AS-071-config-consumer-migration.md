@@ -16,7 +16,8 @@ source: AS-031 acceptance criteria (consumer migration), docs/design/adr-0002-co
 ## Description
 
 AS-031 landed the layered config substrate (`internal/config`): nested JSON,
-precedence (built-in defaults → user → project → env → flags), typed accessors,
+precedence (built-in defaults → env → user → project → flags, the low→high
+reading of D-CLI-6), typed accessors,
 per-leaf source tracking, unknown-key warnings, and `smith config show`. To keep
 that PR lean and low-risk, the **migration of existing config consumers** onto
 the substrate was deliberately split out into this ticket (the AS-031 AC

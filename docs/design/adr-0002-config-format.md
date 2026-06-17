@@ -39,12 +39,15 @@ config, decoded into an open `map[string]any` tree.
   zero change to the typed accessors or precedence logic. JSON is the
   lowest-dependency way to ship the substrate now.
 
-Layers merge lowest-to-highest precedence: **built-in defaults → user file →
-project file → env → flags.** Nested objects deep-merge key by key; scalars and
-lists are replaced wholesale by the highest layer that sets them (list semantics
-are *override*, not append, so precedence stays predictable). Every resolved
-leaf records the `Source` (layer + origin file) that won it, which is what
-`smith config show` prints.
+Layers merge lowest-to-highest precedence: **built-in defaults → env → user file
+→ project file → flags** — the low→high reading of the established **D-CLI-6**
+chain (`flag > project > user > env > default`). Env sits *below* the files on
+purpose, so a checked-in repo config stays reproducible regardless of ambient
+environment. Nested objects deep-merge key by key; scalars and lists are
+replaced wholesale by the highest layer that sets them (list semantics are
+*override*, not append, so precedence stays predictable). Every resolved leaf
+records the `Source` (layer + origin file) that won it, which is what `smith
+config show` prints.
 
 ### Alternatives considered
 
