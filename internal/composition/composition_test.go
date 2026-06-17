@@ -8,6 +8,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -67,6 +68,30 @@ func TestTotalEqualsProjectionEstimate(t *testing.T) {
 	}
 	if sum != c.TotalTokens {
 		t.Errorf("segment token sum %d != TotalTokens %d", sum, c.TotalTokens)
+	}
+}
+
+// TestMemorySegmentAttributed is AS-032 AC3: a memory block shows in /context
+// attributed to its source file (Origin) under the system+memory group, with a
+// non-zero token estimate — so it is visible and accountable like any segment.
+func TestMemorySegmentAttributed(t *testing.T) {
+	const path = "/proj/CLAUDE.md"
+	mem := memory.Block(path, strings.Repeat("m", 200)) // ~50 tok
+	mem.TS = base.Add(-time.Minute)
+
+	c := build(t, []schema.Block{mem}, composition.SortSize)
+	if len(c.Segments) != 1 {
+		t.Fatalf("got %d segments, want 1", len(c.Segments))
+	}
+	seg := c.Segments[0]
+	if seg.Origin != path {
+		t.Errorf("Origin = %q, want %q", seg.Origin, path)
+	}
+	if seg.Group != "system+memory" {
+		t.Errorf("Group = %q, want system+memory", seg.Group)
+	}
+	if seg.Tokens == 0 {
+		t.Error("memory segment estimated to 0 tokens")
 	}
 }
 

@@ -209,7 +209,7 @@ func readonlyController(override string) (*chatSession, func(), error) {
 			}
 		}
 	}
-	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, filepath.Base(wd))
+	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd)
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
 
@@ -380,6 +380,12 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 		return fmt.Errorf("create session: %w", err)
 	}
 	defer func() { _ = sess.Log.Close() }()
+	// A headless run is a fresh session, so seed the project's memory files
+	// (AS-032) before the single turn — the model follows the same standing
+	// guidance an interactive session does.
+	if err := seedMemory(wd, sess); err != nil {
+		return err
+	}
 
 	tools, err := headlessTools(wd)
 	if err != nil {

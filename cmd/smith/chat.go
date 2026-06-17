@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
@@ -53,6 +53,14 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	sess, err := openOrCreate(store, resumeID)
 	if err != nil {
 		return err
+	}
+	// Load the project's memory files into a fresh session only (AS-032). A
+	// resumed session already carries the memory blocks it was created with, so
+	// re-seeding would duplicate them; mid-session refresh is out of scope.
+	if resumeID == "" {
+		if err := seedMemory(wd, sess); err != nil {
+			return err
+		}
 	}
 	debugLog, err := openDebugLog(sess.Dir)
 	if err != nil {
@@ -101,7 +109,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		}
 	}
 
-	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, filepath.Base(wd))
+	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd)
 	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate)}
 	if noSplash {
 		opts = append(opts, tui.WithoutSplash())
@@ -120,6 +128,24 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	}
 
 	return app.Run(ctl)
+}
+
+// seedMemory loads the project's memory files (AGENTS.md / AGENT.md / CLAUDE.md,
+// AS-032) discovered from wd and appends them to a freshly created session's log
+// as model-facing memory blocks, so the first turn sees them and /context
+// attributes them to their source. It is called only for new sessions; a resumed
+// session already carries the blocks it was created with.
+func seedMemory(wd string, sess *session.Session) error {
+	blocks, err := memory.Load(memory.UserDir(), wd)
+	if err != nil {
+		return fmt.Errorf("load memory files: %w", err)
+	}
+	for _, b := range blocks {
+		if _, err := sess.Log.Append(b); err != nil {
+			return fmt.Errorf("append memory block: %w", err)
+		}
+	}
+	return nil
 }
 
 // openOrCreate resumes the session named by resumeID, or creates a fresh one when
