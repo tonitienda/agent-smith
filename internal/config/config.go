@@ -180,14 +180,27 @@ func (c *Config) Bool(path string) (value bool, source Source, ok bool) {
 }
 
 // Float64 returns the number at path. ok is false if unset or not a number.
-// (JSON decodes every number to float64.)
+// JSON decodes every number to float64; native int/int64 (from an in-memory
+// MapLayer, e.g. env/flag overrides) are accepted too.
 func (c *Config) Float64(path string) (value float64, source Source, ok bool) {
 	v, s, ok := c.lookup(path)
 	if !ok {
 		return 0, s, false
 	}
-	f, ok := v.(float64)
-	return f, s, ok
+	switch n := v.(type) {
+	case float64:
+		return n, s, true
+	case float32:
+		return float64(n), s, true
+	case int:
+		return float64(n), s, true
+	case int64:
+		return float64(n), s, true
+	case int32:
+		return float64(n), s, true
+	default:
+		return 0, s, false
+	}
 }
 
 // Int returns the integer at path. ok is false if unset, not a number, or not a
@@ -201,25 +214,29 @@ func (c *Config) Int(path string) (value int, source Source, ok bool) {
 }
 
 // Strings returns the string list at path. ok is false if unset, not a list, or
-// any element is not a string.
+// any element is not a string. JSON decodes a list to []any; a native []string
+// (from an in-memory MapLayer) is accepted too.
 func (c *Config) Strings(path string) (value []string, source Source, ok bool) {
 	v, s, ok := c.lookup(path)
 	if !ok {
 		return nil, s, false
 	}
-	list, ok := v.([]any)
-	if !ok {
+	switch list := v.(type) {
+	case []string:
+		return append([]string(nil), list...), s, true
+	case []any:
+		out := make([]string, 0, len(list))
+		for _, e := range list {
+			str, ok := e.(string)
+			if !ok {
+				return nil, s, false
+			}
+			out = append(out, str)
+		}
+		return out, s, true
+	default:
 		return nil, s, false
 	}
-	out := make([]string, 0, len(list))
-	for _, e := range list {
-		str, ok := e.(string)
-		if !ok {
-			return nil, s, false
-		}
-		out = append(out, str)
-	}
-	return out, s, true
 }
 
 // Entry is one resolved leaf in the effective config.

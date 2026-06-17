@@ -134,6 +134,27 @@ func TestTypedAccessors(t *testing.T) {
 		t.Fatalf("Strings: %v %v", v, ok)
 	}
 
+	// In-memory MapLayer values (env/flag overrides) use native Go types, not
+	// JSON's float64/[]any — the accessors must resolve those too.
+	cMap := New(MapLayer("flag", "flags", map[string]any{
+		"i":    7,
+		"i64":  int64(9),
+		"f32":  float32(2.5),
+		"list": []string{"a", "b"},
+	}))
+	if v, _, ok := cMap.Int("i"); !ok || v != 7 {
+		t.Fatalf("MapLayer Int: %v %v", v, ok)
+	}
+	if v, _, ok := cMap.Int("i64"); !ok || v != 9 {
+		t.Fatalf("MapLayer Int64: %v %v", v, ok)
+	}
+	if v, _, ok := cMap.Float64("f32"); !ok || v != 2.5 {
+		t.Fatalf("MapLayer Float32: %v %v", v, ok)
+	}
+	if v, _, ok := cMap.Strings("list"); !ok || !reflect.DeepEqual(v, []string{"a", "b"}) {
+		t.Fatalf("MapLayer Strings: %v %v", v, ok)
+	}
+
 	// Wrong-type and missing lookups report ok=false rather than panicking.
 	if _, _, ok := c.Int("f"); ok {
 		t.Fatal("1.5 should not read as Int")
