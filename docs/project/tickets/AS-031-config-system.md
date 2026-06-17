@@ -1,7 +1,7 @@
 ---
 id: AS-031
 title: Layered configuration system
-status: ready-to-implement
+status: done
 github_issue: 31
 depends_on: [AS-001]
 area: foundation
@@ -11,7 +11,14 @@ source: PRD.md §7 (implied throughout), Appendix C.3, Appendix D
 
 # AS-031 · Layered configuration system
 
-**Status: ready to implement**
+**Status: done** — core landed; consumer migration split into **AS-071**.
+
+> **Format note:** the substrate ships as **JSON** (stdlib), not YAML, to avoid a
+> dependency while staying nested and forward-compatible. YAML is a superset and
+> can be added later behind the same accessors if hand-edit friction warrants it.
+> See [adr-0002](../../design/adr-0002-config-format.md). The migration of
+> existing consumers (permissions, pricing, the flat `config get`/`set` chain)
+> was intentionally split out to keep this PR lean — tracked as **AS-071**.
 
 ## Description
 
@@ -25,10 +32,10 @@ The config substrate nearly every fast-follow feature hangs off: permission rule
 
 ## Acceptance criteria
 
-- [ ] Precedence order is correct and covered by tests for scalar, map, and list merge cases.
-- [ ] Unknown keys produce a warning naming the file and key, and are preserved.
-- [ ] `smith config` shows effective values and where each came from.
-- [ ] Existing config consumers (permissions, pricing) migrate onto this system.
+- [x] Precedence order is correct and covered by tests for scalar, map, and list merge cases.
+- [x] Unknown keys produce a warning naming the file and key, and are preserved.
+- [x] `smith config` shows effective values and where each came from (`smith config show`).
+- [ ] Existing config consumers (permissions, pricing) migrate onto this system. → **moved to AS-071** (kept this PR lean per the build-order decision).
 
 ## Dependencies
 

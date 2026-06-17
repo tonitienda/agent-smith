@@ -63,7 +63,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-031](AS-031-config-system.md) | Layered configuration system | foundation | ready | 001 |
+| [AS-031](AS-031-config-system.md) | Layered configuration system | foundation | done | 001 |
 | [AS-032](AS-032-memory-files.md) | Memory files (AGENT/CLAUDE/AGENTS.md merge) | capability | ready | 006, 018, 031 |
 | [AS-033](AS-033-custom-slash-commands.md) | Custom slash commands | commands | ready | 022, 031 |
 | [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | ready | 018, 031 |
@@ -96,6 +96,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-068](AS-068-clean-interactive-selection.md) | `/clean` interactive multi-select + per-item archive restore | context-wedge | done | 028, 067 |
 | [AS-069](AS-069-headless-prompt-file-precedence.md) | `smith run -f <file>` shadowed by ambient stdin on a non-TTY | faces | done | 065 |
 | [AS-070](AS-070-leaf-help-command-flags.md) | `smith <cmd> --help` omits command-specific flags | faces | done | 065 |
+| [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | ready | 031 |
 
 ## Suggested build order
 

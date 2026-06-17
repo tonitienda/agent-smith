@@ -11,6 +11,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
+	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
@@ -462,6 +463,13 @@ func configCommand() *cli.Command {
 		Summary: "Read and write layered configuration",
 		Sub: []*cli.Command{
 			{
+				Name:          "show",
+				Summary:       "Print the effective merged config and each value's source layer",
+				Examples:      []string{"smith config show"},
+				Scriptability: command.Scriptable.String(),
+				Run:           configShow,
+			},
+			{
 				Name:          "get",
 				Summary:       "Resolve a config key through the precedence chain",
 				Usage:         "<key>",
@@ -502,6 +510,99 @@ func configGet(c *cli.Context) error {
 		_, _ = fmt.Fprintf(c.Stderr, "(from %s)\n", source)
 	}
 	return c.Emit(value)
+}
+
+// knownConfigSections are the top-level config keys the binary recognizes.
+// Anything else still loads and is preserved (forward-compat, PRD D2) but
+// surfaces as a warning so a typo doesn't pass silently. The list grows as
+// fast-follow features (subagents, personality, hooks, mcp) land their config.
+var knownConfigSections = []string{
+	"model", "provider", "permissions", "pricing",
+	"subagents", "personality", "hooks", "mcp", "tools",
+}
+
+// configShow loads the layered JSON config (built-in defaults < user < project)
+// and prints every effective value with the layer that won it. Unknown
+// top-level keys are reported on stderr without being dropped (AS-031).
+func configShow(c *cli.Context) error {
+	cfg, err := loadLayeredConfig(c.Globals.Config)
+	if err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, e := range cfg.Effective() {
+		fmt.Fprintf(&b, "%s = %v\t[%s]\n", e.Path, e.Value, e.Source)
+	}
+	for _, w := range cfg.Unknown(knownConfigSections...) {
+		_, _ = fmt.Fprintf(c.Stderr, "warning: %s\n", w)
+	}
+	return c.Emit(strings.TrimRight(b.String(), "\n"))
+}
+
+// loadLayeredConfig builds the nested-JSON config chain (AS-031) in D-CLI-6
+// precedence, lowest to highest: built-in defaults, SMITH_* env, the user file,
+// then the project file. Env sits *below* the files on purpose, so a checked-in
+// repo config stays reproducible regardless of ambient environment (matching the
+// flat chain in loadConfig). An explicit --config path replaces the user+project
+// files with that single project-scoped file. The two chains consolidate in a
+// follow-on (AS-071).
+func loadLayeredConfig(override string) (*config.Config, error) {
+	defaults := config.MapLayer("default", "built-in", map[string]any{"model": defaultModel})
+	env := envConfigLayer()
+	if override != "" {
+		project, err := config.FileLayer("project", override)
+		if err != nil {
+			return nil, err
+		}
+		return config.New(defaults, env, project), nil
+	}
+	userPath, err := layeredConfigPath(true)
+	if err != nil {
+		return nil, err
+	}
+	projectPath, err := layeredConfigPath(false)
+	if err != nil {
+		return nil, err
+	}
+	user, err := config.FileLayer("user", userPath)
+	if err != nil {
+		return nil, err
+	}
+	project, err := config.FileLayer("project", projectPath)
+	if err != nil {
+		return nil, err
+	}
+	return config.New(defaults, env, user, project), nil
+}
+
+// envConfigLayer maps recognized SMITH_* environment overrides into a config
+// layer so `config show` reflects the same effective values the runtime sees.
+// Only flat scalars are mapped today (e.g. SMITH_MODEL); richer env→nested-key
+// mapping lands with the consumer migration (AS-071).
+func envConfigLayer() config.Layer {
+	values := map[string]any{}
+	if v := strings.TrimSpace(os.Getenv(cli.EnvKey("model"))); v != "" {
+		values["model"] = v
+	}
+	return config.MapLayer("env", "env", values)
+}
+
+// layeredConfigPath returns the project (./.smith/config.json) or user
+// (<UserConfigDir>/smith/config.json) nested-config path — the `.json` sibling
+// of the flat `config` file used by `config get`/`set`.
+func layeredConfigPath(user bool) (string, error) {
+	if user {
+		dir, err := os.UserConfigDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve user config dir: %w", err)
+		}
+		return filepath.Join(dir, "smith", "config.json"), nil
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve working directory: %w", err)
+	}
+	return filepath.Join(wd, ".smith", "config.json"), nil
 }
 
 // configSet writes a key=value to the explicit --config file when given,
