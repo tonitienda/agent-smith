@@ -40,7 +40,7 @@ func isTerminal(f *os.File) bool {
 // (active provider/model, current log) lives in chatSession, which the TUI drives
 // through the Runner/Meta/Meter seams, so all of this provider/tool wiring stays
 // here in the command, never in internal/tui.
-func startChat(resumeID string, noSplash bool) error {
+func startChat(resumeID string, noSplash bool, override string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
@@ -79,7 +79,7 @@ func startChat(resumeID string, noSplash bool) error {
 		return fmt.Errorf("register shell tool: %w", err)
 	}
 
-	pricing, err := sessionPricing()
+	pricing, err := sessionPricing(override)
 	if err != nil {
 		return fmt.Errorf("load pricing table: %w", err)
 	}
@@ -110,7 +110,7 @@ func startChat(resumeID string, noSplash bool) error {
 	// Wire the permission gate before the first engine is built, so every tool
 	// call is approved through the TUI (AS-016/AS-024). The Asker delivers prompts
 	// into the running app, which app.Run starts below.
-	policy, err := buildPolicy(wd, app)
+	policy, err := buildPolicy(wd, app, override)
 	if err != nil {
 		return fmt.Errorf("load permission policy: %w", err)
 	}

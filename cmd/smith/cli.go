@@ -67,7 +67,7 @@ func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(
 }
 
 // bareTUI launches the interactive TUI for a bare `smith` on a terminal (D-CLI-2).
-func bareTUI(*cli.Context) error { return startChat("", false) }
+func bareTUI(c *cli.Context) error { return startChat("", false, c.Globals.Config) }
 
 // tuiCommand is the explicit TUI launch, with the prior --resume/--no-splash
 // affordances preserved.
@@ -83,7 +83,7 @@ func tuiCommand() *cli.Command {
 			fs.StringVar(&resume, "resume", "", "resume a session by ID")
 			fs.BoolVar(&noSplash, "no-splash", false, "hide the startup header")
 		},
-		Run: func(*cli.Context) error { return startChat(resume, noSplash) },
+		Run: func(c *cli.Context) error { return startChat(resume, noSplash, c.Globals.Config) },
 	}
 }
 
@@ -157,7 +157,7 @@ func allArgs(c *cli.Context) []string { return c.Args }
 // recent session.
 func registryCommand(name string, pickArgs func(*cli.Context) []string) func(*cli.Context) error {
 	return func(c *cli.Context) error {
-		ctl, closeFn, err := readonlyController()
+		ctl, closeFn, err := readonlyController(c.Globals.Config)
 		if err != nil {
 			return err
 		}
@@ -183,7 +183,7 @@ func registryCommand(name string, pickArgs func(*cli.Context) []string) func(*cl
 // for the read-only inspection verbs (cost, context, session). It wires the
 // pricing table and providers but never builds an engine, so it issues no model
 // calls. closeFn releases the opened session log.
-func readonlyController() (*chatSession, func(), error) {
+func readonlyController(override string) (*chatSession, func(), error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve working directory: %w", err)
@@ -196,7 +196,7 @@ func readonlyController() (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	pricing, err := sessionPricing()
+	pricing, err := sessionPricing(override)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load pricing table: %w", err)
 	}
@@ -385,7 +385,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 	if err != nil {
 		return err
 	}
-	prov, model, err := headlessProvider()
+	prov, model, err := headlessProvider(c.Globals.Config)
 	if err != nil {
 		return err
 	}
@@ -406,8 +406,8 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 // to its vendor through the pricing table — the same resolution readonlyController
 // uses — so `smith run` with an OpenAI SMITH_MODEL talks to the OpenAI provider
 // rather than failing against a hardcoded Anthropic one.
-func headlessProvider() (provider.Provider, string, error) {
-	pricing, err := sessionPricing()
+func headlessProvider(override string) (provider.Provider, string, error) {
+	pricing, err := sessionPricing(override)
 	if err != nil {
 		return nil, "", fmt.Errorf("load pricing table: %w", err)
 	}
@@ -618,10 +618,10 @@ func loadLayeredConfig(override string) (*config.Config, error) {
 
 // sessionPricing builds the pricing table from the embedded defaults overlaid
 // with the unified config's `pricing` section and the $SMITH_PRICING escape
-// hatch (AS-071). It reads the default config chain (no --config override),
-// which is the chain every session runs under.
-func sessionPricing() (*cost.Table, error) {
-	cfg, err := loadLayeredConfig("")
+// hatch (AS-071). override is the --config path (empty for the default chain),
+// so `smith run --config x.json` prices through x.json's pricing section.
+func sessionPricing(override string) (*cost.Table, error) {
+	cfg, err := loadLayeredConfig(override)
 	if err != nil {
 		return nil, err
 	}

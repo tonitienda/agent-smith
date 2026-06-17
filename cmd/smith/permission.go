@@ -23,8 +23,8 @@ import (
 // permissions.json keeps working unchanged and remains the append target for
 // remembered rules (preserving its atomic-write path). Allow-lists concatenate,
 // so a remembered rule is never lost regardless of which source set the mode.
-func buildPolicy(root string, app *tui.App) (*permission.Policy, error) {
-	cfg, err := loadLayeredConfig("")
+func buildPolicy(root string, app *tui.App, override string) (*permission.Policy, error) {
+	cfg, err := loadLayeredConfig(override)
 	if err != nil {
 		return nil, err
 	}
