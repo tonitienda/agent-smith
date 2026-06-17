@@ -1,10 +1,9 @@
 # Agent Smith — Ticket Backlog
 
-The full backlog derived from [PRD.md](../PRD.md), in two waves:
+The full backlog derived from [PRD.md](../PRD.md), in three waves:
 
 - **AS-001 … AS-030 — V1** (Decision Log D6 ship set): substrate, providers, loop, tools, permissions, TUI, persistence, cost meter, `/context` + `/clean`. (Plus **AS-060** and **AS-061**, V1-freeze-window schema-hardening passes appended after the spike work, **AS-062**, a tools follow-on spun out of AS-013, **AS-063**, a cost follow-on spun out of AS-020, **AS-064**, a `/resume` UX follow-on spun out of AS-023, **AS-065**, the CLI subcommand router/contract from the [CLI-UX.md](../CLI-UX.md) grilling, and **AS-067**, the TUI inspect-mode panel framework from the [TUI-UX.md](../TUI-UX.md) grilling.)
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes. (Plus **AS-066**, the shared slash↔subcommand command-registry follow-on from the [CLI-UX.md](../CLI-UX.md) grilling, **AS-068**, the interactive in-panel `/clean` selection spun out of AS-028, and **AS-072 … AS-076**, the Coding Mode orchestration layer from the [coding-mode.prd.md](../coding-mode.prd.md) grilling.)
-
 - **AS-077 … AS-081 — GUI wave** (graphical faces over the face-agnostic core, post-V1): the `smith serve` JSON-RPC/WebSocket spine, a thin-client web GUI and a Viscose (VS Code) extension on top of it, a WASM read-only session inspector (the one place WASM genuinely pays off), and a flagged spike for the D9 collision around hosting a live agent for strangers. See those tickets for the full reasoning (browser can't run the live agent — no fs/shell/exec, no keychain, CORS; the GUI is a new *face* over `smith serve`, not a WASM rewrite).
 
 Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD marks it "later" and it's too far out to spec honestly; AS-059 (plugin trust) is a prerequisite. (The Desktop/editor UI itself is now ticketed as the GUI wave AS-077…AS-081, shipping on the AS-077 JSON-RPC fallback per §10 Q5 rather than waiting on AS-052/ACP.)

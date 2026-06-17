@@ -13,7 +13,7 @@ source: PRD.md §5, §7.18; GUI grilling session 2026-06
 
 **Status: needs clarification**
 
-# Description
+## Description
 
 The editor face. A VS Code extension that drives the same core through
 `smith serve` (AS-077) and renders the AS-078 web UI inside a webview — so the
