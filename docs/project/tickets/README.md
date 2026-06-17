@@ -65,7 +65,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-031](AS-031-config-system.md) | Layered configuration system | foundation | done | 001 |
-| [AS-032](AS-032-memory-files.md) | Memory files (AGENT/CLAUDE/AGENTS.md merge) | capability | ready | 006, 018, 031 |
+| [AS-032](AS-032-memory-files.md) | Memory files (AGENT/CLAUDE/AGENTS.md merge) | capability | done | 006, 018, 031 |
 | [AS-033](AS-033-custom-slash-commands.md) | Custom slash commands | commands | ready | 022, 031 |
 | [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | ready | 018, 031 |
 | [AS-035](AS-035-hooks.md) | Lifecycle hooks | capability | ready | 013, 018, 031 |
@@ -108,6 +108,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061, 038 |
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
+| [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | ready | 032 |
 
 ## Suggested build order
 

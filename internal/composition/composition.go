@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -260,6 +261,9 @@ func groupFor(b schema.Block) string {
 // originFor names where a block came from for the Origin column: the file path
 // for a read, the tool name for a call/result, otherwise the role.
 func originFor(b schema.Block) string {
+	if path, ok := memory.Source(b); ok {
+		return path // a memory file (AS-032): attribute the segment to its source
+	}
 	switch {
 	case b.FileRead != nil && b.FileRead.Path != "":
 		return b.FileRead.Path

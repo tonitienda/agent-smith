@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,6 +55,9 @@ type chatSession struct {
 	// project labels the working context in the startup header (D-TUI-10); it is
 	// static for the session's lifetime, so it needs no lock.
 	project string
+	// wd is the working directory the session runs in; it is the root for memory
+	// file discovery (AS-032) when a fresh session is created mid-run (/clear).
+	wd string
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -89,7 +93,7 @@ type chatSession struct {
 // the default Anthropic + OpenAI providers and the model for the first turn. The
 // engine is not built yet: the caller sets the observer (from the TUI) and calls
 // start so turn progress is wired before the first turn runs.
-func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, project string) *chatSession {
+func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string) *chatSession {
 	return &chatSession{
 		store:     store,
 		tools:     tools,
@@ -98,7 +102,8 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 		sess:      sess,
 		provName:  provName,
 		model:     model,
-		project:   project,
+		project:   filepath.Base(wd),
+		wd:        wd,
 	}
 }
 
@@ -523,6 +528,13 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	fresh, err := s.store.Create("")
 	if err != nil {
 		return command.Output{}, fmt.Errorf("start new session: %w", err)
+	}
+	// Seed the fresh session with the project's memory files, so a cleared
+	// session starts from the same standing context a freshly launched one does
+	// (AS-032). A discovery error is surfaced rather than silently dropping it.
+	if err := seedMemory(s.wd, fresh); err != nil {
+		_ = fresh.Log.Close()
+		return command.Output{}, err
 	}
 	eng, err := s.buildEngine(fresh, s.provName, s.model)
 	if err != nil {
