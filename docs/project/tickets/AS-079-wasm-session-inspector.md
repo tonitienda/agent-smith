@@ -3,7 +3,7 @@ id: AS-079
 title: WASM observability core + static session inspector
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-005, AS-006, AS-020, AS-061]
+depends_on: [AS-005, AS-006, AS-020, AS-061, AS-038]
 area: observability
 priority: P2
 source: PRD.md §4 (observability thesis), §7.26; GUI grilling session 2026-06

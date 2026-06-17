@@ -104,9 +104,9 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | ready | 032, 072 |
 | [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | **needs clarification** | 045, 048, 072 |
-| [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | ready | 018, 051 |
+| [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | ready | 018, 051, 066 |
 | [AS-078](AS-078-web-gui-thin-client.md) | Web GUI — thin client over `smith serve` | faces | ready | 077 |
-| [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061 |
+| [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061, 038 |
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
 
@@ -121,7 +121,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 7. **Fast-follow, wedge wave**: 044 → 045/046 → 047 → 048/049/050; 051 → 052/053; 066 (registry parity) alongside 051; 042/043 once clarified.
 8. **P2**: 054/055/057/058 as the async + analytics story matures.
 9. **Coding Mode** (orchestration layer, after the capability + wedge waves): 072 (shell) → 073 (phase tracker) / 074 (process skills) / 075 (method override) → 076 (reflect artifacts). 072/073/076 need their open questions answered first (see below); 074/075 are ready once 034/032 land.
-10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is independent — it only needs the substrate (005/006/020/061) and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is a flagged spike that must clear D9 before any stranger-facing live hosting; it likely closes in favour of 079.
+10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is a flagged spike that must clear D9 before any stranger-facing live hosting; it likely closes in favour of 079.
 
 ## Needs clarification — decisions to make
 
