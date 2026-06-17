@@ -266,6 +266,13 @@ func TestValueLeafAndSection(t *testing.T) {
 	if _, _, ok := c.Value("nope"); ok {
 		t.Error("Value(unset) ok=true; want false")
 	}
+
+	// Empty path segments are rejected on read too (symmetry with SetFileValue).
+	for _, p := range []string{"permissions..default_mode", ".permissions", "permissions."} {
+		if _, _, ok := c.Value(p); ok {
+			t.Errorf("Value(%q) ok=true; want false (empty segment)", p)
+		}
+	}
 }
 
 func TestDecodeSection(t *testing.T) {

@@ -257,6 +257,9 @@ func (c *Config) subtree(path string) (any, bool) {
 	}
 	cur := any(c.tree)
 	for _, seg := range strings.Split(path, ".") {
+		if seg == "" {
+			return nil, false // empty path segment ("a..b", ".a") — matches SetFileValue's rejection
+		}
 		m, ok := cur.(map[string]any)
 		if !ok {
 			return nil, false

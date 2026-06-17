@@ -552,9 +552,9 @@ func configShow(c *cli.Context) error {
 	for _, w := range cfg.Unknown(knownConfigSections...) {
 		_, _ = fmt.Fprintf(c.Stderr, "warning: %s\n", w)
 	}
-	if c.Globals.Config == "" {
-		warnLegacyFlatConfig(c.Stderr)
-	}
+	// The flat file is never read now, regardless of --config, so warn whenever
+	// one is present (matching ADR-0002) rather than only on the default chain.
+	warnLegacyFlatConfig(c.Stderr)
 	return c.Emit(strings.TrimRight(b.String(), "\n"))
 }
 
@@ -583,10 +583,10 @@ func legacyFlatWarn(stderr io.Writer, path string) {
 // loadLayeredConfig builds the nested-JSON config chain (AS-031) in D-CLI-6
 // precedence, lowest to highest: built-in defaults, SMITH_* env, the user file,
 // then the project file. Env sits *below* the files on purpose, so a checked-in
-// repo config stays reproducible regardless of ambient environment (matching the
-// flat chain in loadConfig). An explicit --config path replaces the user+project
-// files with that single project-scoped file. The two chains consolidate in a
-// follow-on (AS-071).
+// repo config stays reproducible regardless of ambient environment. An explicit
+// --config path replaces the user+project files with that single project-scoped
+// file. This is the single config loader (AS-071): `config get`/`set`/`show`,
+// pricing, and permissions all resolve through it.
 func loadLayeredConfig(override string) (*config.Config, error) {
 	defaults := config.MapLayer("default", "built-in", map[string]any{"model": defaultModel})
 	env := envConfigLayer()
