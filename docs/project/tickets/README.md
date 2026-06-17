@@ -97,11 +97,11 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-069](AS-069-headless-prompt-file-precedence.md) | `smith run -f <file>` shadowed by ambient stdin on a non-TTY | faces | done | 065 |
 | [AS-070](AS-070-leaf-help-command-flags.md) | `smith <cmd> --help` omits command-specific flags | faces | done | 065 |
 | [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | ready | 031 |
-| [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | ready | 006, 033, 040 |
-| [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | ready | 067, 072 |
+| [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | **needs clarification** | 006, 033, 040 |
+| [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | **needs clarification** | 067, 072 |
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | ready | 032, 072 |
-| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | ready | 045, 048, 072 |
+| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | **needs clarification** | 045, 048, 072 |
 
 ## Suggested build order
 
@@ -113,6 +113,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 6. **Fast-follow, capability wave**: 031 → 032/033/034/035/036 (mostly parallel) + the cheap commands 037–041.
 7. **Fast-follow, wedge wave**: 044 → 045/046 → 047 → 048/049/050; 051 → 052/053; 066 (registry parity) alongside 051; 042/043 once clarified.
 8. **P2**: 054/055/057/058 as the async + analytics story matures.
+9. **Coding Mode** (orchestration layer, after the capability + wedge waves): 072 (shell) → 073 (phase tracker) / 074 (process skills) / 075 (method override) → 076 (reflect artifacts). 072/073/076 need their open questions answered first (see below); 074/075 are ready once 034/032 land.
 
 ## Needs clarification — decisions to make
 
@@ -129,6 +130,9 @@ Not ticketed (intentionally): §7.26 plugin marketplace / Desktop UI / team conf
 | [AS-054](AS-054-async-runner.md) | Process model (daemon?), queue semantics, scheduling ownership, completion surface |
 | [AS-057](AS-057-cross-session-analytics.md) | Surface (TUI/HTML), aggregation index vs on-demand scan, friction scope |
 | [AS-058](AS-058-self-improving-config.md) | Trigger/cadence, edit-target scope, approval UX, conflict handling |
+| [AS-072](AS-072-coding-mode-shell.md) | coding-mode.prd.md Q1 (naming `/feature` vs `/mode`, mode primitive?), Q2 (phase-advancement trigger), Q4 (multi-feature interleaving) |
+| [AS-073](AS-073-coding-mode-phase-tracker.md) | coding-mode.prd.md Q5 (does Coding Mode mean anything headless/ACP, or TUI-only) |
+| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Blocked on AS-048 (needs-clarification); reflect-artifact depth (scratch note vs synced check-back tickets) |
 
 The two spikes (AS-056, AS-059) are themselves the clarification work for PRD open questions Q13 and Q12 — they're ready to start.
 

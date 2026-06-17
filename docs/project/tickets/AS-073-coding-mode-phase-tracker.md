@@ -1,7 +1,7 @@
 ---
 id: AS-073
 title: Coding Mode phase tracker panel + mode presentation
-status: ready-to-implement
+status: needs-clarification
 github_issue: null
 depends_on: [AS-067, AS-072]
 area: coding-mode
@@ -11,7 +11,7 @@ source: coding-mode.prd.md (D-CODE-4)
 
 # AS-073 · Coding Mode phase tracker panel + presentation
 
-**Status: ready-to-implement**
+**Status: needs-clarification**
 
 ## Description
 
@@ -39,6 +39,15 @@ inspect-mode panel framework (AS-067, D-TUI-3) so it reuses focus/hotkey routing
       chrome.
 - [ ] Non-interactive faces (`smith run`, ACP) produce phase-tagged events with
       no layout/flavor; nothing mode-specific leaks into machine-readable output.
+
+## Open questions
+
+Blocked on a design decision still open in [coding-mode.prd.md](../coding-mode.prd.md):
+
+- **Q5 — headless behavior:** does Coding Mode mean anything in `smith run` / ACP,
+  or is it strictly a TUI experience? D-CODE-4 leans TUI-only (degrade to plain
+  phase-tagged events off-TUI), but this is unconfirmed and it determines the
+  non-interactive acceptance criterion above.
 
 ## Dependencies
 

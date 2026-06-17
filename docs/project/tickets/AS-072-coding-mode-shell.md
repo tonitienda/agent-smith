@@ -1,7 +1,7 @@
 ---
 id: AS-072
 title: Coding Mode shell — /feature & /mode entry/exit + phase-as-block
-status: ready-to-implement
+status: needs-clarification
 github_issue: null
 depends_on: [AS-006, AS-033, AS-040]
 area: coding-mode
@@ -11,7 +11,7 @@ source: coding-mode.prd.md (D-CODE-1, -2, -3)
 
 # AS-072 · Coding Mode shell — entry/exit + phase state
 
-**Status: ready-to-implement**
+**Status: needs-clarification**
 
 ## Description
 
@@ -47,6 +47,20 @@ primitives and records mode state on the append-only log.
       nothing refuses to run because of the current phase.
 - [ ] New event types are additive-only and pass the AS-004 schema guard.
 - [ ] With the mode off, behavior is unchanged from today (zero cost when unused).
+
+## Open questions
+
+Blocked on design decisions still open in [coding-mode.prd.md](../coding-mode.prd.md):
+
+- **Q1 — naming/shape:** `/feature` (task-shaped) vs `/mode coding` (mode-shaped)
+  vs both; whether "mode" generalises to a reusable primitive (future review/debug
+  modes) — which would change how entry/exit and phase state are built.
+- **Q2 — phase-advancement trigger:** what prompts think→analyse→…? User command,
+  model judgement, or a signal (goal set / tests green)? Soft never auto-advances,
+  but the prompt for the "yes" still needs a defined trigger.
+- **Q4 — multi-feature interleaving:** single-goal at a time, or multiple features
+  in-flight in one session each with its own phase state? Changes the phase-state
+  model.
 
 ## Dependencies
 

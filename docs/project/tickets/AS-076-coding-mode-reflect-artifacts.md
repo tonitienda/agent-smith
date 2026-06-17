@@ -1,7 +1,7 @@
 ---
 id: AS-076
 title: Coding Mode reflect-phase artifacts (success metric, instrumentation, check-back ticket)
-status: ready-to-implement
+status: needs-clarification
 github_issue: null
 depends_on: [AS-045, AS-048, AS-072]
 area: coding-mode
@@ -11,7 +11,7 @@ source: coding-mode.prd.md (D-CODE-7)
 
 # AS-076 · Coding Mode reflect-phase artifacts
 
-**Status: ready-to-implement**
+**Status: needs-clarification**
 
 ## Description
 
@@ -38,6 +38,16 @@ It never reads runtime data.
       deals only in artifacts (a test/asserts no telemetry-ingestion path exists).
 - [ ] Durable facts surfaced during the feature are offered for saving via the
       AS-048 detector; the session retro is available via `/insights` (AS-045).
+
+## Open questions
+
+- **Prerequisite not yet clarified:** depends on AS-048 (rediscovered-fact
+  detector), which is itself `needs-clarification` (detection mechanism, precision
+  bar, durable-fact definition). This ticket can't be finalised until AS-048 is.
+- **Reflect-artifact depth (PRD Q3-adjacent):** how far does the reflect phase go
+  in producing artifacts — a scratch success-metric note, or actual synced
+  `AS-NNN` check-back tickets via `cmd/ticket-sync`? The latter couples Coding
+  Mode to this repo's ticket workflow.
 
 ## Dependencies
 
