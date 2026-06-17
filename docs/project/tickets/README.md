@@ -108,7 +108,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061, 038 |
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
-| [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | ready | 032 |
+| [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
 
 ## Suggested build order
 
