@@ -74,7 +74,17 @@ func Discover(userDir, wd string) []string {
 			if seen[p] {
 				continue
 			}
-			if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			// Skip a clean absence or a directory by that name; include anything
+			// else — including a stat that failed for a reason other than
+			// non-existence (e.g. a permission error) — so Load reads it and fails
+			// loudly rather than silently dropping guidance the user expects.
+			fi, err := os.Stat(p)
+			switch {
+			case err == nil && fi.IsDir():
+				continue
+			case os.IsNotExist(err):
+				continue
+			default:
 				seen[p] = true
 				paths = append(paths, p)
 			}
