@@ -2,7 +2,7 @@
 id: AS-078
 title: Web GUI — thin client over `smith serve`
 status: ready-to-implement
-github_issue: null
+github_issue: 133
 depends_on: [AS-077]
 area: faces
 priority: P1

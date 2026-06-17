@@ -2,7 +2,7 @@
 id: AS-077
 title: "`smith serve` — local JSON-RPC/WebSocket session server"
 status: ready-to-implement
-github_issue: null
+github_issue: 132
 depends_on: [AS-018, AS-051, AS-066]
 area: faces
 priority: P1

@@ -2,7 +2,7 @@
 id: AS-081
 title: Viscose (VS Code) extension over `smith serve`
 status: needs-clarification
-github_issue: null
+github_issue: 136
 depends_on: [AS-077, AS-078]
 area: faces
 priority: P2
