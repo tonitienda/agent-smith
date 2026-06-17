@@ -35,7 +35,7 @@ It never reads runtime data.
 - [ ] In the reflect phase, Smith can produce: (a) a stated success metric,
       (b) an instrumentation code proposal as a diff, (c) a check-back ticket.
 - [ ] Smith never attempts to read or claim shipped-app runtime data; the phase
-      deals only in artifacts (a test/asserts no telemetry-ingestion path exists).
+      deals only in artifacts (a test asserts no telemetry-ingestion path exists).
 - [ ] Durable facts surfaced during the feature are offered for saving via the
       AS-048 detector; the session retro is available via `/insights` (AS-045).
 
