@@ -2,7 +2,7 @@
 id: AS-071
 title: "Migrate config consumers (flat key=value, permissions, pricing) onto the layered config substrate"
 status: ready-to-implement
-github_issue: null
+github_issue: 119
 depends_on: [AS-031]
 area: foundation
 priority: P1
