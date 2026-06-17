@@ -20,6 +20,29 @@ func write(t *testing.T, path, content string) {
 	}
 }
 
+// blockFor returns the loaded memory block sourced from path, if present. The
+// tests key on specific written paths rather than the full result set, because
+// Discover walks the working directory's ancestors up to the filesystem root —
+// a stray memory file in a real ancestor (e.g. /tmp) must not make a test flaky.
+func blockFor(blocks []schema.Block, path string) (schema.Block, bool) {
+	for _, b := range blocks {
+		if src, ok := memory.Source(b); ok && src == path {
+			return b, true
+		}
+	}
+	return schema.Block{}, false
+}
+
+// indexOfPath returns the position of path within paths, or -1 when absent.
+func indexOfPath(paths []string, path string) int {
+	for i, p := range paths {
+		if p == path {
+			return i
+		}
+	}
+	return -1
+}
+
 // TestEquivalence is AC1: a project with only CLAUDE.md behaves identically to
 // the same project with only AGENT.md (and AGENTS.md) — the three filenames are
 // equivalent, so the loaded content is the same regardless of which is used.
@@ -28,20 +51,22 @@ func TestEquivalence(t *testing.T) {
 	for _, name := range memory.Filenames {
 		t.Run(name, func(t *testing.T) {
 			wd := t.TempDir()
-			write(t, filepath.Join(wd, name), body)
+			path := filepath.Join(wd, name)
+			write(t, path, body)
 
 			blocks, err := memory.Load("", wd)
 			if err != nil {
 				t.Fatalf("load: %v", err)
 			}
-			if len(blocks) != 1 {
-				t.Fatalf("got %d blocks, want 1", len(blocks))
+			got, ok := blockFor(blocks, path)
+			if !ok {
+				t.Fatalf("no memory block for %s (loaded %d blocks)", path, len(blocks))
 			}
-			if blocks[0].Text == nil || blocks[0].Text.Text != body {
-				t.Fatalf("content = %+v, want %q", blocks[0].Text, body)
+			if got.Text == nil || got.Text.Text != body {
+				t.Fatalf("content = %+v, want %q", got.Text, body)
 			}
-			if blocks[0].Role != schema.RoleSystem || blocks[0].Kind != schema.KindText {
-				t.Fatalf("kind/role = %s/%s, want text/system", blocks[0].Kind, blocks[0].Role)
+			if got.Role != schema.RoleSystem || got.Kind != schema.KindText {
+				t.Fatalf("kind/role = %s/%s, want text/system", got.Kind, got.Role)
 			}
 		})
 	}
@@ -57,23 +82,25 @@ func TestHierarchyPrecedence(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	write(t, filepath.Join(userDir, "AGENTS.md"), "user")
-	write(t, filepath.Join(root, "CLAUDE.md"), "project")
-	write(t, filepath.Join(sub, "AGENT.md"), "dir")
+	userPath := filepath.Join(userDir, "AGENTS.md")
+	projPath := filepath.Join(root, "CLAUDE.md")
+	dirPath := filepath.Join(sub, "AGENT.md")
+	write(t, userPath, "user")
+	write(t, projPath, "project")
+	write(t, dirPath, "dir")
 
+	// Assert the relative order of the three written files (user → project → dir).
+	// Discover may also surface memory files from real ancestors of the temp dir,
+	// so we check positions rather than the full set.
 	paths := memory.Discover(userDir, sub)
-	got := make([]string, len(paths))
-	for i, p := range paths {
-		got[i] = filepath.Base(p)
+	iUser := indexOfPath(paths, userPath)
+	iProj := indexOfPath(paths, projPath)
+	iDir := indexOfPath(paths, dirPath)
+	if iUser < 0 || iProj < 0 || iDir < 0 {
+		t.Fatalf("missing expected paths in %v (user=%d proj=%d dir=%d)", paths, iUser, iProj, iDir)
 	}
-	want := []string{"AGENTS.md", "CLAUDE.md", "AGENT.md"} // user → project → dir
-	if len(got) != len(want) {
-		t.Fatalf("discovered %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("order[%d] = %s, want %s (full: %v)", i, got[i], want[i], got)
-		}
+	if iUser >= iProj || iProj >= iDir {
+		t.Fatalf("order user=%d proj=%d dir=%d, want ascending (full: %v)", iUser, iProj, iDir, paths)
 	}
 }
 
@@ -84,13 +111,20 @@ func TestDeterministicOrderWithinDir(t *testing.T) {
 	for _, name := range memory.Filenames {
 		write(t, filepath.Join(wd, name), name)
 	}
-	paths := memory.Discover("", wd)
-	if len(paths) != len(memory.Filenames) {
-		t.Fatalf("discovered %d files, want %d", len(paths), len(memory.Filenames))
+	// Restrict to files in wd itself; Discover may also return files from real
+	// ancestor directories of the temp dir.
+	var inWd []string
+	for _, p := range memory.Discover("", wd) {
+		if filepath.Dir(p) == wd {
+			inWd = append(inWd, filepath.Base(p))
+		}
 	}
-	for i, p := range paths {
-		if filepath.Base(p) != memory.Filenames[i] {
-			t.Fatalf("order[%d] = %s, want %s", i, filepath.Base(p), memory.Filenames[i])
+	if len(inWd) != len(memory.Filenames) {
+		t.Fatalf("discovered %v in wd, want %v", inWd, memory.Filenames)
+	}
+	for i, name := range memory.Filenames {
+		if inWd[i] != name {
+			t.Fatalf("order[%d] = %s, want %s", i, inWd[i], name)
 		}
 	}
 }
@@ -98,13 +132,14 @@ func TestDeterministicOrderWithinDir(t *testing.T) {
 // TestSkipsEmpty checks that whitespace-only files add no segment.
 func TestSkipsEmpty(t *testing.T) {
 	wd := t.TempDir()
-	write(t, filepath.Join(wd, "CLAUDE.md"), "   \n\t\n")
+	emptyPath := filepath.Join(wd, "CLAUDE.md")
+	write(t, emptyPath, "   \n\t\n")
 	blocks, err := memory.Load("", wd)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if len(blocks) != 0 {
-		t.Fatalf("got %d blocks, want 0 for an empty file", len(blocks))
+	if _, ok := blockFor(blocks, emptyPath); ok {
+		t.Fatalf("whitespace-only file %s should have been skipped", emptyPath)
 	}
 }
 

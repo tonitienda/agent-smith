@@ -110,10 +110,11 @@ func Load(userDir, wd string) ([]schema.Block, error) {
 			}
 			return nil, fmt.Errorf("read memory file %s: %w", p, err)
 		}
-		if strings.TrimSpace(string(data)) == "" {
+		content := string(data)
+		if strings.TrimSpace(content) == "" {
 			continue
 		}
-		blocks = append(blocks, Block(p, string(data)))
+		blocks = append(blocks, Block(p, content))
 	}
 	return blocks, nil
 }
