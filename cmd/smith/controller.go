@@ -891,7 +891,7 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 		return command.Output{Text: "Compaction blocked by a pre-compact hook: " + out.Reason}, nil
 	}
 
-	summary, tokens, err := summarize(ctx, prov, model, plan.Sources)
+	summary, tokens, stopReason, err := summarize(ctx, prov, model, plan.Sources)
 	if err != nil {
 		return command.Output{}, fmt.Errorf("summarize for /compact: %w", err)
 	}
@@ -906,7 +906,7 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 	// Record the summarization's token usage so /cost itemizes it on the cheap
 	// tier (AS-038 AC4); a nil-usage surface simply records nothing.
 	if tokens != nil {
-		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.Producer, vendor, model, provider.StopEndTurn, tokens, nil)); err != nil {
+		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
 			return command.Output{}, fmt.Errorf("record compaction usage: %w", err)
 		}
 	}
@@ -983,10 +983,11 @@ func pluralBlocks(n int) string {
 
 // summarize runs a one-shot, non-streaming-consumed summarization turn against
 // prov with model, asking it to condense the rendered transcript of the
-// compactable blocks. It returns the summary text and the turn's reported token
-// usage (nil when the surface reports none). Caching is disabled — this prefix
-// recurs only once.
-func summarize(ctx context.Context, prov provider.Provider, model string, sources []schema.Block) (string, *schema.Tokens, error) {
+// compactable blocks. It returns the summary text, the turn's reported token
+// usage (nil when the surface reports none), and the turn's stop reason (so the
+// recorded usage event reflects max_tokens/refusal rather than asserting
+// end_turn). Caching is disabled — this prefix recurs only once.
+func summarize(ctx context.Context, prov provider.Provider, model string, sources []schema.Block) (string, *schema.Tokens, string, error) {
 	req := provider.Request{
 		Model: model,
 		Context: []schema.Block{
@@ -1008,12 +1009,13 @@ func summarize(ctx context.Context, prov provider.Provider, model string, source
 	}
 	stream, err := prov.Stream(ctx, req)
 	if err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
 	defer stream.Close() //nolint:errcheck // best-effort once drained
 
 	var text strings.Builder
 	var usage *schema.Tokens
+	var stopReason string
 	for stream.Next() {
 		ev := stream.Event()
 		switch ev.Type {
@@ -1021,12 +1023,14 @@ func summarize(ctx context.Context, prov provider.Provider, model string, source
 			text.WriteString(ev.TextDelta)
 		case provider.EventUsage:
 			usage = mergeTokens(usage, ev.Usage)
+		case provider.EventTurnStop:
+			stopReason = ev.StopReason
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
-	return text.String(), usage, nil
+	return text.String(), usage, stopReason, nil
 }
 
 // summarizeInstruction is the cheap-tier summarizer's system prompt.
