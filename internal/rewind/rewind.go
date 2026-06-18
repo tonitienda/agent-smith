@@ -329,14 +329,15 @@ func RenderPreview(p Plan) string {
 // describe labels a checkpoint for the preview/picker.
 func (c Checkpoint) describe() string {
 	if c.Manual {
-		return fmt.Sprintf("mark %q (%s)", c.Label, shortAnchor(c.Anchor))
+		return fmt.Sprintf("mark %q (%s)", c.Label, ShortAnchor(c.Anchor))
 	}
-	return fmt.Sprintf("turn %d: %q (%s)", c.Turn, clip(c.Label, 48), shortAnchor(c.Anchor))
+	return fmt.Sprintf("turn %d: %q (%s)", c.Turn, clip(c.Label, 48), ShortAnchor(c.Anchor))
 }
 
-// shortAnchor trims a block ID to a compact handle for display, dropping the
-// "blk_" prefix so it reads like the /context handles.
-func shortAnchor(id string) string {
+// ShortAnchor trims a block ID to a compact handle for display, dropping the
+// "blk_" prefix so it reads like the /context handles. It is the handle the
+// /rewind listing shows and `/rewind <handle>` accepts.
+func ShortAnchor(id string) string {
 	h := strings.TrimPrefix(id, idPrefix)
 	if len(h) > 8 {
 		return h[:8]

@@ -649,7 +649,7 @@ func (s *chatSession) rewindList() command.Output {
 	for i := len(cps) - 1; i >= 0; i-- {
 		c := cps[i]
 		label := rewindLabel(c)
-		fmt.Fprintf(&b, "  %-12s %s\n", rewindHandle(c.Anchor), label)
+		fmt.Fprintf(&b, "  %-12s %s\n", rewind.ShortAnchor(c.Anchor), label)
 		items = append(items, command.PickerItem{Label: label, Value: c.Anchor})
 	}
 	return command.Output{
@@ -701,7 +701,7 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 	}
 	s.pendingRewind, s.pendingRewindFor = nil, nil
 	return command.Output{
-		Text:      fmt.Sprintf("Rewound to %s, reclaiming %d tokens. Restore with /rewind --undo.", rewindHandle(plan.Target.Anchor), plan.Tokens),
+		Text:      fmt.Sprintf("Rewound to %s, reclaiming %d tokens. Restore with /rewind --undo.", rewind.ShortAnchor(plan.Target.Anchor), plan.Tokens),
 		ResetView: true,
 	}, nil
 }
@@ -760,16 +760,6 @@ func rewindLabel(c rewind.Checkpoint) string {
 		return fmt.Sprintf("%s⚑ mark: %s", stamp, c.Label)
 	}
 	return fmt.Sprintf("%sturn %d: %s", stamp, c.Turn, c.Label)
-}
-
-// rewindHandle trims a checkpoint anchor ID to the compact handle the listing
-// shows and /rewind accepts (the "blk_" prefix dropped, like /context handles).
-func rewindHandle(id string) string {
-	h := strings.TrimPrefix(id, "blk_")
-	if len(h) > 8 {
-		return h[:8]
-	}
-	return h
 }
 
 // cmdClear ends the current session and starts a fresh one (AS-023 /clear). The
