@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,17 +10,6 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 )
-
-func writeProjectSkill(t *testing.T, wd, name, content string) {
-	t.Helper()
-	sd := filepath.Join(skill.ProjectDir(wd), name)
-	if err := os.MkdirAll(sd, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(sd, "SKILL.md"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func TestSkillToolReturnsBodyAttributed(t *testing.T) {
 	skills := []skill.Skill{{Name: "research", Description: "do research", Body: "Follow these steps."}}
@@ -55,10 +42,18 @@ func TestSkillToolUnknownNameIsModelError(t *testing.T) {
 	}
 }
 
+func loadedSkillNames(sess *session.Session) []string {
+	var names []string
+	for _, b := range sess.Log.Events() {
+		if b.Kind == eventlog.KindSkillLoad && b.Attribution != nil {
+			names = append(names, b.Attribution.Skill)
+		}
+	}
+	return names
+}
+
 func TestSeedSkillsRecordsLoadEvents(t *testing.T) {
-	wd := t.TempDir()
-	writeProjectSkill(t, wd, "beta", "---\nname: beta\n---\nbody")
-	writeProjectSkill(t, wd, "alpha", "---\nname: alpha\n---\nbody")
+	skills := []skill.Skill{{Name: "beta"}, {Name: "alpha"}}
 
 	store, err := session.NewStore(t.TempDir(), t.TempDir())
 	if err != nil {
@@ -70,20 +65,40 @@ func TestSeedSkillsRecordsLoadEvents(t *testing.T) {
 	}
 	defer func() { _ = sess.Log.Close() }()
 
-	if err := seedSkills(wd, sess); err != nil {
+	if err := seedSkills(sess, skills); err != nil {
 		t.Fatalf("seedSkills: %v", err)
 	}
 
-	var names []string
-	for _, b := range sess.Log.Events() {
-		if b.Kind == eventlog.KindSkillLoad {
-			if b.Attribution == nil {
-				t.Fatalf("skill-load event has no attribution: %+v", b)
-			}
-			names = append(names, b.Attribution.Skill)
-		}
-	}
+	names := loadedSkillNames(sess)
 	if len(names) != 2 || names[0] != "alpha" || names[1] != "beta" {
 		t.Errorf("skill-load events = %v, want [alpha beta]", names)
+	}
+}
+
+// TestSeedSkillsReconcilesWithoutDuplicating covers the resume/clear path: a
+// second seed against the same snapshot must not re-append events already on the
+// log, but must add an event for a newly available skill.
+func TestSeedSkillsReconcilesWithoutDuplicating(t *testing.T) {
+	store, err := session.NewStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.Create("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sess.Log.Close() }()
+
+	if err := seedSkills(sess, []skill.Skill{{Name: "alpha"}}); err != nil {
+		t.Fatalf("seedSkills: %v", err)
+	}
+	// Re-seed with alpha (already logged) plus a newly available beta.
+	if err := seedSkills(sess, []skill.Skill{{Name: "alpha"}, {Name: "beta"}}); err != nil {
+		t.Fatalf("seedSkills re-seed: %v", err)
+	}
+
+	names := loadedSkillNames(sess)
+	if len(names) != 2 || names[0] != "alpha" || names[1] != "beta" {
+		t.Errorf("skill-load events = %v, want [alpha beta] (alpha not duplicated)", names)
 	}
 }

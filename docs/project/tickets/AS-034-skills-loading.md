@@ -28,9 +28,13 @@ source: PRD.md §7.7, §4
   with token cost. `tool.Output` gained an `Attribution` field the runtime merges
   onto the result (the tool's own name stays authoritative); MCP (AS-036) reuses it.
 - Skill availability is recorded on the log as `eventlog.KindSkillLoad` control
-  events (non-rendered, attributed by skill name), seeded on fresh sessions
-  alongside memory files — the stable hook AS-047's analyzers attach to. The
-  activation span is the attributed `skill` tool_call/tool_result pair.
+  events (non-rendered, attributed by skill name) — the stable hook AS-047's
+  analyzers attach to. The activation span is the attributed `skill`
+  tool_call/tool_result pair. The process scans skills once at startup into a
+  single snapshot that both builds the `skill` tool and seeds the load events;
+  `seedSkills` reconciles (deduped) so a fresh, cleared, or resumed session's
+  recorded catalog always matches exactly what the tool offers, with no
+  filesystem re-scan that could drift between them.
 - Headless `smith run` denies tool calls (D-CLI-8), so the skill tool is not
   offered there.
 

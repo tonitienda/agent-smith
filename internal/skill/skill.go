@@ -161,29 +161,31 @@ func loadDir(dir, scope string) ([]Skill, error) {
 }
 
 // parseFrontmatter splits an optional `---`-fenced frontmatter from the body and
-// reads name, description, and every other key (preserved in meta). Content
-// without a fence (or with an unterminated one) is treated entirely as the body,
-// so a bare Markdown skill still loads with the directory name.
+// reads name, description, and every other key (preserved in meta). It works on
+// whole lines — the opening fence is a `---` first line and the closing fence the
+// next `---` line — so it handles an empty frontmatter (`---`/`---`) and a file
+// that ends exactly at the closing fence with no trailing newline. Content
+// without an opening fence (or with an unterminated one) is treated entirely as
+// the body, so a bare Markdown skill still loads with the directory name.
 func parseFrontmatter(content string) (name, desc string, meta map[string]string, body string) {
 	meta = map[string]string{}
 	// Normalize Windows CRLF so fence detection and line splitting work regardless
 	// of how the file was checked out or saved.
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	if !strings.HasPrefix(content, "---\n") {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	if len(lines) == 0 || lines[0] != "---" {
 		return "", "", meta, content
 	}
-	// A fenced file that ends exactly at the closing fence has no trailing
-	// newline, so the fence search below would miss it; normalize it to end in one.
-	if !strings.HasSuffix(content, "\n") {
-		content += "\n"
+	closeIdx := -1
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			closeIdx = i
+			break
+		}
 	}
-	end := strings.Index(content[4:], "\n---\n")
-	if end < 0 {
-		return "", "", meta, content
+	if closeIdx < 0 {
+		return "", "", meta, content // unterminated fence: treat as plain body
 	}
-	front := content[4 : 4+end]
-	body = strings.TrimLeft(content[4+end+5:], "\n")
-	for _, line := range strings.Split(front, "\n") {
+	for _, line := range lines[1:closeIdx] {
 		key, val, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
@@ -201,5 +203,6 @@ func parseFrontmatter(content string) (name, desc string, meta map[string]string
 			meta[key] = val
 		}
 	}
+	body = strings.TrimLeft(strings.Join(lines[closeIdx+1:], "\n"), "\n")
 	return name, desc, meta, body
 }

@@ -209,7 +209,7 @@ func readonlyController(override string) (*chatSession, func(), error) {
 			}
 		}
 	}
-	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd)
+	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil)
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
 

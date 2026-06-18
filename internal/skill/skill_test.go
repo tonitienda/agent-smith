@@ -67,6 +67,18 @@ func TestParseFrontmatterNoTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestParseFrontmatterEmpty(t *testing.T) {
+	// An empty frontmatter section must be recognized so the fences don't leak
+	// into the body.
+	name, _, _, body := parseFrontmatter("---\n---\nthe body")
+	if name != "" {
+		t.Errorf("name = %q, want empty", name)
+	}
+	if body != "the body" {
+		t.Errorf("body = %q, want %q", body, "the body")
+	}
+}
+
 func TestLoadDiscoversAndSorts(t *testing.T) {
 	dir := t.TempDir()
 	writeSkill(t, dir, "beta", "---\nname: beta\ndescription: B\n---\nbeta body")
@@ -86,7 +98,7 @@ func TestLoadDiscoversAndSorts(t *testing.T) {
 	if skills[0].Name != "alpha" || skills[1].Name != "beta" {
 		t.Errorf("not sorted by name: %q, %q", skills[0].Name, skills[1].Name)
 	}
-	if skills[0].Body != "alpha body\n" || skills[0].Scope != "project" {
+	if skills[0].Body != "alpha body" || skills[0].Scope != "project" {
 		t.Errorf("alpha = %+v", skills[0])
 	}
 }
@@ -115,7 +127,7 @@ func TestLoadProjectShadowsUser(t *testing.T) {
 	if len(skills) != 1 {
 		t.Fatalf("got %d, want 1 (project shadows user)", len(skills))
 	}
-	if skills[0].Body != "project body\n" || skills[0].Scope != "project" {
+	if skills[0].Body != "project body" || skills[0].Scope != "project" {
 		t.Errorf("project did not win: %+v", skills[0])
 	}
 }

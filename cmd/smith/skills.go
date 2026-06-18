@@ -28,16 +28,13 @@ const skillToolInput = `{
   "additionalProperties": false
 }`
 
-// registerSkillTool discovers portable skills (AS-034) under wd and the user
-// config dir and, when any exist, registers a single "skill" tool the model
-// invokes by name to load a skill's instructions into the context. No skills
-// means no tool is offered, so a project without skills sends the model nothing
-// extra. A discovery error is surfaced so a broken setup fails loudly.
-func registerSkillTool(reg *tool.Registry, wd string) error {
-	skills, err := skill.Load(skill.UserDir(), skill.ProjectDir(wd))
-	if err != nil {
-		return fmt.Errorf("load skills: %w", err)
-	}
+// registerSkillTool registers a single "skill" tool the model invokes by name to
+// load a skill's instructions into the context, built over the given snapshot of
+// portable skills (AS-034). An empty snapshot offers no tool, so a project
+// without skills sends the model nothing extra. The caller scans skills once at
+// startup and reuses that snapshot for both the tool and seedSkills, so the
+// offered catalog and the recorded skill_load events can never diverge.
+func registerSkillTool(reg *tool.Registry, skills []skill.Skill) error {
 	if len(skills) == 0 {
 		return nil
 	}
@@ -100,20 +97,29 @@ func skillToolDescription(skills []skill.Skill) string {
 	return b.String()
 }
 
-// seedSkills records a skill-load event for every portable skill available to
-// the session (AS-034), giving the living-skills analyzers (AS-047) a stable hook
-// for what was loaded. These are control events that never enter model-facing
-// context — a skill's instructions arrive only when the model invokes it. Called
-// for fresh sessions only, like seedMemory; a resumed session already carries
-// the load events it was created with.
-func seedSkills(wd string, sess *session.Session) error {
-	skills, err := skill.Load(skill.UserDir(), skill.ProjectDir(wd))
-	if err != nil {
-		return fmt.Errorf("load skills: %w", err)
+// seedSkills reconciles the session's skill_load events with the process's skill
+// snapshot (AS-034): it appends a skill-load event for every snapshot skill the
+// log does not already record, giving the living-skills analyzers (AS-047) a
+// stable hook for what was loaded. These are control events that never enter
+// model-facing context — a skill's instructions arrive only when the model
+// invokes it. Because the snapshot also builds the skill tool, every offered
+// skill ends up with a load event and vice versa, on a fresh, cleared, or
+// resumed session alike. Reconciling (rather than blindly appending) keeps a
+// resumed session from duplicating the events it was created with.
+func seedSkills(sess *session.Session, skills []skill.Skill) error {
+	logged := map[string]bool{}
+	for _, b := range sess.Log.Events() {
+		if b.Kind == eventlog.KindSkillLoad && b.Attribution != nil {
+			logged[b.Attribution.Skill] = true
+		}
 	}
 	// Deterministic order on the log regardless of discovery order.
-	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
-	for _, s := range skills {
+	ordered := append([]skill.Skill(nil), skills...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Name < ordered[j].Name })
+	for _, s := range ordered {
+		if logged[s.Name] {
+			continue
+		}
 		if _, err := sess.Log.Append(eventlog.NewSkillLoad(skillProducer, s.Name)); err != nil {
 			return fmt.Errorf("append skill-load event: %w", err)
 		}
