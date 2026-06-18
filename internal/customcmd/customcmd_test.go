@@ -123,3 +123,16 @@ func TestLoadMissingDirsAreFine(t *testing.T) {
 		t.Fatalf("got %d commands, want 0", len(cmds))
 	}
 }
+
+func TestParseFrontmatterCRLF(t *testing.T) {
+	desc, hint, body := parseFrontmatter("---\r\ndescription: Win file\r\nargument-hint: \"[x]\"\r\n---\r\nDo $1\r\n")
+	if desc != "Win file" {
+		t.Errorf("description = %q, want Win file", desc)
+	}
+	if hint != "[x]" {
+		t.Errorf("argument-hint = %q, want [x]", hint)
+	}
+	if body != "Do $1\n" {
+		t.Errorf("body = %q, want %q", body, "Do $1\n")
+	}
+}

@@ -247,3 +247,27 @@ func TestUpsertReplacesAndValidates(t *testing.T) {
 		t.Error("Upsert with leading slash succeeded, want error")
 	}
 }
+
+// TestRegistryConcurrentAccess exercises the mutex: a writer Upserting while
+// readers call All/Match/Lookup must not race (run with -race). It mirrors the
+// real pattern — custom commands rescanned on palette open (Upsert) while a
+// /help-style handler reads the registry from another goroutine (AS-033).
+func TestRegistryConcurrentAccess(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r, Command{Name: "help", Run: noop})
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 1000; i++ {
+			_ = r.Upsert(Command{Name: "dyn", Summary: "v", Run: noop})
+		}
+		close(done)
+	}()
+	for i := 0; i < 1000; i++ {
+		_ = r.All()
+		_ = r.Match("h")
+		_, _ = r.Lookup("dyn")
+		_, _ = r.Suggest("hepl")
+	}
+	<-done
+}

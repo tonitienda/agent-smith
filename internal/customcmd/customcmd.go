@@ -187,6 +187,9 @@ func loadDir(dir, scope string) ([]Command, error) {
 // (or with an unterminated one) is treated entirely as the body, so a plain
 // Markdown prompt file works with no ceremony.
 func parseFrontmatter(content string) (desc, hint, body string) {
+	// Normalize Windows CRLF so the fence detection and line splitting below work
+	// regardless of how the file was checked out or saved.
+	content = strings.ReplaceAll(content, "\r\n", "\n")
 	if !strings.HasPrefix(content, "---\n") {
 		return "", "", content
 	}
