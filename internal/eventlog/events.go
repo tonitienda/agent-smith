@@ -158,6 +158,32 @@ func NewHookNote(producer, event, note string) schema.Block {
 	}
 }
 
+// KindCheckpoint is the event kind for a manual rewind checkpoint (AS-037
+// `/rewind --mark "<label>"`): a control event marking a point the conversation
+// can later be rewound to, carrying the user's label on Block.Text. Automatic
+// checkpoints are derived from user turns and need no event; only named manual
+// marks are recorded, so the rewind picker can offer them.
+//
+// Like the other control kinds it lives here rather than in the frozen
+// content-block schema (AS-003) because it is a harness/log control event, not a
+// content block; the schema tolerates non-content kinds (Block.Validate imposes
+// no body constraint on them) and the projection engine (AS-006) never renders
+// it into model-facing context.
+const KindCheckpoint schema.Kind = "checkpoint"
+
+// NewCheckpoint builds a manual checkpoint event labeled with label, attributed
+// to producer (e.g. "/rewind --mark"). The returned block has a fresh ID; its
+// Seq and append timestamp are assigned when it is appended to a Log.
+func NewCheckpoint(producer, label string) schema.Block {
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindCheckpoint,
+		Role:       schema.RoleHarness,
+		Text:       &schema.TextBody{Text: label, Subtype: schema.TextSubtypeNormal},
+		Provenance: &schema.Provenance{Producer: producer},
+	}
+}
+
 // Derive stamps a caller-built replacement block as a derived-block event:
 // derived from the given source block IDs and attributed to producer. The
 // derived block replaces its sources in the projection — the sources are

@@ -1,7 +1,7 @@
 ---
 id: AS-037
 title: /rewind — checkpoint and restore
-status: ready-to-implement
+status: done
 github_issue: 37
 depends_on: [AS-006, AS-022]
 area: commands
@@ -11,7 +11,7 @@ source: PRD.md §7.16, D3, Appendix A
 
 # AS-037 · /rewind
 
-**Status: ready to implement**
+**Status: done** — engine in `internal/rewind`, command in `cmd/smith` (`/rewind`, `--mark`, `--apply`, `--undo`, `--cancel`).
 
 ## Description
 
@@ -24,10 +24,10 @@ Parity command (§7.16). D3 makes this structurally cheap: a checkpoint is just 
 
 ## Acceptance criteria
 
-- [ ] Rewinding to turn N yields a projection identical to the historical projection at turn N (golden test via point-in-time projection).
-- [ ] The rewind itself is reversible; no events are deleted (§6 no-data-loss guardrail).
-- [ ] Picker shows turn metadata and the modified-files warning.
-- [ ] Works mid-session across provider switches (`/model`).
+- [x] Rewinding to turn N yields a projection identical to the historical projection at turn N (golden test via point-in-time projection). — `TestRewindMatchesPointInTimeProjection`
+- [x] The rewind itself is reversible; no events are deleted (§6 no-data-loss guardrail). — `TestRewindIsReversible` (undo is a counter-exclusion; the log only grows)
+- [x] Picker shows turn metadata (time, turn/mark, preview) and the preview lists the modified-files warning. — `TestModifiedFilesWarning`
+- [x] Works mid-session across provider switches (`/model`): the rewind is a pure projection over the log, independent of the active provider, and `/rewind --undo` / picker re-dispatch run on whatever session is active.
 
 ## Dependencies
 

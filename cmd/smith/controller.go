@@ -22,6 +22,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/rewind"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -85,6 +86,13 @@ type chatSession struct {
 	// blocks from the wrong log.
 	pendingClean    *clean.Plan
 	pendingCleanFor *session.Session
+
+	// pendingRewind holds the previewed /rewind plan awaiting confirmation
+	// (/rewind --apply) or discard (/rewind --cancel), keyed to the session it was
+	// previewed against so a /clear or /resume between preview and apply
+	// invalidates it rather than rewinding the wrong log (mirrors pendingClean).
+	pendingRewind    *rewind.Plan
+	pendingRewindFor *session.Session
 
 	// meter memo: recomputed only when the active log, its length, or the model
 	// changes, so the per-delta status-line refresh stays O(1) (mirrors AS-025).
@@ -586,6 +594,183 @@ const cleanUsage = `/clean removes segments from the model's context window.
   /clean --cancel    discard the preview
 
 Nothing leaves the log — a removal is reversible, and the live thread keeps working.`
+
+// cmdRewind rewinds the conversation to an earlier turn or named mark (AS-037
+// /rewind, PRD §7.16): the user picks a checkpoint, sees a preview of exactly
+// what leaves the window and a warning listing files modified after that point,
+// then confirms. A rewind is an appended exclusion event — history is never
+// mutated (D3) — and /rewind --undo restores it exactly.
+//
+//   - /rewind                  open the checkpoint picker (TUI) / list (CLI)
+//   - /rewind <handle>          preview rewinding to that checkpoint and stage it
+//   - /rewind --mark "<label>"  drop a named checkpoint at the current point
+//   - /rewind --apply           confirm the staged preview, appending the rewind
+//   - /rewind --undo            reverse the most recent rewind
+//   - /rewind --cancel          discard the staged preview
+func (s *chatSession) cmdRewind(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		switch args[0] {
+		case "--mark":
+			return s.rewindMark(strings.Join(args[1:], " "))
+		case "--apply":
+			return s.rewindApply()
+		case "--undo":
+			return s.rewindUndo()
+		case "--cancel":
+			return s.rewindCancel()
+		default:
+			return command.Output{}, fmt.Errorf("unknown /rewind flag %q (use --mark, --apply, --undo, or --cancel)", args[0])
+		}
+	}
+	if len(args) == 0 {
+		return s.rewindList(), nil
+	}
+	return s.rewindPreview(args[0])
+}
+
+// rewindList renders the session's checkpoints newest-first for both faces: a
+// text listing (the scriptable path, with the handle to pass to /rewind) and an
+// interactive Picker the TUI opens so a checkpoint can be chosen with the arrow
+// keys. Choosing an item re-dispatches /rewind <handle>, which stages the
+// preview — the same path a typed handle takes.
+func (s *chatSession) rewindList() command.Output {
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	s.mu.Unlock()
+
+	cps := rewind.Checkpoints(events)
+	if len(cps) == 0 {
+		return command.Output{Text: "Nothing to rewind to yet — no turns in this session."}
+	}
+
+	var b strings.Builder
+	b.WriteString("Rewind points (newest first) — /rewind <handle> to preview one:\n\n")
+	items := make([]command.PickerItem, 0, len(cps))
+	for i := len(cps) - 1; i >= 0; i-- {
+		c := cps[i]
+		label := rewindLabel(c)
+		fmt.Fprintf(&b, "  %-12s %s\n", rewindHandle(c.Anchor), label)
+		items = append(items, command.PickerItem{Label: label, Value: c.Anchor})
+	}
+	return command.Output{
+		Text:   strings.TrimRight(b.String(), "\n"),
+		Picker: &command.Picker{Title: "Rewind to a checkpoint", Items: items},
+	}
+}
+
+// rewindPreview stages a rewind: it resolves the handle to a checkpoint, builds
+// the plan, and stores it pending confirmation. Nothing is appended to the log.
+func (s *chatSession) rewindPreview(handle string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+	target, ok := rewind.Find(events, handle)
+	if !ok {
+		s.pendingRewind, s.pendingRewindFor = nil, nil
+		return command.Output{Text: fmt.Sprintf("No checkpoint matches %q. Run /rewind to list them.", handle)}, nil
+	}
+	plan := rewind.Preview(events, s.pricing, s.model, time.Now(), target)
+	if plan.Empty() {
+		s.pendingRewind, s.pendingRewindFor = nil, nil
+		return command.Output{Text: rewind.RenderPreview(plan)}, nil
+	}
+	s.pendingRewind, s.pendingRewindFor = &plan, s.sess
+	return command.Output{Text: rewind.RenderPreview(plan)}, nil
+}
+
+// rewindApply confirms the staged preview, appending the exclusion event that
+// rewinds the conversation. The plan is discarded once applied.
+func (s *chatSession) rewindApply() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingRewind == nil {
+		return command.Output{Text: "Nothing staged. Run /rewind <handle> to preview a rewind first."}, nil
+	}
+	if s.pendingRewindFor != s.sess {
+		s.pendingRewind, s.pendingRewindFor = nil, nil
+		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /rewind again."}, nil
+	}
+	plan := *s.pendingRewind
+	event, ok := rewind.Apply(plan)
+	if !ok {
+		s.pendingRewind, s.pendingRewindFor = nil, nil
+		return command.Output{Text: "Nothing to rewind."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record rewind: %w", err)
+	}
+	s.pendingRewind, s.pendingRewindFor = nil, nil
+	return command.Output{
+		Text:      fmt.Sprintf("Rewound to %s, reclaiming %d tokens. Restore with /rewind --undo.", rewindHandle(plan.Target.Anchor), plan.Tokens),
+		ResetView: true,
+	}, nil
+}
+
+// rewindUndo reverses the most recent rewind by appending a counter-exclusion.
+// The log is never rewritten, so the restoration is exact.
+func (s *chatSession) rewindUndo() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, ok := rewind.Undo(s.sess.Log.Events())
+	if !ok {
+		return command.Output{Text: "No /rewind to undo in this session."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record rewind undo: %w", err)
+	}
+	return command.Output{Text: "Restored the conversation to before the last rewind.", ResetView: true}, nil
+}
+
+// rewindMark drops a named manual checkpoint at the current end of the log
+// (/rewind --mark "<label>"). The mark is a control event, so it never enters
+// the model's window; it only gives the picker a labeled point to rewind to.
+func (s *chatSession) rewindMark(label string) (command.Output, error) {
+	label = strings.TrimSpace(strings.Trim(strings.TrimSpace(label), `"`))
+	if label == "" {
+		return command.Output{Text: `Give the mark a label, e.g. /rewind --mark "before refactor".`}, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, err := s.sess.Log.Append(rewind.Mark(label)); err != nil {
+		return command.Output{}, fmt.Errorf("record checkpoint: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Marked a checkpoint %q. Return to it with /rewind.", label)}, nil
+}
+
+// rewindCancel discards a staged preview without touching the log.
+func (s *chatSession) rewindCancel() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingRewind == nil {
+		return command.Output{Text: "Nothing staged to cancel."}, nil
+	}
+	s.pendingRewind, s.pendingRewindFor = nil, nil
+	return command.Output{Text: "Discarded the staged /rewind preview. Nothing changed."}, nil
+}
+
+// rewindLabel formats a checkpoint as a one-line picker/listing row, leading
+// with its append time so the turn list reads chronologically (AS-037 picker
+// metadata). A zero time (tests, in-memory blocks) is omitted.
+func rewindLabel(c rewind.Checkpoint) string {
+	stamp := ""
+	if !c.Time.IsZero() {
+		stamp = c.Time.Local().Format("15:04") + " · "
+	}
+	if c.Manual {
+		return fmt.Sprintf("%s⚑ mark: %s", stamp, c.Label)
+	}
+	return fmt.Sprintf("%sturn %d: %s", stamp, c.Turn, c.Label)
+}
+
+// rewindHandle trims a checkpoint anchor ID to the compact handle the listing
+// shows and /rewind accepts (the "blk_" prefix dropped, like /context handles).
+func rewindHandle(id string) string {
+	h := strings.TrimPrefix(id, "blk_")
+	if len(h) > 8 {
+		return h[:8]
+	}
+	return h
+}
 
 // cmdClear ends the current session and starts a fresh one (AS-023 /clear). The
 // previous session stays on disk and resumable (append-only ethos, D3); only the

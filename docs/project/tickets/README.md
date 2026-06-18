@@ -70,7 +70,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | done | 018, 031 |
 | [AS-035](AS-035-hooks.md) | Lifecycle hooks | capability | done | 013, 018, 031 |
 | [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | done | 013, 016, 031 |
-| [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | ready | 006, 022 |
+| [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | done | 006, 022 |
 | [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | ready | 006, 022 |
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
@@ -110,6 +110,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
 | [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
 | [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | ready | 036 |
+| [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | **needs clarification** | 037 |
 
 ## Suggested build order
 
@@ -143,6 +144,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-073](AS-073-coding-mode-phase-tracker.md) | coding-mode.prd.md Q5 (does Coding Mode mean anything headless/ACP, or TUI-only) |
 | [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Blocked on AS-048 (needs-clarification); reflect-artifact depth (scratch note vs synced check-back tickets) |
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Is a live hosted demo in scope at all (vs AS-079 inspector)? If so: isolation model, key/cost model, tool subset (D9 collision) |
+| [AS-084](AS-084-rewind-file-snapshot.md) | Snapshot mechanism (content/git/log-replay), shell-change capture, snapshot cost/pruning, working-tree conflict handling, opt-in vs default |
 | [AS-081](AS-081-viscose-vscode-extension.md) | How the extension reaches the core (bundle native binary / spawn user's `smith` / WASM-in-host); workspace integration depth; lifecycle; distribution |
 
 The spikes (AS-056, AS-059, AS-080) are themselves the clarification work for PRD open questions (Q13, Q12, and the D9 hosted-execution collision) — AS-056/AS-059 are ready to start; AS-080's first question is whether it should exist.

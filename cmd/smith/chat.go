@@ -254,6 +254,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdClean,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "rewind",
+		Summary:       "Rewind the conversation to an earlier turn or mark",
+		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith rewind", `smith rewind --mark "before refactor"`},
+		Run:           ctl.cmdRewind,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "clear",
 		Summary:       "Start a fresh session (the old one stays in /resume)",
 		Mode:          command.Inline,
