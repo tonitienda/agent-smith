@@ -230,6 +230,16 @@ func (e *Engine) Run(ctx context.Context, userText string) (Result, error) {
 func (e *Engine) drive(ctx context.Context) (Result, error) {
 	res := Result{}
 	warned := false
+	// The ceiling is static for the life of one Run — /budget cannot be issued
+	// mid-turn — so resolve it once (a /budget override on the log wins over the
+	// configured default) rather than rescanning the log every iteration. Only the
+	// spend it is measured against changes per turn.
+	limit := e.budgetDefaultUSD
+	if e.spent != nil {
+		if v, ok := budget.Current(e.log.Events()); ok {
+			limit = v
+		}
+	}
 	for iter := 0; ; iter++ {
 		if err := ctx.Err(); err != nil {
 			res.StopReason = StopCanceled
@@ -244,10 +254,6 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 		// already been dispatched, so halting here finishes work in flight and
 		// stops before starting another priced turn.
 		if e.spent != nil {
-			limit := e.budgetDefaultUSD
-			if v, ok := budget.Current(e.log.Events()); ok {
-				limit = v
-			}
 			guard := budget.Guard{LimitUSD: limit, WarnFraction: e.budgetWarnFraction}
 			if guard.Enabled() {
 				spent := e.spent()

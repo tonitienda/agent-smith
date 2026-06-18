@@ -218,7 +218,10 @@ func NewBudget(producer string, limitUSD float64) schema.Block {
 // /budget wins. A budget event whose Text does not parse as a number is skipped
 // defensively rather than aborting accounting.
 func BudgetLimit(events []schema.Block) (limitUSD float64, ok bool) {
-	for _, b := range events {
+	// Scan in reverse so the most recently set ceiling is found first — O(1) in the
+	// common case that a budget was set recently, mirroring lastModel.
+	for i := len(events) - 1; i >= 0; i-- {
+		b := events[i]
 		if b.Kind != KindBudget || b.Text == nil {
 			continue
 		}
@@ -226,9 +229,9 @@ func BudgetLimit(events []schema.Block) (limitUSD float64, ok bool) {
 		if err != nil {
 			continue
 		}
-		limitUSD, ok = v, true
+		return v, true
 	}
-	return limitUSD, ok
+	return 0, false
 }
 
 // Derive stamps a caller-built replacement block as a derived-block event:
