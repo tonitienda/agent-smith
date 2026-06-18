@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/clean"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/compact"
@@ -73,6 +74,13 @@ type chatSession struct {
 	// start fire its prompt-submit and session lifecycle events. A nil-safe *Set
 	// fires nothing, so a hook-free session behaves exactly as before.
 	hooks *hook.Set
+
+	// budgetDefaultUSD and budgetWarnFraction are the configured budget defaults
+	// (AS-041) read once from layered config at startup: the default ceiling
+	// applied when the session log carries no /budget override, and the fraction
+	// of the ceiling at which warnings begin. Both are static for the session.
+	budgetDefaultUSD   float64
+	budgetWarnFraction float64
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -138,6 +146,15 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 	}
 }
 
+// setBudgetDefaults records the configured budget ceiling default and warning
+// fraction (AS-041), read from layered config at startup. A non-positive default
+// leaves new sessions budget-free until /budget sets one; a warn fraction outside
+// (0,1) falls back to the budget package default downstream.
+func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64) {
+	s.budgetDefaultUSD = defaultUSD
+	s.budgetWarnFraction = warnFraction
+}
+
 // setPolicy installs the permission gate used by every engine this controller
 // builds. It must be called before start (and before any turn), so the first
 // engine already carries the gate.
@@ -192,7 +209,17 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 	// runtime; they run after the permission gate, never replacing it.
 	rtOpts = append(rtOpts, hookToolOptions(s.hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(s.tools, sess.Log, rtOpts...)
-	return loop.New(prov, sess.Log, rt, s.tools, model, loop.WithObserver(s.observer))
+	// Budget enforcement (AS-041): spend is the session's running dollar total
+	// from the same accounting source as /cost and the meter, so the guard, the
+	// command, and the gauge never drift. Pricing may be nil (cli/tests), in which
+	// case enforcement is left disabled.
+	opts := []loop.Option{loop.WithObserver(s.observer)}
+	if s.pricing != nil {
+		log := sess.Log
+		spent := func() float64 { return cost.Summarize(log.Events(), s.pricing).TotalUSD }
+		opts = append(opts, loop.WithBudget(spent, s.budgetDefaultUSD, s.budgetWarnFraction))
+	}
+	return loop.New(prov, sess.Log, rt, s.tools, model, opts...)
 }
 
 // Run drives one user turn against the current engine (tui.Runner). It reads the
@@ -313,6 +340,79 @@ func (s *chatSession) cmdGoal(_ context.Context, args []string) (command.Output,
 	return command.Output{Text: "Goal set: " + objective}, nil
 }
 
+// cmdBudget implements /budget (AS-041): set, show, or clear the session spend
+// ceiling. The ceiling is recorded on the log (budget.Set), so it survives
+// /resume and the loop enforces it at every turn boundary.
+//
+//   - /budget            show the active ceiling, warning threshold, and spend
+//   - /budget <amount>   set the ceiling (a leading currency symbol is allowed)
+//   - /budget off        clear the budget (records a 0 ceiling)
+func (s *chatSession) cmdBudget(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+
+	if len(args) == 0 {
+		return command.Output{Text: s.renderBudget(events)}, nil
+	}
+
+	arg := strings.TrimSpace(strings.Join(args, " "))
+	if strings.EqualFold(arg, "off") || strings.EqualFold(arg, "none") {
+		if _, err := s.sess.Log.Append(budget.Set(0)); err != nil {
+			return command.Output{}, fmt.Errorf("clear budget: %w", err)
+		}
+		return command.Output{Text: "Budget cleared."}, nil
+	}
+
+	limit, err := parseBudgetAmount(arg)
+	if err != nil {
+		return command.Output{}, err
+	}
+	if _, err := s.sess.Log.Append(budget.Set(limit)); err != nil {
+		return command.Output{}, fmt.Errorf("record budget: %w", err)
+	}
+	sym := cost.Symbol(cost.Summarize(events, s.pricing).Currency)
+	return command.Output{Text: fmt.Sprintf("Budget set: %s%s", sym, strconv.FormatFloat(limit, 'f', 2, 64))}, nil
+}
+
+// renderBudget describes the active budget for /budget with no arguments: the
+// ceiling (a /budget override or the configured default), the warning threshold,
+// and what the session has spent so far against it. Callers hold s.mu.
+func (s *chatSession) renderBudget(events []schema.Block) string {
+	summary := cost.Summarize(events, s.pricing)
+	sym := cost.Symbol(summary.Currency)
+	limit := s.budgetDefaultUSD
+	if v, ok := budget.Current(events); ok {
+		limit = v
+	}
+	g := budget.Guard{LimitUSD: limit, WarnFraction: s.budgetWarnFraction}
+	if !g.Enabled() {
+		return fmt.Sprintf("No budget set — spent %s%s so far. Set one with /budget <amount>.",
+			sym, strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64))
+	}
+	return fmt.Sprintf("Budget %s%s · warn at %s%s · spent %s%s (%s).",
+		sym, strconv.FormatFloat(limit, 'f', 2, 64),
+		sym, strconv.FormatFloat(g.WarnThresholdUSD(), 'f', 2, 64),
+		sym, strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64),
+		g.Check(summary.TotalUSD))
+}
+
+// parseBudgetAmount parses a /budget amount, tolerating a leading currency
+// symbol (e.g. "$0.50") and surrounding whitespace. A non-positive or unparseable
+// amount is an error — clearing a budget goes through "/budget off", so a typo
+// never silently disables enforcement.
+func parseBudgetAmount(arg string) (float64, error) {
+	cleaned := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(arg), "$€£"))
+	v, err := strconv.ParseFloat(cleaned, 64)
+	if err != nil {
+		return 0, fmt.Errorf("/budget needs a dollar amount, e.g. /budget 0.50 (or /budget off)")
+	}
+	if v <= 0 {
+		return 0, fmt.Errorf("/budget amount must be positive; use /budget off to clear")
+	}
+	return v, nil
+}
+
 // Meter computes the context/cost snapshot for the status line (tui.MeterFunc)
 // from the current session log and pricing table — the same accounting source as
 // /cost, so the gauge and the command never drift. The window denominator uses
@@ -333,12 +433,21 @@ func (s *chatSession) Meter(model string) tui.Meter {
 		used = last.ContextTokens()
 	}
 	window, _ := s.pricing.Window(model)
+	// Resolve the active budget ceiling (AS-041): a /budget override on the log
+	// wins over the configured default, so the gauge tracks whatever the loop
+	// enforces.
+	budgetUSD := s.budgetDefaultUSD
+	if v, ok := budget.Current(events); ok {
+		budgetUSD = v
+	}
 	s.meterCache = tui.Meter{
-		Tokens:    used,
-		Window:    window,
-		CostUSD:   summary.TotalUSD,
-		CostKnown: summary.AllPriced,
-		Currency:  cost.Symbol(summary.Currency),
+		Tokens:             used,
+		Window:             window,
+		CostUSD:            summary.TotalUSD,
+		CostKnown:          summary.AllPriced,
+		Currency:           cost.Symbol(summary.Currency),
+		BudgetUSD:          budgetUSD,
+		BudgetWarnFraction: s.budgetWarnFraction,
 	}
 	s.meterLog, s.meterLen, s.meterModel = log, len(events), model
 	return s.meterCache

@@ -140,6 +140,11 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	}
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
+	// Apply the configured budget defaults (AS-041): a default ceiling for new
+	// sessions and the warning fraction, both overridable per session by /budget.
+	budgetLimit, _, _ := cfg.Float64("budget.limit_usd")
+	budgetWarn, _, _ := cfg.Float64("budget.warn_fraction")
+	ctl.setBudgetDefaults(budgetLimit, budgetWarn)
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.
@@ -295,6 +300,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Scriptability: command.Both,
 		Examples:      []string{`smith goal "ship the parser"`, "smith goal", "smith goal done"},
 		Run:           ctl.cmdGoal,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "budget",
+		Summary:       "Set, show, or clear the session spend ceiling",
+		Args:          "[<amount> | off]",
+		Mode:          command.Inline,
+		Scriptability: command.Both,
+		Examples:      []string{"smith budget", "smith budget 0.50", "smith budget off"},
+		Run:           ctl.cmdBudget,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "resume",

@@ -114,6 +114,15 @@ func (m *model) apply(ev loop.UIEvent) {
 
 	case loop.UITurnComplete:
 		m.finalizeText()
+
+	case loop.UIBudgetWarning:
+		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: fmt.Sprintf(
+			"budget warning: spent $%.4f of $%.2f ceiling", ev.BudgetSpentUSD, ev.BudgetLimitUSD)})
+
+	case loop.UIBudgetHalt:
+		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: fmt.Sprintf(
+			"budget reached: spent $%.4f of $%.2f — turn halted. Raise it with /budget, or trim with /clean or /compact.",
+			ev.BudgetSpentUSD, ev.BudgetLimitUSD)})
 	}
 }
 

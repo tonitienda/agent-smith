@@ -74,7 +74,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | done | 006, 022 |
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
-| [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | ready | 020, 022, 031 |
+| [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | **needs clarification** | 008, 031, 044 |
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | **needs clarification** | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | ready | 006, 018, 020, 031 |

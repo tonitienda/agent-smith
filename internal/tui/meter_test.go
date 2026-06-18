@@ -132,3 +132,20 @@ func TestMeterShownInStatusLineAndUpdates(t *testing.T) {
 		}
 	}
 }
+
+// TestMeterBudgetRendering checks the status-line cost segment shows the ceiling
+// and reflects budget enforcement state (AS-041): no ceiling shows bare cost, a
+// set ceiling appends "/<limit>".
+func TestMeterBudgetRendering(t *testing.T) {
+	// No budget: cost shown without a ceiling.
+	noBudget := Meter{Tokens: 10, Window: 100, CostUSD: 0.30, CostKnown: true}.render()
+	if strings.Contains(noBudget, "/$") {
+		t.Errorf("no-budget meter unexpectedly shows a ceiling: %q", noBudget)
+	}
+
+	// With a budget the ceiling is appended next to the cost.
+	withBudget := Meter{Tokens: 10, Window: 100, CostUSD: 0.45, CostKnown: true, BudgetUSD: 0.50}.render()
+	if !strings.Contains(withBudget, "$0.4500") || !strings.Contains(withBudget, "/$0.50") {
+		t.Errorf("budget meter missing cost/ceiling: %q", withBudget)
+	}
+}

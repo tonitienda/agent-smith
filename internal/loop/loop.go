@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
@@ -43,6 +44,11 @@ const producer = "agent-loop"
 // valve fires: the model kept requesting tools past the configured budget, so
 // the loop halts a potential runaway rather than continuing forever.
 const StopMaxIterations = "max_iterations"
+
+// StopBudget is the stop reason surfaced when the session budget ceiling is
+// reached (AS-041): the loop finished the in-flight turn's tool calls, then
+// halted before starting another priced turn rather than exceeding the budget.
+const StopBudget = "budget_exceeded"
 
 // Defaults for the engine's guards and retry policy.
 const (
@@ -79,6 +85,14 @@ type Engine struct {
 	maxAttempts   int
 	backoffBase   time.Duration
 	backoffMax    time.Duration
+
+	// Budget enforcement (AS-041). spent reports the session's total dollar spend
+	// so far (nil disables enforcement); budgetDefaultUSD is the configured
+	// default ceiling applied when the log carries no /budget override, and
+	// budgetWarnFraction is the fraction of the ceiling at which warnings begin.
+	spent              func() float64
+	budgetDefaultUSD   float64
+	budgetWarnFraction float64
 }
 
 // Option configures an Engine.
@@ -113,6 +127,23 @@ func WithRetry(maxAttempts int, backoffBase time.Duration) Option {
 		}
 		if backoffBase > 0 {
 			e.backoffBase = backoffBase
+		}
+	}
+}
+
+// WithBudget installs budget enforcement (AS-041). spent reports the session's
+// total dollar spend so far (typically cost.Summarize over the log); the loop
+// consults it at each turn boundary and, against the active ceiling, warns near
+// the limit and halts before exceeding it. defaultLimitUSD is the configured
+// default ceiling used when the log carries no /budget override; warnFraction is
+// the fraction of the ceiling at which warnings begin (0 falls back to the
+// package default). A nil spent leaves enforcement disabled.
+func WithBudget(spent func() float64, defaultLimitUSD, warnFraction float64) Option {
+	return func(e *Engine) {
+		if spent != nil {
+			e.spent = spent
+			e.budgetDefaultUSD = defaultLimitUSD
+			e.budgetWarnFraction = warnFraction
 		}
 	}
 }
@@ -198,6 +229,7 @@ func (e *Engine) Run(ctx context.Context, userText string) (Result, error) {
 // drive runs the turn loop over the current log until a stop condition.
 func (e *Engine) drive(ctx context.Context) (Result, error) {
 	res := Result{}
+	warned := false
 	for iter := 0; ; iter++ {
 		if err := ctx.Err(); err != nil {
 			res.StopReason = StopCanceled
@@ -206,6 +238,31 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 		if iter >= e.maxIterations {
 			res.StopReason = StopMaxIterations
 			return res, nil
+		}
+		// Budget enforcement (AS-041) runs at the turn boundary: the prior turn's
+		// usage is already recorded on the log, and any in-flight tool call has
+		// already been dispatched, so halting here finishes work in flight and
+		// stops before starting another priced turn.
+		if e.spent != nil {
+			limit := e.budgetDefaultUSD
+			if v, ok := budget.Current(e.log.Events()); ok {
+				limit = v
+			}
+			guard := budget.Guard{LimitUSD: limit, WarnFraction: e.budgetWarnFraction}
+			if guard.Enabled() {
+				spent := e.spent()
+				switch guard.Check(spent) {
+				case budget.Halt:
+					e.emit(UIEvent{Kind: UIBudgetHalt, Iteration: iter, BudgetSpentUSD: spent, BudgetLimitUSD: limit})
+					res.StopReason = StopBudget
+					return res, nil
+				case budget.Warn:
+					if !warned {
+						warned = true
+						e.emit(UIEvent{Kind: UIBudgetWarning, Iteration: iter, BudgetSpentUSD: spent, BudgetLimitUSD: limit})
+					}
+				}
+			}
 		}
 
 		req := e.request()

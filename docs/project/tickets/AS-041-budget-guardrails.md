@@ -1,7 +1,7 @@
 ---
 id: AS-041
 title: Budget guardrails + /budget command
-status: ready-to-implement
+status: done
 github_issue: 41
 depends_on: [AS-020, AS-022, AS-031]
 area: cost
@@ -11,7 +11,7 @@ source: PRD.md §7.15, Appendix A
 
 # AS-041 · Budget guardrails + /budget
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -25,10 +25,19 @@ source: PRD.md §7.15, Appendix A
 
 ## Acceptance criteria
 
-- [ ] A session with a $0.50 budget warns at $0.40 and halts before exceeding $0.50 (test with mock provider pricing).
-- [ ] The hard stop is graceful: log consistent, session resumable after raising the budget.
-- [ ] Budget state survives `/resume`.
-- [ ] Sub-agent budget caps consume the same enforcement API.
+- [x] A session with a $0.50 budget warns at $0.40 and halts before exceeding $0.50 (test with mock provider pricing). — `loop.TestBudgetWarnThenHalt`.
+- [x] The hard stop is graceful: log consistent, session resumable after raising the budget. — the loop returns `StopBudget` at a turn boundary (in-flight tool calls already dispatched, no orphaned blocks); raising the ceiling appends a new `/budget` event and the next turn proceeds.
+- [x] Budget state survives `/resume`. — the ceiling is an append-only `eventlog.KindBudget` event derived from the log on replay (`budget.Current`), not side state; `budget.TestSetCurrentRoundTrip` and `loop.TestBudgetOverrideFromLog`.
+- [x] Sub-agent budget caps consume the same enforcement API. — `budget.Guard` is the stateless decision rule (spend → OK/Warn/Halt); the loop and any future sub-agent (AS-044/046) enforce a per-task cap through the same `Guard`.
+
+## Implementation notes
+
+- **`internal/budget`** owns the durable ceiling on the log (`Set`/`Current`, over `eventlog.KindBudget`) and the pure enforcement decision (`Guard.Check` → `OK`/`Warn`/`Halt`, inclusive ceiling so a turn boundary never tips strictly past the limit). The zero `Guard` is disabled.
+- **Loop** (`loop.WithBudget`): enforcement runs at each turn boundary, after the prior turn's usage is recorded and any tool call dispatched — emitting `UIBudgetWarning` once on first crossing and `UIBudgetHalt` + `StopBudget` at the ceiling. Spend comes from the same `cost.Summarize` source as `/cost` and the meter, so the three never drift.
+- **`/budget`** (inline, scriptable): `/budget` shows the ceiling, warn threshold, and spend; `/budget <amount>` sets it (tolerates a leading currency symbol); `/budget off` clears it (records a `0` ceiling).
+- **Config defaults** (AS-031): `budget.limit_usd` (default ceiling for new sessions) and `budget.warn_fraction` (default 0.8); a `/budget` override on the log wins over both.
+- **Status line**: the cost segment appends the ceiling (`$0.42/$0.50`) and colors by enforcement state (green/yellow/red).
+- **Scoped out** (as specified): the "budget mode that trims context aggressively" — deferred behind AS-043 `/tidy`.
 
 ## Dependencies
 
