@@ -18,4 +18,5 @@ disagree. Interactive-only commands state a reason.
 | `/help` | both |  |
 | `/model` | both |  |
 | `/resume` | both |  |
+| `/rewind` | both |  |
 | `/version` | both |  |
