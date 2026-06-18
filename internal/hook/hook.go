@@ -77,9 +77,9 @@ const DefaultTimeout = 30 * time.Second
 type Spec struct {
 	// Event is the lifecycle point this hook fires on (one of the Event values).
 	Event string `json:"event"`
-	// Matcher is a glob (filepath.Match syntax) tested against the event's match
-	// key — the tool name for tool events. Empty or "*" matches every key, so a
-	// hook with no matcher fires on all of its event's occurrences.
+	// Matcher is a glob (path.Match syntax) tested against the event's match key —
+	// the tool name for tool events. Empty or "*" matches every key, so a hook
+	// with no matcher fires on all of its event's occurrences.
 	Matcher string `json:"matcher,omitempty"`
 	// Command is the shell command run via `sh -c`. Required.
 	Command string `json:"command"`
@@ -309,8 +309,8 @@ func (s *Set) Run(ctx context.Context, p Payload) Outcome {
 }
 
 // matches reports whether the hook's matcher applies to key. An empty or "*"
-// matcher matches everything; otherwise filepath.Match glob syntax is used, and
-// a malformed pattern matches nothing (it was already a no-op).
+// matcher matches everything; otherwise path.Match glob syntax is used, and a
+// malformed pattern matches nothing (it was already a no-op).
 func (h hook) matches(key string) bool {
 	if h.matcher == "" || h.matcher == "*" {
 		return true

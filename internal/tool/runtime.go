@@ -210,7 +210,11 @@ func (r *Runtime) prepare(ctx context.Context, call schema.Block) (plan, error) 
 	if r.preHook != nil {
 		res := r.preHook(ctx, gate)
 		if res.Block {
-			return r.denyPlan(logged, "tool %q blocked by hook: %s", tc.Name, res.Reason), nil
+			reason := res.Reason
+			if reason == "" {
+				reason = "no reason given"
+			}
+			return r.denyPlan(logged, "tool %q blocked by hook: %s", tc.Name, reason), nil
 		}
 		if res.Modified != nil {
 			modified, err := r.applyModifiedArgs(logged, t, res.Modified)
@@ -236,8 +240,13 @@ func (r *Runtime) applyModifiedArgs(call schema.Block, t Tool, args json.RawMess
 	}
 	derived := call
 	derived.ID = ""
+	derived.TS = time.Time{} // let Derive stamp the rewrite with its own append time
 	tc := *call.ToolCall
 	tc.Arguments = append(json.RawMessage(nil), args...)
+	// Drop the original verbatim arguments string: providers prefer ArgumentsRaw
+	// when present, so leaving it would serialize the pre-rewrite arguments and
+	// silently undo the hook's modification.
+	tc.ArgumentsRaw = ""
 	derived.ToolCall = &tc
 	derived = eventlog.Derive(derived, hookProducer, call.ID)
 	stored, err := r.log.Append(derived)
