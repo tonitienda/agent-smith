@@ -116,14 +116,27 @@ func (m *model) apply(ev loop.UIEvent) {
 		m.finalizeText()
 
 	case loop.UIBudgetWarning:
+		sym := m.budgetSymbol()
 		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: fmt.Sprintf(
-			"budget warning: spent $%.4f of $%.2f ceiling", ev.BudgetSpentUSD, ev.BudgetLimitUSD)})
+			"budget warning: spent %s%.4f of %s%.2f ceiling", sym, ev.BudgetSpentUSD, sym, ev.BudgetLimitUSD)})
 
 	case loop.UIBudgetHalt:
+		sym := m.budgetSymbol()
 		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: fmt.Sprintf(
-			"budget reached: spent $%.4f of $%.2f — turn halted. Raise it with /budget, or trim with /clean or /compact.",
-			ev.BudgetSpentUSD, ev.BudgetLimitUSD)})
+			"budget reached: spent %s%.4f of %s%.2f — turn halted. Raise it with /budget, or trim with /clean or /compact.",
+			sym, ev.BudgetSpentUSD, sym, ev.BudgetLimitUSD)})
 	}
+}
+
+// budgetSymbol is the currency prefix for budget notices, taken from the cached
+// meter snapshot so the message agrees with /cost, /budget, and the status-line
+// meter under a non-USD pricing table; it defaults to "$" before the first
+// snapshot exists.
+func (m *model) budgetSymbol() string {
+	if s := m.meterState.Currency; s != "" {
+		return s
+	}
+	return "$"
 }
 
 // segmentsFromBlocks rebuilds the visible transcript from a session's projected

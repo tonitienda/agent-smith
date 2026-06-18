@@ -89,9 +89,11 @@ func (g Guard) WarnThresholdUSD() float64 {
 }
 
 // Check maps a session's total spend to an enforcement decision. A disabled
-// guard always returns OK. The ceiling test is inclusive (spend == limit halts)
-// so enforcement never lets a turn tip the total strictly past the ceiling at a
-// turn boundary.
+// guard always returns OK. The ceiling test is inclusive (spend == limit halts).
+// Check is a pure decision over the spend it is given; whether the total can
+// overshoot the ceiling depends on when the caller measures spend — the loop
+// checks at turn boundaries, so a single turn's cost can still carry the total
+// past the ceiling before the next check (see WithBudget).
 func (g Guard) Check(spentUSD float64) State {
 	if !g.Enabled() {
 		return OK

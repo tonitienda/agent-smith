@@ -46,8 +46,10 @@ const producer = "agent-loop"
 const StopMaxIterations = "max_iterations"
 
 // StopBudget is the stop reason surfaced when the session budget ceiling is
-// reached (AS-041): the loop finished the in-flight turn's tool calls, then
-// halted before starting another priced turn rather than exceeding the budget.
+// reached (AS-041): at a turn boundary the recorded spend met or passed the
+// ceiling, so the loop finished the in-flight turn's tool calls and halted
+// rather than starting another priced turn. Enforcement is boundary-based, so
+// the turn that crossed the ceiling may have carried the total slightly past it.
 const StopBudget = "budget_exceeded"
 
 // Defaults for the engine's guards and retry policy.
@@ -134,10 +136,18 @@ func WithRetry(maxAttempts int, backoffBase time.Duration) Option {
 // WithBudget installs budget enforcement (AS-041). spent reports the session's
 // total dollar spend so far (typically cost.Summarize over the log); the loop
 // consults it at each turn boundary and, against the active ceiling, warns near
-// the limit and halts before exceeding it. defaultLimitUSD is the configured
+// the limit and halts once spend reaches it. defaultLimitUSD is the configured
 // default ceiling used when the log carries no /budget override; warnFraction is
 // the fraction of the ceiling at which warnings begin (0 falls back to the
 // package default). A nil spent leaves enforcement disabled.
+//
+// Enforcement is boundary-based and only as accurate as spent: the cost of a
+// turn is known only after it completes, so a single turn can carry the total
+// slightly past the ceiling before the next boundary halts the run, and a turn
+// the pricing table cannot price contributes $0 to spent — an unpriced model is
+// effectively unmetered. Strict, pre-turn non-overshoot (a reservation from a
+// request-size + max-output estimate) and conservative handling of unpriced
+// turns are tracked as a follow-up (AS-086).
 func WithBudget(spent func() float64, defaultLimitUSD, warnFraction float64) Option {
 	return func(e *Engine) {
 		if spent != nil {
