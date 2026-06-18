@@ -50,10 +50,11 @@ func (m *model) syncPalette() {
 		m.palette = palette{}
 		return
 	}
-	// Re-scan for custom commands as the palette opens, so a file dropped into the
-	// commands dir is invocable without a restart (AS-033). It mutates the shared
-	// registry; scanning a local dir per keystroke is cheap.
-	if m.rescan != nil {
+	// Re-scan for custom commands only as the palette transitions to open — not on
+	// every keystroke while already typing a command — so a file dropped into the
+	// commands dir is invocable without a restart (AS-033) without hammering the
+	// disk on each key (which matters on slow/remote home dirs).
+	if m.rescan != nil && !m.palette.open {
 		m.rescan()
 	}
 	matches := m.commands.Match(v[1:])
