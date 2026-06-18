@@ -4,6 +4,7 @@ Status: **In progress / draft**
 Owner: Agent Smith project  
 Last updated: 2026-06-18  
 Related themes: sandboxing, subagents, remote execution, CI-style execution, auditability, deterministic orchestration
+important: some of the features dracribed here are opt-in for power users or conpanies. Specially remote execution, worker/task/environment definitions, etc. Maybe they become a premium/paid feature. Individuals should still get defaulf local sandboxing for safety without extra configuration. 
 
 ---
 
