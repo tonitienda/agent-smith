@@ -76,6 +76,30 @@ func resultFor(t *testing.T, log *eventlog.Log) schema.Block {
 	return results[0]
 }
 
+// TestExecuteMergesOutputAttribution covers the AS-034 path: a tool that returns
+// Output.Attribution (e.g. the skill tool crediting the skill it loaded) has
+// those fields merged onto the result, while the tool's own name stays
+// authoritative.
+func TestExecuteMergesOutputAttribution(t *testing.T) {
+	skillish := Func{
+		Spec: Def{Name: "skill", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		Fn: func(context.Context, json.RawMessage) (Output, error) {
+			return Output{Text: "instructions", Attribution: &schema.Attribution{Skill: "research"}}, nil
+		},
+	}
+	rt, log := newTestRuntime(t, skillish)
+	if _, err := rt.Execute(context.Background(), callBlock("skill", `{}`)); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	result := resultFor(t, log)
+	if result.Attribution == nil || result.Attribution.Tool != "skill" {
+		t.Fatalf("tool name not preserved: %+v", result.Attribution)
+	}
+	if result.Attribution.Skill != "research" {
+		t.Fatalf("skill attribution not merged: %+v", result.Attribution)
+	}
+}
+
 func TestExecuteHappyPathLogsPair(t *testing.T) {
 	rt, log := newTestRuntime(t, echoTool("echo", nil))
 

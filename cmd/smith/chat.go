@@ -62,6 +62,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		if err := seedMemory(wd, sess); err != nil {
 			return err
 		}
+		if err := seedSkills(wd, sess); err != nil {
+			return err
+		}
 	}
 	debugLog, err := openDebugLog(sess.Dir)
 	if err != nil {
@@ -86,6 +89,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	}
 	if err := reg.Register(shell); err != nil {
 		return fmt.Errorf("register shell tool: %w", err)
+	}
+	if err := registerSkillTool(reg, wd); err != nil {
+		return err
 	}
 
 	pricing, err := sessionPricing(override)

@@ -536,6 +536,10 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 		_ = fresh.Log.Close()
 		return command.Output{}, err
 	}
+	if err := seedSkills(s.wd, fresh); err != nil {
+		_ = fresh.Log.Close()
+		return command.Output{}, err
+	}
 	eng, err := s.buildEngine(fresh, s.provName, s.model)
 	if err != nil {
 		_ = fresh.Log.Close() // built nothing; don't leak the fresh log's handle

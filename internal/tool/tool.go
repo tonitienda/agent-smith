@@ -93,6 +93,14 @@ type Output struct {
 	Parts    []schema.Part
 	IsError  bool
 	FileRead *schema.FileReadBody
+
+	// Attribution, when set, records what the result content should be attributed
+	// to beyond the tool that produced it — e.g. the skill a "skill" tool loaded
+	// (AS-034) or, later, an MCP server/tool (AS-036). The Runtime always stamps
+	// the result with the tool's own name; these fields are merged on top so
+	// /context and the living-skills analyzers can credit the underlying source.
+	// The tool name on the result is never overwritten.
+	Attribution *schema.Attribution
 }
 
 // parts returns the effective result content: Parts when set, otherwise a single
