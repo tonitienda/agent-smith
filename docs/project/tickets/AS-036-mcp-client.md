@@ -1,7 +1,7 @@
 ---
 id: AS-036
 title: MCP client (stdio + HTTP/SSE servers)
-status: ready-to-implement
+status: done
 github_issue: 36
 depends_on: [AS-013, AS-016, AS-031]
 area: capability
@@ -11,7 +11,11 @@ source: PRD.md §7.4
 
 # AS-036 · MCP client
 
-**Status: ready to implement**
+**Status: done** — `internal/mcp` connects stdio and HTTP/SSE servers, runs the
+MCP handshake, lists tools, and calls them; `cmd/smith` registers each tool under
+`mcp__<server>__<tool>` so calls flow through permissions, logging, and
+`/context` attribution like native tools. Resources/prompts, on-demand reconnect,
+and tools/list pagination are tracked as the AS-083 follow-on.
 
 ## Description
 

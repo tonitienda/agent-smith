@@ -69,7 +69,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-033](AS-033-custom-slash-commands.md) | Custom slash commands | commands | done | 022, 031 |
 | [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | done | 018, 031 |
 | [AS-035](AS-035-hooks.md) | Lifecycle hooks | capability | done | 013, 018, 031 |
-| [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | ready | 013, 016, 031 |
+| [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | done | 013, 016, 031 |
 | [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | ready | 006, 022 |
 | [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | ready | 006, 022 |
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
@@ -109,6 +109,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
 | [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
+| [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | ready | 036 |
 
 ## Suggested build order
 

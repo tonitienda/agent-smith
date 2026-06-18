@@ -128,6 +128,31 @@ func TestSkillSegmentAttributed(t *testing.T) {
 	}
 }
 
+// TestMCPSegmentAttributed confirms an MCP tool result is attributed to its
+// server/tool in the Origin column (AS-036), so /context credits MCP output per
+// server rather than only by the namespaced tool name.
+func TestMCPSegmentAttributed(t *testing.T) {
+	mcpRes := schema.Block{
+		ID:          "m1",
+		Kind:        schema.KindToolResult,
+		Role:        schema.RoleTool,
+		TS:          base.Add(-time.Minute),
+		Attribution: &schema.Attribution{Tool: "mcp__github__list_issues", MCPServer: "github", MCPTool: "list_issues"},
+		ToolResult: &schema.ToolResultBody{
+			ToolUseID: "u1",
+			Content:   []schema.Part{{Type: "text", Text: strings.Repeat("z", 200)}},
+		},
+	}
+
+	c := build(t, []schema.Block{mcpRes}, composition.SortSize)
+	if len(c.Segments) != 1 {
+		t.Fatalf("got %d segments, want 1", len(c.Segments))
+	}
+	if got := c.Segments[0].Origin; got != "mcp: github/list_issues" {
+		t.Errorf("Origin = %q, want \"mcp: github/list_issues\"", got)
+	}
+}
+
 // TestTopConsumersRanked confirms the largest segments lead the list, so a user
 // can read the top consumers off the top (PRD AC: top 3 in under 5s).
 func TestTopConsumersRanked(t *testing.T) {

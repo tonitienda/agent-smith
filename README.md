@@ -156,6 +156,21 @@ Summarize the commits since the last tag into a Keep-a-Changelog entry.
 
 (The `pre-compact` event is defined and fires through the same machinery; it is wired to `/compact` when that lands — AS-038.)
 
+**MCP servers** (AS-036) let the agent use tools hosted by external [Model Context Protocol](https://modelcontextprotocol.io) servers — a stdio subprocess or an HTTP/SSE endpoint. Declare them under `mcp.servers` in layered config, keyed by name; each server's tools are registered under a namespaced name `mcp__<server>__<tool>`, so they flow through the permission gate, the event log, and `/context` (where their cost is attributed per server) exactly like the built-in tools. A `command` (plus optional `args`/`env`) selects the stdio transport; a `url` (plus optional `headers`) selects HTTP/SSE; an optional `timeout` bounds each call. Isolation is the rule: a server that fails to connect is skipped with a warning, and one that crashes or hangs mid-session only makes *its* tools report unavailable — the session stays healthy. Example:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "github": { "command": "github-mcp-server", "args": ["stdio"], "env": { "GITHUB_TOKEN": "…" } },
+      "search":  { "url": "https://mcp.example.com/sse", "headers": { "Authorization": "Bearer …" }, "timeout": "20s" }
+    }
+  }
+}
+```
+
+(Resources, prompts, on-demand reconnect, and `tools/list` pagination are the AS-083 follow-on.)
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).

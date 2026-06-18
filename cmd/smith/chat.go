@@ -116,6 +116,12 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	}
 	hooks := loadHooks(cfg, os.Stderr)
 
+	// Connect configured MCP servers (AS-036) and register their tools; a server
+	// that fails to connect is skipped, never fatal. Clients are closed at session
+	// end to reap any subprocesses.
+	mcpClients := connectMCPServers(context.Background(), cfg, reg, os.Stderr)
+	defer closeMCPClients(mcpClients)
+
 	providers := wrapProvidersWithDebugLog(map[string]provider.Provider{
 		"anthropic": anthropic.New(""),
 		"openai":    openai.New(""),
