@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Mode is how a face should render a command's output. Commands declare it up
@@ -84,6 +85,13 @@ type Output struct {
 	// state). A non-interactive face ignores it and renders Text instead. Advisory
 	// and additive (D2).
 	Selector *Selector
+	// Prompt, when non-empty, asks the face to submit this text as a fresh user
+	// turn — the expansion of a custom slash command (AS-033), whose whole purpose
+	// is to feed a templated prompt to the model rather than print to the
+	// transcript. A face that drives turns runs it like typed input; one that
+	// cannot ignores it. Advisory and additive (D2); a handler setting Prompt
+	// normally leaves Text empty.
+	Prompt string
 }
 
 // Picker is an interactive single-select list a Handler offers to interactive
@@ -182,9 +190,12 @@ type Command struct {
 }
 
 // Registry holds commands by name. The zero value is not usable; build one with
-// NewRegistry. It is not safe for concurrent mutation, which is fine: commands
-// are registered once at startup, then only read.
+// NewRegistry. Access is guarded by mu because custom slash commands (AS-033) are
+// rescanned and Upserted at runtime (as the palette opens) while command handlers
+// — e.g. /help's renderHelp calling All — read the registry from their own
+// goroutine; the lock keeps those concurrent map accesses safe.
 type Registry struct {
+	mu     sync.RWMutex
 	byName map[string]Command
 }
 
@@ -198,30 +209,58 @@ func NewRegistry() *Registry {
 // "registering a command makes it appear everywhere" contract can't be violated
 // by a malformed entry.
 func (r *Registry) Register(c Command) error {
-	name := c.Name
+	if err := validate(c); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, dup := r.byName[c.Name]; dup {
+		return fmt.Errorf("command %q: already registered", c.Name)
+	}
+	r.byName[c.Name] = c
+	return nil
+}
+
+// Upsert adds c, replacing any command already registered under the same name.
+// Unlike Register it tolerates a clobber: it is the entry point for the custom
+// slash commands (AS-033), which are rediscovered from disk on palette open and
+// must be allowed to replace their prior version when their file changes. It
+// applies the same name/handler validation as Register.
+func (r *Registry) Upsert(c Command) error {
+	if err := validate(c); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byName[c.Name] = c
+	return nil
+}
+
+// validate enforces the rules shared by Register and Upsert: a non-empty name
+// with no leading slash or whitespace, a non-nil handler, and a Reason on any
+// interactive-only command.
+func validate(c Command) error {
 	switch {
-	case name == "":
+	case c.Name == "":
 		return fmt.Errorf("command: empty name")
-	case strings.HasPrefix(name, "/"):
-		return fmt.Errorf("command %q: name must not include the leading slash", name)
-	case strings.ContainsAny(name, " \t\n"):
-		return fmt.Errorf("command %q: name must not contain whitespace", name)
+	case strings.HasPrefix(c.Name, "/"):
+		return fmt.Errorf("command %q: name must not include the leading slash", c.Name)
+	case strings.ContainsAny(c.Name, " \t\n"):
+		return fmt.Errorf("command %q: name must not contain whitespace", c.Name)
 	case c.Run == nil:
-		return fmt.Errorf("command %q: nil handler", name)
+		return fmt.Errorf("command %q: nil handler", c.Name)
 	case c.Scriptability == InteractiveOnly && strings.TrimSpace(c.Reason) == "":
 		// UX.md §17.5: an interactive-only command must say why it can't be
 		// scripted, so the parity table never lists a silent interactive-only one.
-		return fmt.Errorf("command %q: interactive-only command must state a Reason", name)
+		return fmt.Errorf("command %q: interactive-only command must state a Reason", c.Name)
 	}
-	if _, dup := r.byName[name]; dup {
-		return fmt.Errorf("command %q: already registered", name)
-	}
-	r.byName[name] = c
 	return nil
 }
 
 // Lookup returns the command registered under name (without the slash).
 func (r *Registry) Lookup(name string) (Command, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	c, ok := r.byName[name]
 	return c, ok
 }
@@ -229,6 +268,15 @@ func (r *Registry) Lookup(name string) (Command, bool) {
 // All returns every command sorted by name, for `/help` and an unfiltered
 // palette.
 func (r *Registry) All() []Command {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.all()
+}
+
+// all returns every command sorted by name. The caller must hold at least a read
+// lock; it exists so lock-holding methods (All, Match) share one body without
+// re-acquiring the non-reentrant RWMutex.
+func (r *Registry) all() []Command {
 	out := make([]Command, 0, len(r.byName))
 	for _, c := range r.byName {
 		out = append(out, c)
@@ -242,8 +290,10 @@ func (r *Registry) All() []Command {
 // commands. See match.go for the scoring.
 func (r *Registry) Match(query string) []Command {
 	query = strings.TrimSpace(strings.ToLower(query))
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if query == "" {
-		return r.All()
+		return r.all()
 	}
 	type scored struct {
 		cmd   Command
@@ -271,7 +321,10 @@ func (r *Registry) Match(query string) []Command {
 // Suggest returns the registered name closest to an unknown one, for the
 // "did you mean …?" hint. ok is false when nothing is close enough.
 func (r *Registry) Suggest(name string) (string, bool) {
-	return nearest(strings.ToLower(name), r.names())
+	r.mu.RLock()
+	names := r.names()
+	r.mu.RUnlock()
+	return nearest(strings.ToLower(name), names)
 }
 
 // Nearest returns the candidate closest to name, for a "did you mean …?" hint
@@ -282,7 +335,8 @@ func Nearest(name string, candidates []string) (string, bool) {
 	return nearest(strings.ToLower(name), candidates)
 }
 
-// names returns the registered command names (unsorted).
+// names returns the registered command names (unsorted). The caller must hold at
+// least a read lock.
 func (r *Registry) names() []string {
 	out := make([]string, 0, len(r.byName))
 	for n := range r.byName {

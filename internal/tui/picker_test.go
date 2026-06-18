@@ -17,7 +17,7 @@ import (
 func modelWithRehydrate(t *testing.T, blocks []schema.Block) model {
 	t.Helper()
 	m := newModel(&fakeRunner{}, staticMeta(Meta{Model: "m"}),
-		make(chan loop.UIEvent), nil, nil, nil, false, func() []schema.Block { return blocks })
+		make(chan loop.UIEvent), nil, nil, nil, false, func() []schema.Block { return blocks }, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
 

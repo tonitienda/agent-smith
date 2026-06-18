@@ -50,6 +50,13 @@ func (m *model) syncPalette() {
 		m.palette = palette{}
 		return
 	}
+	// Re-scan for custom commands only as the palette transitions to open — not on
+	// every keystroke while already typing a command — so a file dropped into the
+	// commands dir is invocable without a restart (AS-033) without hammering the
+	// disk on each key (which matters on slow/remote home dirs).
+	if m.rescan != nil && !m.palette.open {
+		m.rescan()
+	}
 	matches := m.commands.Match(v[1:])
 	sel := m.palette.sel
 	if sel >= len(matches) {
@@ -216,6 +223,12 @@ func runCommand(c command.Command, args []string) tea.Cmd {
 func (m model) finishCommand(msg commandDoneMsg) model {
 	if msg.err != nil {
 		m.appendSegment(segment{kind: segError, text: "/" + msg.cmd.Name + ": " + msg.err.Error(), done: true})
+		return m
+	}
+	// A custom command (AS-033) carries its expansion in Prompt, not Text: the
+	// caller submits it as a user turn, which renders the prompt as the user
+	// segment, so there is nothing to render here.
+	if msg.out.Prompt != "" {
 		return m
 	}
 	// An interactive picker takes over the screen until the user chooses an item

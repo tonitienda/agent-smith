@@ -222,3 +222,52 @@ func names(cmds []Command) []string {
 	}
 	return out
 }
+
+func TestUpsertReplacesAndValidates(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r, Command{Name: "ship", Summary: "first", Run: noop})
+
+	// Register refuses to clobber; Upsert replaces.
+	if err := r.Register(Command{Name: "ship", Summary: "second", Run: noop}); err == nil {
+		t.Fatal("Register over an existing name succeeded, want duplicate error")
+	}
+	if err := r.Upsert(Command{Name: "ship", Summary: "second", Run: noop}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, ok := r.Lookup("ship")
+	if !ok || got.Summary != "second" {
+		t.Fatalf("after Upsert: got %+v ok=%v, want Summary=second", got, ok)
+	}
+
+	// Upsert enforces the same validation as Register.
+	if err := r.Upsert(Command{Name: "nope"}); err == nil {
+		t.Error("Upsert with nil handler succeeded, want error")
+	}
+	if err := r.Upsert(Command{Name: "/slash", Run: noop}); err == nil {
+		t.Error("Upsert with leading slash succeeded, want error")
+	}
+}
+
+// TestRegistryConcurrentAccess exercises the mutex: a writer Upserting while
+// readers call All/Match/Lookup must not race (run with -race). It mirrors the
+// real pattern — custom commands rescanned on palette open (Upsert) while a
+// /help-style handler reads the registry from another goroutine (AS-033).
+func TestRegistryConcurrentAccess(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r, Command{Name: "help", Run: noop})
+
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 1000; i++ {
+			_ = r.Upsert(Command{Name: "dyn", Summary: "v", Run: noop})
+		}
+		close(done)
+	}()
+	for i := 0; i < 1000; i++ {
+		_ = r.All()
+		_ = r.Match("h")
+		_, _ = r.Lookup("dyn")
+		_, _ = r.Suggest("hepl")
+	}
+	<-done
+}

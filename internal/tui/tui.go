@@ -94,6 +94,7 @@ type App struct {
 	meter     MeterFunc
 	splash    bool
 	rehydrate RehydrateFunc
+	refresh   func()
 
 	// mu guards prog, which is set when Run starts the program. The permission
 	// Asker (Ask) runs on the turn goroutine and reads prog to deliver a prompt
@@ -122,6 +123,14 @@ type RehydrateFunc func() []schema.Block
 // transcript on a session swap and at launch (AS-064).
 func WithRehydrate(f RehydrateFunc) Option {
 	return func(a *App) { a.rehydrate = f }
+}
+
+// WithCommandRefresh wires a callback the face runs as the command palette opens,
+// so the registry can be re-scanned for newly dropped custom commands without a
+// restart (AS-033). The callback mutates the shared registry in place; a nil
+// refresh (the default) just lists whatever was registered at startup.
+func WithCommandRefresh(f func()) Option {
+	return func(a *App) { a.refresh = f }
 }
 
 // New builds an App for the given session-identity source and slash-command
@@ -159,7 +168,7 @@ func (a *App) Observer() loop.Observer {
 // behave like a full-screen app. Mouse reporting stays off in V1 so terminal
 // text selection/copy keeps working (docs/project/TUI-UX.md D-TUI-12).
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate, a.refresh)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	a.mu.Lock()
 	a.prog = p

@@ -59,6 +59,10 @@ type model struct {
 	newRend  rendererFactory
 	renderer markdownRenderer
 	commands *command.Registry
+	// rescan, when set, re-scans the command registry as the palette opens, so a
+	// custom command dropped into the commands dir is invocable without a restart
+	// (AS-033). nil leaves the registry as it was built at startup.
+	rescan func()
 	// rehydrate yields the active session's projected live blocks; the face
 	// replays them into the transcript on a session swap (/clear, /resume) and at
 	// launch, so a resumed session shows its prior turns (AS-064). nil leaves the
@@ -143,7 +147,7 @@ func defaultPanelHotkeys() map[string]string {
 // rendering (the transcript then shows raw text); commands may be nil to run
 // without any slash commands; meter may be nil to hide the context meter; splash
 // shows the startup header.
-func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc) model {
+func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc, rescan func()) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Alt+Enter for newline)…"
 	ta.Prompt = "┃ "
@@ -166,6 +170,7 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 		commands:     commands,
 		meter:        meter,
 		rehydrate:    rehydrate,
+		rescan:       rescan,
 		panelHotkeys: defaultPanelHotkeys(),
 		splash:       splash,
 		textarea:     ta,
@@ -235,7 +240,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finishTurn(msg), nil
 
 	case commandDoneMsg:
-		return m.finishCommand(msg), nil
+		m = m.finishCommand(msg)
+		// A custom command (AS-033) expands to a prompt; submit it as a user turn so
+		// the model runs it, exactly like typed input. finishCommand rendered nothing
+		// for it, so submitText supplies the user segment.
+		if msg.err == nil && msg.out.Prompt != "" {
+			return m.submitText(msg.out.Prompt)
+		}
+		return m, nil
 
 	case spinner.TickMsg:
 		if !m.busy {
@@ -373,6 +385,17 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 	m.histIdx = len(m.history)
 	m.resetInput()
 
+	return m.submitText(text)
+}
+
+// submitText runs text as a user turn: it echoes text as the user segment and
+// drives the runner. It is shared by typed input (submit) and a custom command's
+// expanded prompt (AS-033), so both reach the model the same way. A turn already
+// in flight is a no-op.
+func (m model) submitText(text string) (tea.Model, tea.Cmd) {
+	if m.busy {
+		return m, nil
+	}
 	m.segs = append(m.segs, segment{kind: segUser, text: text, done: true})
 	m.curAssistant, m.curReasoning = -1, -1
 

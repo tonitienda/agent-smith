@@ -101,7 +101,7 @@ func TestMeterReceivesActiveModel(t *testing.T) {
 		make(chan loop.UIEvent), nil, nil, func(model string) Meter {
 			got = model
 			return Meter{}
-		}, false, nil)
+		}, false, nil, nil)
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	_ = m
 	if got != "claude-opus-4-8" {
@@ -115,7 +115,7 @@ func TestMeterReceivesActiveModel(t *testing.T) {
 func TestMeterShownInStatusLineAndUpdates(t *testing.T) {
 	meter := Meter{Tokens: 1000, Window: 200000, CostUSD: 0.5, CostKnown: true}
 	m := newModel(&fakeRunner{}, staticMeta(Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "s"}),
-		make(chan loop.UIEvent), nil, nil, func(string) Meter { return meter }, false, nil)
+		make(chan loop.UIEvent), nil, nil, func(string) Meter { return meter }, false, nil, nil)
 	m = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
 
 	if !strings.Contains(m.View(), "$0.5000") {

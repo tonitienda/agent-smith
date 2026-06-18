@@ -33,7 +33,7 @@ func staticMeta(m Meta) MetaFunc { return func() Meta { return m } }
 func newTestModel(t *testing.T, runner Runner) model {
 	t.Helper()
 	m := newModel(runner, staticMeta(Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123"}),
-		make(chan loop.UIEvent), nil, nil, nil, false, nil)
+		make(chan loop.UIEvent), nil, nil, nil, false, nil, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
 
