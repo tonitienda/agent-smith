@@ -108,6 +108,14 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		return fmt.Errorf("load pricing table: %w", err)
 	}
 
+	// Load the lifecycle-hook set (AS-035) from the layered config; a load error
+	// or a malformed spec degrades to no hooks rather than aborting the session.
+	cfg, err := loadLayeredConfig(override)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	hooks := loadHooks(cfg, os.Stderr)
+
 	providers := wrapProvidersWithDebugLog(map[string]provider.Provider{
 		"anthropic": anthropic.New(""),
 		"openai":    openai.New(""),
@@ -125,7 +133,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		}
 	}
 
-	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills)
+	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.
@@ -149,6 +157,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	if err := ctl.start(app.Observer()); err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
+	// Fire the session-stop hook (AS-035) as the app shuts down, with the final
+	// log in place.
+	defer ctl.stop()
 
 	return app.Run(ctl)
 }

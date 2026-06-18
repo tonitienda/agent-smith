@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -15,6 +16,10 @@ import (
 // producer is stamped on every tool_result block's provenance so its origin is
 // self-describing on the log.
 const producer = "tool-runtime"
+
+// hookProducer is stamped on a tool_call derived from a pre-tool-use hook's
+// argument rewrite (AS-035), so the modification's origin is auditable on the log.
+const hookProducer = "hook"
 
 // DefaultTimeout is the per-tool execution budget when neither the tool's Def
 // nor the Runtime overrides it.
@@ -42,6 +47,8 @@ type Runtime struct {
 	registry    *Registry
 	log         *eventlog.Log
 	permission  PermissionFunc
+	preHook     PreToolHook
+	postHook    PostToolHook
 	timeout     time.Duration
 	maxBytes    int
 	maxParallel int
@@ -56,6 +63,27 @@ func WithPermission(fn PermissionFunc) Option {
 	return func(r *Runtime) {
 		if fn != nil {
 			r.permission = fn
+		}
+	}
+}
+
+// WithPreToolHook sets the lifecycle hook invoked after the permission gate and
+// before a tool runs (AS-035). It may block the call or rewrite its arguments. A
+// nil hook is ignored, leaving the runtime hook-free.
+func WithPreToolHook(fn PreToolHook) Option {
+	return func(r *Runtime) {
+		if fn != nil {
+			r.preHook = fn
+		}
+	}
+}
+
+// WithPostToolHook sets the lifecycle hook invoked after a tool's result is
+// recorded (AS-035). It is observational only. A nil hook is ignored.
+func WithPostToolHook(fn PostToolHook) Option {
+	return func(r *Runtime) {
+		if fn != nil {
+			r.postHook = fn
 		}
 	}
 }
@@ -175,7 +203,48 @@ func (r *Runtime) prepare(ctx context.Context, call schema.Block) (plan, error) 
 	if d := r.permission(ctx, gate); !d.Allow {
 		return r.denyPlan(logged, "permission denied for tool %q: %s", tc.Name, d.Reason), nil
 	}
+
+	// Pre-tool-use hook (AS-035): runs after the permission gate. It may block the
+	// call or rewrite its arguments. Hooks are automation, not the security
+	// boundary — permission above is the gate.
+	if r.preHook != nil {
+		res := r.preHook(ctx, gate)
+		if res.Block {
+			return r.denyPlan(logged, "tool %q blocked by hook: %s", tc.Name, res.Reason), nil
+		}
+		if res.Modified != nil {
+			modified, err := r.applyModifiedArgs(logged, t, res.Modified)
+			if err != nil {
+				return r.denyPlan(logged, "hook rewrote tool %q with invalid arguments: %v", tc.Name, err), nil
+			}
+			logged = modified
+		}
+	}
 	return plan{call: logged, tool: t}, nil
+}
+
+// applyModifiedArgs records a pre-tool hook's rewrite of a call's arguments as a
+// derived tool_call on the log (provenance: the hook), so the modification is
+// visible and auditable (PRD D3) while the original is excluded from the
+// projection. The rewritten arguments are validated against the tool's schema
+// first, so a hook cannot smuggle a malformed call past validation. It returns
+// the derived, on-log tool_call the runtime then executes and links the result
+// to.
+func (r *Runtime) applyModifiedArgs(call schema.Block, t Tool, args json.RawMessage) (schema.Block, error) {
+	if err := validateArgs(t.Def().InputSchema, args); err != nil {
+		return schema.Block{}, err
+	}
+	derived := call
+	derived.ID = ""
+	tc := *call.ToolCall
+	tc.Arguments = append(json.RawMessage(nil), args...)
+	derived.ToolCall = &tc
+	derived = eventlog.Derive(derived, hookProducer, call.ID)
+	stored, err := r.log.Append(derived)
+	if err != nil {
+		return schema.Block{}, fmt.Errorf("tool: log hook-modified tool_call: %w", err)
+	}
+	return stored, nil
 }
 
 // denyPlan builds a terminal plan whose deny Output records a model-readable
@@ -192,17 +261,39 @@ func (r *Runtime) denyPlan(call schema.Block, format string, args ...any) plan {
 // timeout or a tool failure (record a model-readable error so the model can
 // react). ctx is the surrounding turn's context, not the per-tool budget.
 func (r *Runtime) finishCall(ctx context.Context, p plan, out Output, runErr error) (schema.Block, error) {
-	if runErr == nil {
-		return r.record(p.call, out)
-	}
-	if ctx.Err() != nil {
+	var (
+		res schema.Block
+		err error
+	)
+	switch {
+	case runErr == nil:
+		res, err = r.record(p.call, out)
+	case ctx.Err() != nil:
 		return schema.Block{}, ctx.Err()
+	case errors.Is(runErr, context.DeadlineExceeded):
+		res, err = r.record(p.call, errorOutput("tool %q timed out after %s", p.call.ToolCall.Name, r.budget(p.tool)))
+	default:
+		res, err = r.record(p.call, errorOutput("tool %q failed: %v", p.call.ToolCall.Name, runErr))
 	}
-	name := p.call.ToolCall.Name
-	if errors.Is(runErr, context.DeadlineExceeded) {
-		return r.record(p.call, errorOutput("tool %q timed out after %s", name, r.budget(p.tool)))
+	if err != nil {
+		return schema.Block{}, err
 	}
-	return r.record(p.call, errorOutput("tool %q failed: %v", name, runErr))
+	r.firePostHook(ctx, p.call, res.ToolResult)
+	return res, nil
+}
+
+// firePostHook invokes the post-tool-use hook (AS-035) with the executed call
+// and its recorded result. It is observational — the result is already on the
+// log — so a nil hook or a nil result is simply a no-op.
+func (r *Runtime) firePostHook(ctx context.Context, call schema.Block, result *schema.ToolResultBody) {
+	if r.postHook == nil || call.ToolCall == nil || result == nil {
+		return
+	}
+	r.postHook(ctx, Call{
+		ToolUseID: call.ToolCall.ToolUseID,
+		Name:      call.ToolCall.Name,
+		Arguments: call.ToolCall.Arguments,
+	}, result)
 }
 
 // ExecuteBatch runs one assistant turn's client tool calls, executing the

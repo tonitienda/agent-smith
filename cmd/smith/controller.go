@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -16,6 +17,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/goal"
+	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/projection"
@@ -64,6 +66,11 @@ type chatSession struct {
 	// mid-run (/clear) records exactly the catalog the tool offers — they cannot
 	// diverge from an in-flight filesystem change.
 	skills []skill.Skill
+	// hooks is the lifecycle-hook set (AS-035) loaded once from config at startup.
+	// buildEngine wires its pre/post-tool-use hooks into every runtime, and Run /
+	// start fire its prompt-submit and session lifecycle events. A nil-safe *Set
+	// fires nothing, so a hook-free session behaves exactly as before.
+	hooks *hook.Set
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -99,7 +106,7 @@ type chatSession struct {
 // the default Anthropic + OpenAI providers and the model for the first turn. The
 // engine is not built yet: the caller sets the observer (from the TUI) and calls
 // start so turn progress is wired before the first turn runs.
-func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string, skills []skill.Skill) *chatSession {
+func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string, skills []skill.Skill, hooks *hook.Set) *chatSession {
 	return &chatSession{
 		store:     store,
 		tools:     tools,
@@ -111,6 +118,7 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 		project:   filepath.Base(wd),
 		wd:        wd,
 		skills:    skills,
+		hooks:     hooks,
 	}
 }
 
@@ -129,7 +137,25 @@ func (s *chatSession) start(observer loop.Observer) error {
 		return err
 	}
 	s.engine = eng
+	// Fire the session-start lifecycle hook (AS-035) once the session is wired.
+	fireLifecycle(context.Background(), s.hooks, s.sess.Log, hook.Payload{
+		Event:   hook.SessionStart,
+		Session: s.sess.ID,
+	})
 	return nil
+}
+
+// stop fires the session-stop lifecycle hook (AS-035). The chat face calls it as
+// the app shuts down, so a hook can run teardown (flush, notify) with the final
+// log in place. It is best-effort: a stop hook cannot block an exit.
+func (s *chatSession) stop() {
+	s.mu.Lock()
+	log, id := s.sess.Log, s.sess.ID
+	s.mu.Unlock()
+	fireLifecycle(context.Background(), s.hooks, log, hook.Payload{
+		Event:   hook.SessionStop,
+		Session: id,
+	})
 }
 
 // buildEngine constructs an engine over the given session log, provider, and
@@ -146,6 +172,9 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 	if s.policy != nil {
 		rtOpts = append(rtOpts, tool.WithPermission(s.policy.Func()))
 	}
+	// Wire the pre/post-tool-use lifecycle hooks (AS-035) into this engine's
+	// runtime; they run after the permission gate, never replacing it.
+	rtOpts = append(rtOpts, hookToolOptions(s.hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(s.tools, sess.Log, rtOpts...)
 	return loop.New(prov, sess.Log, rt, s.tools, model, loop.WithObserver(s.observer))
 }
@@ -156,8 +185,40 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 func (s *chatSession) Run(ctx context.Context, userText string) (loop.Result, error) {
 	s.mu.Lock()
 	eng := s.engine
+	log := s.sess.Log
+	id := s.sess.ID
 	s.mu.Unlock()
+
+	// Fire the user-prompt-submit hook (AS-035) before the prompt is recorded: it
+	// may block the turn (the prompt is rejected, the model never sees it) or
+	// rewrite the prompt text the model receives.
+	if s.hooks.Has(hook.UserPromptSubmit) {
+		out := fireLifecycle(ctx, s.hooks, log, hook.Payload{
+			Event:   hook.UserPromptSubmit,
+			Session: id,
+			Prompt:  userText,
+		})
+		if out.Blocked {
+			return loop.Result{StopReason: "hook_blocked"}, fmt.Errorf("prompt blocked by hook: %s", out.Reason)
+		}
+		if len(out.Input) > 0 {
+			if rewritten := promptRewrite(out.Input); rewritten != "" {
+				userText = rewritten
+			}
+		}
+	}
 	return eng.Run(ctx, userText)
+}
+
+// promptRewrite extracts a rewritten prompt string from a user-prompt-submit
+// hook's modification. A hook returns the new prompt as a JSON string in its
+// `input` field; a non-string (or empty) value leaves the prompt unchanged.
+func promptRewrite(raw []byte) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return ""
+	}
+	return s
 }
 
 // Meta reports the current status-line identity (tui.MetaFunc).
