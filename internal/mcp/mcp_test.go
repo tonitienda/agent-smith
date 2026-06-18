@@ -187,6 +187,45 @@ func TestStdioCallTimeout(t *testing.T) {
 	}
 }
 
+func TestCallerCancelKeepsHealthy(t *testing.T) {
+	// A server that connects but never answers a tools/call, so the only way out is
+	// the caller's cancellation. Caller cancellation must NOT circuit-break the
+	// server (it says nothing about server health), unlike our own per-call timeout.
+	reqR, reqW := io.Pipe()
+	respR, respW := io.Pipe()
+	go func() {
+		dec := json.NewDecoder(reqR)
+		enc := json.NewEncoder(respW)
+		for {
+			var req rpcRequest
+			if err := dec.Decode(&req); err != nil {
+				return
+			}
+			switch req.Method {
+			case "initialize":
+				_ = enc.Encode(rpcResponse{JSONRPC: jsonRPCVersion, ID: req.ID, Result: json.RawMessage(`{}`)})
+			case "tools/list":
+				_ = enc.Encode(rpcResponse{JSONRPC: jsonRPCVersion, ID: req.ID, Result: json.RawMessage(`{"tools":[]}`)})
+			}
+			// tools/call: never answered.
+		}
+	}()
+	c := &Client{name: "slow", transport: newStdioTransport(reqW, respR, nil), tmo: 10 * time.Second}
+	if err := c.handshake(context.Background()); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	c.healthy = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	if _, err := c.Call(ctx, "echo", nil); err == nil {
+		t.Fatal("cancelled call should error")
+	}
+	if !c.Healthy() {
+		t.Fatal("caller cancellation must not circuit-break the server")
+	}
+}
+
 func TestHTTPTransport(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest

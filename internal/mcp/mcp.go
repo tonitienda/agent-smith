@@ -200,11 +200,11 @@ func (c *Client) listTools(ctx context.Context) ([]ToolInfo, error) {
 // returned as an error for the adapter to render as unavailable; a server
 // protocol error or a tool's own domain error comes back without breaking the
 // circuit (the latter as a CallResult with IsError set).
-func (c *Client) Call(ctx context.Context, toolName string, args json.RawMessage) (CallResult, error) {
+func (c *Client) Call(parent context.Context, toolName string, args json.RawMessage) (CallResult, error) {
 	if !c.Healthy() {
 		return CallResult{}, ErrUnavailable
 	}
-	ctx, cancel := context.WithTimeout(ctx, c.tmo)
+	ctx, cancel := context.WithTimeout(parent, c.tmo)
 	defer cancel()
 
 	params := map[string]any{"name": toolName}
@@ -215,13 +215,27 @@ func (c *Client) Call(ctx context.Context, toolName string, args json.RawMessage
 	}
 	raw, err := c.transport.call(ctx, "tools/call", params)
 	if err != nil {
-		var rerr *rpcError
-		if !errors.As(err, &rerr) {
-			c.markUnhealthy() // a transport failure trips the circuit break
+		if isTransportFault(parent, err) {
+			c.markUnhealthy() // a real transport fault trips the circuit break
 		}
 		return CallResult{}, err
 	}
 	return parseCallResult(raw)
+}
+
+// isTransportFault reports whether a Call error reflects an unhealthy server and
+// should trip the circuit break. A protocol-level rpcError (the server answered,
+// just with an error) does not, and neither does a caller-initiated cancellation
+// or deadline (parent.Err() != nil) — that says nothing about server health and
+// must not permanently disable the server for the rest of the session. Our own
+// per-call timeout (a hung server: parent still live, ctx deadline exceeded) is
+// left as a fault, which is exactly the hang we want to break the circuit on.
+func isTransportFault(parent context.Context, err error) bool {
+	var rerr *rpcError
+	if errors.As(err, &rerr) {
+		return false
+	}
+	return parent.Err() == nil
 }
 
 func (c *Client) markUnhealthy() {

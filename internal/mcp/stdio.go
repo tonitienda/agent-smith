@@ -19,6 +19,7 @@ import (
 // going unavailable rather than wedging the session (AS-036 isolation).
 type stdioTransport struct {
 	mu      sync.Mutex
+	writeMu sync.Mutex // serializes Encode, held without mu so a blocked write can't wedge the reader
 	enc     *json.Encoder
 	w       io.Closer
 	nextID  int
@@ -126,12 +127,17 @@ func (t *stdioTransport) call(ctx context.Context, method string, params any) (j
 	id := t.nextID
 	ch := make(chan rpcResponse, 1)
 	t.pending[id] = ch
-	if err := t.enc.Encode(rpcRequest{JSONRPC: jsonRPCVersion, ID: id, Method: method, Params: raw}); err != nil {
+	t.mu.Unlock()
+
+	// Encode outside t.mu (under writeMu): a write to a full pipe blocks until the
+	// server drains it, and holding t.mu across that would also block readLoop from
+	// delivering the very responses that let the server drain — a deadlock.
+	if err := t.write(rpcRequest{JSONRPC: jsonRPCVersion, ID: id, Method: method, Params: raw}); err != nil {
+		t.mu.Lock()
 		delete(t.pending, id)
 		t.mu.Unlock()
 		return nil, fmt.Errorf("mcp: write request: %w", err)
 	}
-	t.mu.Unlock()
 
 	select {
 	case <-ctx.Done():
@@ -156,13 +162,22 @@ func (t *stdioTransport) notify(_ context.Context, method string, params any) er
 		return err
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	select {
 	case <-t.closed:
+		t.mu.Unlock()
 		return errConnClosed
 	default:
 	}
-	return t.enc.Encode(rpcRequest{JSONRPC: jsonRPCVersion, Method: method, Params: raw})
+	t.mu.Unlock()
+	return t.write(rpcRequest{JSONRPC: jsonRPCVersion, Method: method, Params: raw})
+}
+
+// write serializes encoder access under writeMu, held independently of t.mu so a
+// write blocked on a full pipe cannot stall the reader or other gating.
+func (t *stdioTransport) write(req rpcRequest) error {
+	t.writeMu.Lock()
+	defer t.writeMu.Unlock()
+	return t.enc.Encode(req)
 }
 
 func (t *stdioTransport) close() error {
