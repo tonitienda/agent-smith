@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/tonitienda/agent-smith/internal/budget"
 )
 
 // Meter is the always-visible context-and-cost snapshot the status line shows
@@ -29,6 +30,14 @@ type Meter struct {
 	// the accounting engine so the meter agrees with /cost under a non-USD pricing
 	// override. Empty defaults to "$".
 	Currency string
+	// BudgetUSD is the session's active spend ceiling (AS-041); 0 means no budget
+	// is set, in which case the meter shows cost without a ceiling. When set, the
+	// meter appends "/<ceiling>" and colors the cost by how near the ceiling it
+	// is (green/yellow/red), so an approaching budget is visible at a glance.
+	BudgetUSD float64
+	// BudgetWarnFraction is the fraction of BudgetUSD at which the cost turns
+	// yellow; outside (0,1) it falls back to the budget default.
+	BudgetWarnFraction float64
 }
 
 // MeterFunc yields the current Meter for the active model. The model passes the
@@ -75,7 +84,29 @@ func (mt Meter) render() string {
 	if mt.CostKnown {
 		cost = prefix + strconv.FormatFloat(mt.CostUSD, 'f', 4, 64)
 	}
+	// A set budget appends the ceiling and colors the cost by enforcement state
+	// (AS-041), so nearing or exceeding the budget is visible without opening
+	// /cost — the same green/yellow/red language as the context gauge.
+	if g := (budget.Guard{LimitUSD: mt.BudgetUSD, WarnFraction: mt.BudgetWarnFraction}); g.Enabled() {
+		cost += "/" + prefix + strconv.FormatFloat(mt.BudgetUSD, 'f', 2, 64)
+		if mt.CostKnown {
+			cost = budgetStyle(g.Check(mt.CostUSD)).Render(cost)
+		}
+	}
 	return gauge + " · " + cost
+}
+
+// budgetStyle colors the cost segment by budget enforcement state: green under
+// the warning threshold, yellow once warning, red at or past the ceiling.
+func budgetStyle(state budget.State) lipgloss.Style {
+	switch state {
+	case budget.Halt:
+		return meterRedStyle
+	case budget.Warn:
+		return meterYellowStyle
+	default:
+		return meterGreenStyle
+	}
 }
 
 // meterBar draws a fixed-width fill bar for pct (0–100, clamped). The fill is

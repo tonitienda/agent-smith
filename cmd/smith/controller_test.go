@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
@@ -494,4 +495,49 @@ func blocksEqual(a, b []schema.Block) bool {
 		}
 	}
 	return true
+}
+
+// TestCmdBudget exercises the /budget command (AS-041): show when unset, set a
+// ceiling, reflect it on the log, and clear it with "off".
+func TestCmdBudget(t *testing.T) {
+	ctl := newTestController(t)
+
+	// No budget yet.
+	out, err := ctl.cmdBudget(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("cmdBudget show: %v", err)
+	}
+	if !strings.Contains(out.Text, "No budget set") {
+		t.Errorf("unset /budget = %q, want a 'No budget set' notice", out.Text)
+	}
+
+	// Set a ceiling; it is recorded on the log.
+	if _, err := ctl.cmdBudget(context.Background(), []string{"$0.50"}); err != nil {
+		t.Fatalf("cmdBudget set: %v", err)
+	}
+	if limit, ok := budget.Current(ctl.sess.Log.Events()); !ok || limit != 0.50 {
+		t.Errorf("after set, log budget = (%v, %v), want (0.50, true)", limit, ok)
+	}
+
+	// Show now reports the ceiling and warning threshold.
+	out, err = ctl.cmdBudget(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("cmdBudget show set: %v", err)
+	}
+	if !strings.Contains(out.Text, "$0.50") || !strings.Contains(out.Text, "warn at") {
+		t.Errorf("set /budget show = %q, want ceiling + warn threshold", out.Text)
+	}
+
+	// Clear it.
+	if _, err := ctl.cmdBudget(context.Background(), []string{"off"}); err != nil {
+		t.Fatalf("cmdBudget off: %v", err)
+	}
+	if limit, ok := budget.Current(ctl.sess.Log.Events()); !ok || limit != 0 {
+		t.Errorf("after off, log budget = (%v, %v), want (0, true)", limit, ok)
+	}
+
+	// A non-numeric amount is rejected.
+	if _, err := ctl.cmdBudget(context.Background(), []string{"lots"}); err == nil {
+		t.Error("cmdBudget accepted a non-numeric amount")
+	}
 }

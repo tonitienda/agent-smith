@@ -39,6 +39,16 @@ const (
 	// the provider Stop* constants). It fires once per provider turn, before any
 	// tool dispatch that the stop reason triggers.
 	UITurnComplete UIEventKind = "turn_complete"
+
+	// UIBudgetWarning reports that session spend crossed the budget warning
+	// threshold (AS-041). It fires once, when the threshold is first crossed;
+	// BudgetSpentUSD and BudgetLimitUSD carry the figures to show.
+	UIBudgetWarning UIEventKind = "budget_warning"
+
+	// UIBudgetHalt reports that the budget ceiling was reached: the loop is
+	// stopping before the next priced turn (the run ends with StopBudget).
+	// BudgetSpentUSD and BudgetLimitUSD carry the figures to show.
+	UIBudgetHalt UIEventKind = "budget_halt"
 )
 
 // UIEvent is one face-agnostic event emitted to the Observer. Kind selects which
@@ -61,6 +71,12 @@ type UIEvent struct {
 
 	// StopReason is set on UITurnComplete (a provider Stop* constant).
 	StopReason string
+
+	// BudgetSpentUSD and BudgetLimitUSD are set on UIBudgetWarning and
+	// UIBudgetHalt: the session spend so far and the ceiling it is measured
+	// against, so a face can render the banner without re-querying accounting.
+	BudgetSpentUSD float64
+	BudgetLimitUSD float64
 }
 
 // ToolEvent describes a client tool call on UIToolStarted / UIToolFinished. On

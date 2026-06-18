@@ -1,6 +1,7 @@
 package eventlog
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/tonitienda/agent-smith/schema"
@@ -182,6 +183,55 @@ func NewCheckpoint(producer, label string) schema.Block {
 		Text:       &schema.TextBody{Text: label, Subtype: schema.TextSubtypeNormal},
 		Provenance: &schema.Provenance{Producer: producer},
 	}
+}
+
+// KindBudget is the event kind for a budget-ceiling event: a control event
+// recording that the user set (or cleared) the session's spend ceiling in
+// dollars (AS-041 /budget), so budget enforcement is derivable from the log and
+// survives save/resume — the latest budget event is the active ceiling. It is a
+// non-content kind carrying its ceiling on Block.Text (a decimal dollar string);
+// a ceiling of "0" clears the budget.
+//
+// Like the other control kinds it lives here rather than in the frozen
+// content-block schema (AS-003) because it is a harness/log control event, not a
+// content block; the schema tolerates non-content kinds (Block.Validate imposes
+// no body constraint on them) and the projection engine (AS-006) never renders
+// it into model-facing context.
+const KindBudget schema.Kind = "budget"
+
+// NewBudget builds a budget-ceiling event recording limitUSD, attributed to
+// producer (e.g. "/budget"). The ceiling is stored as a plain decimal string on
+// Block.Text so it round-trips exactly through the JSONL log. The returned block
+// has a fresh ID; its Seq and append timestamp are assigned on append.
+func NewBudget(producer string, limitUSD float64) schema.Block {
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindBudget,
+		Role:       schema.RoleHarness,
+		Text:       &schema.TextBody{Text: strconv.FormatFloat(limitUSD, 'f', -1, 64), Subtype: schema.TextSubtypeNormal},
+		Provenance: &schema.Provenance{Producer: producer},
+	}
+}
+
+// BudgetLimit returns the most recently set session ceiling on the log and
+// whether any budget event exists, scanning events in append order so the last
+// /budget wins. A budget event whose Text does not parse as a number is skipped
+// defensively rather than aborting accounting.
+func BudgetLimit(events []schema.Block) (limitUSD float64, ok bool) {
+	// Scan in reverse so the most recently set ceiling is found first — O(1) in the
+	// common case that a budget was set recently, mirroring lastModel.
+	for i := len(events) - 1; i >= 0; i-- {
+		b := events[i]
+		if b.Kind != KindBudget || b.Text == nil {
+			continue
+		}
+		v, err := strconv.ParseFloat(b.Text.Text, 64)
+		if err != nil {
+			continue
+		}
+		return v, true
+	}
+	return 0, false
 }
 
 // Derive stamps a caller-built replacement block as a derived-block event:
