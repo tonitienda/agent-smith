@@ -57,9 +57,12 @@ func newProcessTransport(cfg ServerConfig) (*stdioTransport, error) {
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		_ = stdin.Close()
 		return nil, fmt.Errorf("mcp: stdout pipe: %w", err)
 	}
 	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
 		return nil, fmt.Errorf("mcp: start %q: %w", cfg.Command, err)
 	}
 	return newStdioTransport(stdin, stdout, func() error {
@@ -129,10 +132,10 @@ func (t *stdioTransport) call(ctx context.Context, method string, params any) (j
 	t.pending[id] = ch
 	t.mu.Unlock()
 
-	// Encode outside t.mu (under writeMu): a write to a full pipe blocks until the
-	// server drains it, and holding t.mu across that would also block readLoop from
-	// delivering the very responses that let the server drain — a deadlock.
-	if err := t.write(rpcRequest{JSONRPC: jsonRPCVersion, ID: id, Method: method, Params: raw}); err != nil {
+	// Encode outside t.mu (under writeMu) and bounded by ctx: a write to a full pipe
+	// blocks until the server drains it, holding t.mu across that would deadlock the
+	// reader, and a write the server never drains must still respect the deadline.
+	if err := t.write(ctx, rpcRequest{JSONRPC: jsonRPCVersion, ID: id, Method: method, Params: raw}); err != nil {
 		t.mu.Lock()
 		delete(t.pending, id)
 		t.mu.Unlock()
@@ -156,7 +159,7 @@ func (t *stdioTransport) call(ctx context.Context, method string, params any) (j
 	}
 }
 
-func (t *stdioTransport) notify(_ context.Context, method string, params any) error {
+func (t *stdioTransport) notify(ctx context.Context, method string, params any) error {
 	raw, err := marshalParams(params)
 	if err != nil {
 		return err
@@ -169,15 +172,31 @@ func (t *stdioTransport) notify(_ context.Context, method string, params any) er
 	default:
 	}
 	t.mu.Unlock()
-	return t.write(rpcRequest{JSONRPC: jsonRPCVersion, Method: method, Params: raw})
+	return t.write(ctx, rpcRequest{JSONRPC: jsonRPCVersion, Method: method, Params: raw})
 }
 
-// write serializes encoder access under writeMu, held independently of t.mu so a
-// write blocked on a full pipe cannot stall the reader or other gating.
-func (t *stdioTransport) write(req rpcRequest) error {
-	t.writeMu.Lock()
-	defer t.writeMu.Unlock()
-	return t.enc.Encode(req)
+// write serializes encoder access under writeMu (held independently of t.mu so a
+// blocked write can't stall the reader) and bounds the encode by ctx. A write to
+// a subprocess that has stopped reading its stdin blocks until the pipe drains,
+// which json.Encoder cannot observe; running it under ctx and tearing the
+// connection down on cancellation keeps the §7.4 "every call is timeout-bounded"
+// guarantee — a wedged write can't outlive the call's deadline. Closing the
+// connection unblocks the encode goroutine (the pipe errors), so it never leaks.
+func (t *stdioTransport) write(ctx context.Context, req rpcRequest) error {
+	done := make(chan error, 1)
+	go func() {
+		t.writeMu.Lock()
+		defer t.writeMu.Unlock()
+		done <- t.enc.Encode(req)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		t.fail()        // the server isn't draining stdin: mark the connection dead
+		_ = t.w.Close() // unblock the wedged Encode so its goroutine and writeMu free
+		return ctx.Err()
+	}
 }
 
 func (t *stdioTransport) close() error {

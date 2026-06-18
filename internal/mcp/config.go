@@ -21,11 +21,12 @@ type rawServer struct {
 }
 
 // Parse reads the `mcp.servers` config section into ServerConfig specs, sorted by
-// name for a deterministic connect order. A malformed entry (neither command nor
-// url, both set, or a bad timeout) is skipped with a warning rather than failing
-// the session — one broken server must not block the others (the §7.4 isolation
-// ethos, and config's tolerate-but-warn rule, D2). Returns no specs when the
-// section is absent.
+// name for a deterministic connect order. A transport-ambiguous entry (neither
+// command nor url, or both set) is skipped with a warning; an entry with a
+// malformed timeout is kept (the default timeout applies) with a warning, since
+// the server is otherwise usable. Nothing fails the session — one broken server
+// must not block the others (the §7.4 isolation ethos, and config's
+// tolerate-but-warn rule, D2). Returns no specs when the section is absent.
 func Parse(cfg *config.Config) (specs []ServerConfig, warnings []string, err error) {
 	var servers map[string]rawServer
 	ok, err := cfg.Decode("mcp.servers", &servers)

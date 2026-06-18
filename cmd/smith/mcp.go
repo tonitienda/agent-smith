@@ -67,17 +67,21 @@ func mcpTool(client *mcp.Client, info mcp.ToolInfo) tool.Tool {
 			InputSchema: info.InputSchema,
 		},
 		Fn: func(ctx context.Context, args json.RawMessage) (tool.Output, error) {
+			// Attribute every result — success or unavailable error — to the server/tool
+			// so /context credits MCP cost per server even for failed calls.
+			attr := &schema.Attribution{MCPServer: client.Name(), MCPTool: info.Name}
 			res, err := client.Call(ctx, info.Name, args)
 			if err != nil {
 				return tool.Output{
-					Text:    fmt.Sprintf("mcp server %q unavailable: %v", client.Name(), err),
-					IsError: true,
+					Text:        fmt.Sprintf("mcp server %q unavailable: %v", client.Name(), err),
+					IsError:     true,
+					Attribution: attr,
 				}, nil
 			}
 			return tool.Output{
 				Text:        res.Text,
 				IsError:     res.IsError,
-				Attribution: &schema.Attribution{MCPServer: client.Name(), MCPTool: info.Name},
+				Attribution: attr,
 			}, nil
 		},
 	}

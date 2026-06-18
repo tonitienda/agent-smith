@@ -226,6 +226,30 @@ func TestCallerCancelKeepsHealthy(t *testing.T) {
 	}
 }
 
+func TestStdioWriteRespectsContext(t *testing.T) {
+	// A peer that never reads our stdin: the synchronous pipe makes Encode block.
+	// The write must still honor the deadline (the isolation guarantee) rather than
+	// hang forever, and tear the connection down so nothing leaks.
+	reqR, reqW := io.Pipe() // reqR is intentionally never read
+	defer func() { _ = reqR.Close() }()
+	respR, _ := io.Pipe()
+	tr := newStdioTransport(reqW, respR, nil)
+	defer func() { _ = tr.close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := tr.call(ctx, "initialize", map[string]any{}); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a write to an unread pipe should fail at the deadline")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("call did not return: a blocked write outlived its context")
+	}
+}
+
 func TestHTTPTransport(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
