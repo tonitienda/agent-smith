@@ -220,6 +220,53 @@ func TestEmptyAndUnknown(t *testing.T) {
 	}
 }
 
+// TestRewindReincludesCleanedBlocks: when a /clean removal happened after the
+// checkpoint, rewinding undoes it, so the preview must report the blocks
+// returning to the window and a net change — not only the blocks leaving.
+func TestRewindReincludesCleanedBlocks(t *testing.T) {
+	l, _ := fill(t)
+	// After turn 3, /clean removes turn 1's answer (blk_a1).
+	mustAppend(t, l, eventlog.NewExclusion("/clean", "blk_a1"))
+	events := l.Events()
+
+	// Sanity: blk_a1 is excluded now.
+	live := liveIDs(projection.Project(events, projection.Options{TargetModel: model}))
+	for _, id := range live {
+		if id == "blk_a1" {
+			t.Fatal("blk_a1 should be excluded by /clean before the rewind")
+		}
+	}
+
+	target, ok := rewind.Find(events, "blk_u3")
+	if !ok {
+		t.Fatal("Find blk_u3 failed")
+	}
+	plan := rewind.Preview(events, cost.Embedded(), model, base, target)
+	// Turn 3 (blk_u3, blk_a3) leaves; the /clean exclusion is undone so blk_a1
+	// returns.
+	if plan.Blocks != 2 {
+		t.Fatalf("Blocks leaving = %d, want 2", plan.Blocks)
+	}
+	if plan.Returns != 1 {
+		t.Fatalf("Returns = %d, want 1 (blk_a1 re-included)", plan.Returns)
+	}
+	if plan.ReturnTokens <= 0 {
+		t.Fatalf("ReturnTokens = %d, want > 0", plan.ReturnTokens)
+	}
+	if plan.NetTokens() != plan.Tokens-plan.ReturnTokens {
+		t.Fatalf("NetTokens = %d, want %d", plan.NetTokens(), plan.Tokens-plan.ReturnTokens)
+	}
+
+	// Applying it makes blk_a1 live again and drops turn 3.
+	event, _ := rewind.Apply(plan)
+	mustAppend(t, l, event)
+	got := liveIDs(projection.Project(l.Events(), projection.Options{TargetModel: model}))
+	want := []string{"blk_u1", "blk_a1", "blk_u2", "blk_a2"}
+	if !eq(got, want) {
+		t.Fatalf("after rewind live = %v, want %v", got, want)
+	}
+}
+
 func mustAppend(t *testing.T, l *eventlog.Log, b schema.Block) {
 	t.Helper()
 	if _, err := l.Append(b); err != nil {

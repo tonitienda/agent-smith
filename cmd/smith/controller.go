@@ -690,7 +690,18 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 		s.pendingRewind, s.pendingRewindFor = nil, nil
 		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /rewind again."}, nil
 	}
-	plan := *s.pendingRewind
+	// Recompute against the current log rather than trusting the snapshot taken
+	// at preview time: the checkpoint is identified by its stable anchor, and any
+	// events appended since the preview must also be named by the rewind, or
+	// those newer turns would stay live and the rewind would be incomplete
+	// (append-only, so the anchor's index is stable).
+	events := s.sess.Log.Events()
+	target, ok := rewind.Find(events, s.pendingRewind.Target.Anchor)
+	if !ok {
+		s.pendingRewind, s.pendingRewindFor = nil, nil
+		return command.Output{Text: "The staged checkpoint is no longer in this session. Run /rewind again."}, nil
+	}
+	plan := rewind.Preview(events, s.pricing, s.model, time.Now(), target)
 	event, ok := rewind.Apply(plan)
 	if !ok {
 		s.pendingRewind, s.pendingRewindFor = nil, nil
@@ -700,10 +711,15 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 		return command.Output{}, fmt.Errorf("record rewind: %w", err)
 	}
 	s.pendingRewind, s.pendingRewindFor = nil, nil
-	return command.Output{
-		Text:      fmt.Sprintf("Rewound to %s, reclaiming %d tokens. Restore with /rewind --undo.", rewind.ShortAnchor(plan.Target.Anchor), plan.Tokens),
-		ResetView: true,
-	}, nil
+	text := fmt.Sprintf("Rewound to %s.", rewind.ShortAnchor(plan.Target.Anchor))
+	switch net := plan.NetTokens(); {
+	case net > 0:
+		text += fmt.Sprintf(" Window shrank by ~%d tokens.", net)
+	case net < 0:
+		text += fmt.Sprintf(" Window grew by ~%d tokens (a later /clean was undone).", -net)
+	}
+	text += " Restore with /rewind --undo."
+	return command.Output{Text: text, ResetView: true}, nil
 }
 
 // rewindUndo reverses the most recent rewind by appending a counter-exclusion.

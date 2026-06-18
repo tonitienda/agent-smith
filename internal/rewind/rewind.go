@@ -129,21 +129,29 @@ func Find(events []schema.Block, selector string) (Checkpoint, bool) {
 // Plan is the previewed effect of a rewind. Building one mutates nothing; it is
 // the preview the user confirms before any change is applied (AC).
 type Plan struct {
-	Target   Checkpoint
-	DropIDs  []string // event IDs the rewind exclusion names (everything at/after Target.Index)
-	Blocks   int      // count of live window blocks that would leave the window
-	Tokens   int      // estimated tokens reclaimed
-	CostUSD  float64  // Tokens priced at the active model's input rate
-	Priced   bool     // false when the active model is unpriced ($ blank)
-	Currency string   // money prefix, e.g. "$"
-	Files    []string // files modified by the rewound turns (not reverted — a warning)
+	Target       Checkpoint
+	DropIDs      []string // event IDs the rewind exclusion names (everything at/after Target.Index)
+	Blocks       int      // count of live window blocks that would leave the window
+	Tokens       int      // estimated tokens of the blocks leaving the window
+	CostUSD      float64  // Tokens priced at the active model's input rate
+	Returns      int      // blocks that re-enter the window (a later /clean removal is undone)
+	ReturnTokens int      // estimated tokens of the returning blocks
+	Priced       bool     // false when the active model is unpriced ($ blank)
+	Currency     string   // money prefix, e.g. "$"
+	Files        []string // files modified by the rewound turns (not reverted — a warning)
 }
 
 // Empty reports whether the rewind would drop nothing (already at that point).
 func (p Plan) Empty() bool { return len(p.DropIDs) == 0 }
 
+// NetTokens is the net change in the live window: tokens leaving minus tokens
+// returning. It is positive when the window shrinks and negative when a rewind
+// undoes a later /clean removal and the window grows.
+func (p Plan) NetTokens() int { return p.Tokens - p.ReturnTokens }
+
 // Preview computes the effect of rewinding to target: which events the rewind
-// exclusion would name, how many live blocks and tokens/$ leave the window, and
+// exclusion would name, how many live blocks and tokens/$ leave the window, how
+// many blocks return to it (a later /clean removal undone by the rewind), and
 // which files the rewound turns modified (a warning — files are not reverted).
 // It is pure and never mutates the log. events is the full log.
 func Preview(events []schema.Block, table *cost.Table, model string, now time.Time, target Checkpoint) Plan {
@@ -165,22 +173,40 @@ func Preview(events []schema.Block, table *cost.Table, model string, now time.Ti
 
 	opts := projection.Options{TargetModel: model}
 	// The live blocks that survive the rewind are exactly the point-in-time
-	// projection's live set; anything live now but not in it is being reclaimed.
+	// projection's live set.
+	postProj := projection.ProjectAt(events, n, opts)
 	survives := map[string]bool{}
-	for _, b := range projection.ProjectAt(events, n, opts).Live() {
+	for _, b := range postProj.Live() {
 		survives[b.ID] = true
 	}
 
-	comp := composition.Build(projection.Project(events, opts), table, model, now, composition.SortSize)
-	plan.Priced = comp.Priced
-	plan.Currency = comp.Currency
-	for _, seg := range comp.Segments {
+	cur := composition.Build(projection.Project(events, opts), table, model, now, composition.SortSize)
+	plan.Priced = cur.Priced
+	plan.Currency = cur.Currency
+	curLive := make(map[string]bool, len(cur.Segments))
+	for _, seg := range cur.Segments {
+		curLive[seg.ID] = true
 		if survives[seg.ID] {
 			continue
 		}
+		// Live now but not after the rewind: this block leaves the window.
 		plan.Blocks++
 		plan.Tokens += seg.Tokens
 		plan.CostUSD += seg.CostUSD
+	}
+
+	// A rewind drops every event after the checkpoint, including any later
+	// control event — so a /clean exclusion made after the checkpoint is undone
+	// and the blocks it had removed return to the window. Count them so the
+	// preview reports the net change, not just the blocks leaving (otherwise it
+	// would claim tokens "reclaimed" while the window actually grows).
+	post := composition.Build(postProj, table, model, now, composition.SortSize)
+	for _, seg := range post.Segments {
+		if curLive[seg.ID] {
+			continue
+		}
+		plan.Returns++
+		plan.ReturnTokens += seg.Tokens
 	}
 
 	plan.Files = modifiedFiles(events[n:])
@@ -315,6 +341,11 @@ func RenderPreview(p Plan) string {
 		fmt.Fprintf(&b, " (%s%s)", p.Currency, strconv.FormatFloat(p.CostUSD, 'f', 4, 64))
 	}
 	b.WriteString(" leave the window.\n")
+	if p.Returns > 0 {
+		fmt.Fprintf(&b, "  ⚠ %s · ~%d tokens return to the window — this rewind undoes a later /clean removal.\n",
+			segmentsLabel(p.Returns), p.ReturnTokens)
+		fmt.Fprintf(&b, "  Net change: ~%d tokens (%s).\n", p.NetTokens(), netDirection(p.NetTokens()))
+	}
 	if len(p.Files) > 0 {
 		b.WriteString("\n⚠ File changes are NOT reverted. Files modified after this point:\n")
 		for _, f := range p.Files {
@@ -351,6 +382,15 @@ func segmentsLabel(n int) string {
 		return "1 block"
 	}
 	return strconv.Itoa(n) + " blocks"
+}
+
+// netDirection labels a net token change for the preview: a positive net shrinks
+// the window, a negative net grows it.
+func netDirection(net int) string {
+	if net < 0 {
+		return "window grows"
+	}
+	return "window shrinks"
 }
 
 // clip shortens s to at most n runes, ending in an ellipsis when it was longer.
