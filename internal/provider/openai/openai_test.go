@@ -156,6 +156,29 @@ func TestBuildResponsesRequestSystemAndItems(t *testing.T) {
 	}
 }
 
+// TestBuildResponsesRequestRendersCompaction confirms a derived compaction
+// block (AS-038) reaches the model as an input item rather than being dropped.
+func TestBuildResponsesRequestRendersCompaction(t *testing.T) {
+	req := provider.Request{
+		Model: "gpt-5",
+		Context: []schema.Block{
+			{ID: "c1", Kind: schema.KindCompaction, Role: schema.RoleUser, Text: &schema.TextBody{Text: "summary of earlier"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "and now this"}},
+		},
+	}
+	w, err := buildResponsesRequest(req)
+	if err != nil {
+		t.Fatalf("buildResponsesRequest: %v", err)
+	}
+	if len(w.Input) != 2 {
+		t.Fatalf("input = %d items, want 2 (compaction + text)", len(w.Input))
+	}
+	raw, _ := json.Marshal(w.Input)
+	if !strings.Contains(string(raw), "summary of earlier") {
+		t.Errorf("input does not carry the summary: %s", raw)
+	}
+}
+
 func TestBuildResponsesRequestParams(t *testing.T) {
 	req := provider.Request{
 		Model: "gpt-5",

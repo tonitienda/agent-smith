@@ -50,6 +50,28 @@ func TestBuildChatRequestMergesAssistantAndMaps(t *testing.T) {
 	}
 }
 
+// TestBuildChatRequestRendersCompaction confirms a derived compaction block
+// (AS-038) reaches the model as a user message rather than being dropped.
+func TestBuildChatRequestRendersCompaction(t *testing.T) {
+	req := provider.Request{
+		Model: "gpt-4o",
+		Context: []schema.Block{
+			{ID: "c1", Kind: schema.KindCompaction, Role: schema.RoleUser, Text: &schema.TextBody{Text: "summary of earlier"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "and now this"}},
+		},
+	}
+	w, err := buildChatRequest(req)
+	if err != nil {
+		t.Fatalf("buildChatRequest: %v", err)
+	}
+	if len(w.Messages) != 2 || w.Messages[0].Role != "user" {
+		t.Fatalf("messages = %+v, want compaction(user) + text(user)", w.Messages)
+	}
+	if w.Messages[0].Content != "summary of earlier" {
+		t.Errorf("first message content = %v, want the summary", w.Messages[0].Content)
+	}
+}
+
 func TestBuildChatRequestParamsAndStreamOptions(t *testing.T) {
 	req := provider.Request{
 		Model: "gpt-4o",

@@ -263,6 +263,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdRewind,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "compact",
+		Summary:       "Summarize older context into one reversible block",
+		Args:          "[--apply | --undo | --cancel]",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith compact", "smith compact --apply"},
+		Run:           ctl.cmdCompact,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "clear",
 		Summary:       "Start a fresh session (the old one stays in /resume)",
 		Mode:          command.Inline,

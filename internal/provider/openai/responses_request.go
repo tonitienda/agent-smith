@@ -168,7 +168,10 @@ func systemText(b *schema.Block) string {
 // items. Unknown/derived kinds carry no model-facing content and are skipped.
 func responsesInputFor(b *schema.Block) ([]any, error) {
 	switch b.Kind {
-	case schema.KindText:
+	case schema.KindText, schema.KindCompaction:
+		// A compaction block is a derived summary standing in for the conversation
+		// it replaced (AS-038); it carries a text body, so it renders as a message
+		// item and reaches the model.
 		return responsesTextItem(b), nil
 	case schema.KindReasoning:
 		return responsesReasoningInput(b), nil

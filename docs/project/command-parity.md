@@ -12,6 +12,7 @@ disagree. Interactive-only commands state a reason.
 |---|---|---|
 | `/clean` | both |  |
 | `/clear` | interactive-only | clears the active session in place; a headless run is already a fresh session, so there is nothing to clear |
+| `/compact` | both |  |
 | `/context` | both |  |
 | `/cost` | both |  |
 | `/goal` | both |  |

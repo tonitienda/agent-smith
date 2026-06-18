@@ -114,6 +114,13 @@ func buildChatRequest(req provider.Request) (*chatRequest, error) {
 			if c := chatUserContent(b.Text); c != nil {
 				w.Messages = append(w.Messages, chatMessage{Role: "user", Content: c})
 			}
+		case schema.KindCompaction:
+			// A compaction block is a derived summary standing in for the
+			// conversation it replaced (AS-038); it carries a text body and is built
+			// with a user role, so it renders as a user message and reaches the model.
+			if c := chatUserContent(b.Text); c != nil {
+				w.Messages = append(w.Messages, chatMessage{Role: "user", Content: c})
+			}
 		case schema.KindToolCall:
 			if err := appendAssistantToolCall(w, b); err != nil {
 				return nil, err
