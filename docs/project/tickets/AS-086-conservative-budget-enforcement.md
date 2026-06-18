@@ -2,7 +2,7 @@
 id: AS-086
 title: Conservative budget enforcement — pre-turn estimate + unpriced-turn handling
 status: ready-to-implement
-github_issue: null
+github_issue: 148
 depends_on: [AS-041, AS-063]
 area: cost
 priority: P2
