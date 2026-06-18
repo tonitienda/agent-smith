@@ -82,6 +82,11 @@ type chatSession struct {
 	budgetDefaultUSD   float64
 	budgetWarnFraction float64
 
+	// budgetHaltUnpriced (AS-086) decides whether a budgeted session halts rather
+	// than spending blind when the active model has no pricing entry (so the guard
+	// cannot enforce the ceiling against it). Default false: warn once, proceed.
+	budgetHaltUnpriced bool
+
 	mu       sync.Mutex
 	sess     *session.Session
 	provName string
@@ -150,9 +155,10 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 // fraction (AS-041), read from layered config at startup. A non-positive default
 // leaves new sessions budget-free until /budget sets one; a warn fraction outside
 // (0,1) falls back to the budget package default downstream.
-func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64) {
+func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64, haltUnpriced bool) {
 	s.budgetDefaultUSD = defaultUSD
 	s.budgetWarnFraction = warnFraction
+	s.budgetHaltUnpriced = haltUnpriced
 }
 
 // setPolicy installs the permission gate used by every engine this controller
@@ -218,6 +224,15 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 		log := sess.Log
 		spent := func() float64 { return cost.Summarize(log.Events(), s.pricing).TotalUSD }
 		opts = append(opts, loop.WithBudget(spent, s.budgetDefaultUSD, s.budgetWarnFraction))
+		// Conservative pre-turn enforcement (AS-086): reserve the next turn's
+		// worst-case cost (request-size input + the model's max output) so spend
+		// cannot overshoot the ceiling, and surface an unpriced model the guard
+		// cannot enforce. Priced against the same table and model as /cost.
+		reserveModel := model
+		reserve := func(ctx []schema.Block) (float64, bool) {
+			return cost.EstimateTurnCostUSD(ctx, reserveModel, s.pricing)
+		}
+		opts = append(opts, loop.WithBudgetReservation(reserve, s.budgetHaltUnpriced))
 	}
 	return loop.New(prov, sess.Log, rt, s.tools, model, opts...)
 }

@@ -47,8 +47,18 @@ const (
 
 	// UIBudgetHalt reports that the budget ceiling was reached: the loop is
 	// stopping before the next priced turn (the run ends with StopBudget).
-	// BudgetSpentUSD and BudgetLimitUSD carry the figures to show.
+	// BudgetSpentUSD and BudgetLimitUSD carry the figures to show. It also fires
+	// for the pre-turn reservation (AS-086) when the next turn's worst-case cost
+	// would carry spend past the ceiling, halting before the turn is issued.
 	UIBudgetHalt UIEventKind = "budget_halt"
+
+	// UIBudgetUnpriced reports that a budget is set but cannot be enforced against
+	// the active model because it has no pricing entry (AS-086): the spend it adds
+	// is invisible to the guard. It fires once per run. BudgetLimitUSD carries the
+	// ceiling that cannot be enforced. When the session is configured to halt on an
+	// unpriced model the run then ends with StopBudget; otherwise the turn proceeds
+	// unmetered after this one-time notice.
+	UIBudgetUnpriced UIEventKind = "budget_unpriced"
 )
 
 // UIEvent is one face-agnostic event emitted to the Observer. Kind selects which

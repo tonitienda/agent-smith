@@ -37,6 +37,13 @@ type Rate struct {
 	// is; zero means the window is unknown, so the meter shows the raw token
 	// count without a percentage. The field is optional and additive (PRD D2).
 	ContextWindow int `json:"context_window,omitempty"`
+
+	// MaxOutputTokens is the model's maximum output (completion) length in tokens.
+	// The pre-turn budget reservation (AS-086) prices it at the output rate as the
+	// worst-case generation cost of the next turn; zero means it is unknown, so the
+	// reservation cannot bound the turn and the guard falls back to AS-041's
+	// boundary check. Optional and additive (PRD D2).
+	MaxOutputTokens int `json:"max_output_tokens,omitempty"`
 }
 
 // wireTable is the on-disk pricing document.
