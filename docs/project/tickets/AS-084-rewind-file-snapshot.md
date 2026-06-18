@@ -2,7 +2,7 @@
 id: AS-084
 title: Rewind file-system snapshot & restore
 status: needs-clarification
-github_issue: null
+github_issue: 143
 depends_on: [AS-037]
 area: commands
 priority: P2
