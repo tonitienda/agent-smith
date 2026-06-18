@@ -130,6 +130,34 @@ func NewSkillLoad(producer, name string) schema.Block {
 	}
 }
 
+// KindHookNote is the event kind for a hook note: a control event recording that
+// a lifecycle hook (AS-035) annotated the session — e.g. a post-tool-use hook
+// leaving a note, or a session-start hook recording context. It is a non-content
+// kind carrying its note text on Block.Text and the originating event name on
+// Attribution.Tool (reused as a free-form label), so the note is auditable on the
+// log without entering model-facing context.
+//
+// Like the other control kinds it lives here rather than in the frozen
+// content-block schema (AS-003): the schema tolerates non-content kinds and the
+// projection engine (AS-006) never renders it into the window. A hook that wants
+// the model to *see* something blocks or modifies instead; an annotation is a
+// record, not an injection.
+const KindHookNote schema.Kind = "hook_note"
+
+// NewHookNote builds a hook-note event carrying note as text, labeled with the
+// lifecycle event that produced it and attributed to producer. The returned
+// block has a fresh ID; its Seq and append timestamp are assigned on append.
+func NewHookNote(producer, event, note string) schema.Block {
+	return schema.Block{
+		ID:          schema.NewID(),
+		Kind:        KindHookNote,
+		Role:        schema.RoleHarness,
+		Text:        &schema.TextBody{Text: note, Subtype: schema.TextSubtypeNormal},
+		Provenance:  &schema.Provenance{Producer: producer},
+		Attribution: &schema.Attribution{Tool: event},
+	}
+}
+
 // Derive stamps a caller-built replacement block as a derived-block event:
 // derived from the given source block IDs and attributed to producer. The
 // derived block replaces its sources in the projection — the sources are

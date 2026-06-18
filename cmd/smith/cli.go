@@ -15,6 +15,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
@@ -209,7 +210,7 @@ func readonlyController(override string) (*chatSession, func(), error) {
 			}
 		}
 	}
-	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil)
+	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil, nil)
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
 
@@ -395,11 +396,31 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 	if err != nil {
 		return err
 	}
-	rt := tool.NewRuntime(tools, sess.Log, tool.WithPermission(denyHeadless))
+
+	// Load and wire the lifecycle hooks (AS-035) so a headless run honors the same
+	// pre/post-tool-use and prompt-submit automation an interactive session does.
+	cfg, err := loadLayeredConfig(c.Globals.Config)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	hooks := loadHooks(cfg, c.Stderr)
+
+	rtOpts := append([]tool.Option{tool.WithPermission(denyHeadless)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
+	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
 	eng, err := loop.New(prov, sess.Log, rt, tools, model)
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
+
+	fireLifecycle(ctx, hooks, sess.Log, hook.Payload{Event: hook.SessionStart, Session: sess.ID})
+	defer fireLifecycle(context.Background(), hooks, sess.Log, hook.Payload{Event: hook.SessionStop, Session: sess.ID})
+
+	if out := fireLifecycle(ctx, hooks, sess.Log, hook.Payload{Event: hook.UserPromptSubmit, Session: sess.ID, Prompt: prompt}); out.Blocked {
+		return fmt.Errorf("prompt blocked by hook: %s", out.Reason)
+	} else if rewritten := promptRewrite(out.Input); rewritten != "" {
+		prompt = rewritten
+	}
+
 	res, err := eng.Run(ctx, prompt)
 	if err != nil {
 		return err // runtime failure → exit 1

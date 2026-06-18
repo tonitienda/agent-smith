@@ -139,6 +139,23 @@ description: Write a release changelog from the git history
 Summarize the commits since the last tag into a Keep-a-Changelog entry.
 ```
 
+**Lifecycle hooks** (AS-035) run your own shell commands at well-known points in a session — `session-start`, `session-stop`, `pre-tool-use`, `post-tool-use`, `pre-compact`, and `user-prompt-submit` — to observe, block, modify, or annotate what the agent does. Configure them as a `hooks` array in layered config (`.agent-smith/config.json` per project, or the user config file). Each hook names an `event`, an optional `matcher` (a glob on the tool name, for the tool events), the `command` to run (via `sh -c`), an optional `timeout` (e.g. `"5s"`), and a `failOpen` policy. The hook receives the event payload as JSON on stdin and steers the outcome with its exit code and an optional JSON object on stdout: exit `0` with empty output allows; `{"decision":"block","reason":"…"}` (or exit `2`) blocks and feeds the reason back to the model; `{"input":{…}}` rewrites a tool's arguments before it runs (recorded on the log with hook provenance — for `user-prompt-submit`, where there are no tool arguments, `input` is instead the replacement prompt as a JSON **string**, e.g. `{"input":"<rewritten prompt>"}`); `{"annotation":"…"}` appends an audit note. Hooks are automation layered on top of the permission gate, never a replacement for it — `pre-tool-use` runs *after* the permission check. A hook that hangs or crashes never wedges the loop: it runs under a timeout and its failure resolves through `failOpen` (continue) or fail-closed (block), with a visible warning. Example — block the shell tool from touching `/etc`:
+
+```json
+{
+  "hooks": [
+    {
+      "event": "pre-tool-use",
+      "matcher": "shell",
+      "command": "grep -q '/etc' && echo '{\"decision\":\"block\",\"reason\":\"no /etc access\"}'; exit 0",
+      "timeout": "5s"
+    }
+  ]
+}
+```
+
+(The `pre-compact` event is defined and fires through the same machinery; it is wired to `/compact` when that lands — AS-038.)
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).

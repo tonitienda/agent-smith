@@ -1,7 +1,7 @@
 ---
 id: AS-035
 title: Lifecycle hooks (session, tool use, compact, prompt-submit)
-status: ready-to-implement
+status: done
 github_issue: 35
 depends_on: [AS-013, AS-018, AS-031]
 area: capability
@@ -33,3 +33,20 @@ source: PRD.md §7.5
 ## Dependencies
 
 - AS-013 (tool runtime interception points), AS-018 (session/turn events), AS-031 (config)
+
+## Implementation notes
+
+- `internal/hook` is the runtime-agnostic core: it compiles the config `hooks`
+  array into a `Set`, runs matching hooks per event (JSON payload on stdin),
+  and folds their exit-code/stdout responses into one `Outcome` (allow / block /
+  modify / annotate), resolving timeouts and failures through each hook's
+  `failOpen` policy so a misbehaving hook never wedges the loop.
+- Pre/post-tool-use are wired through `tool.WithPreToolHook`/`WithPostToolHook`
+  seams in the runtime — pre runs *after* the permission gate; a modify rewrite
+  is re-validated and recorded as a derived `tool_call` with hook provenance
+  (PRD D3). Session start/stop and user-prompt-submit fire from the chat
+  controller and the headless `smith run` path. Annotations land on the log as
+  `hook_note` control events (`internal/eventlog`).
+- **pre-compact** is defined and fires through the same `Set`, but the call site
+  is `/compact`, which is not built yet (AS-038). AS-038 must call
+  `hook.PreCompact` before compacting; tracked there rather than left as a TODO.
