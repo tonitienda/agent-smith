@@ -121,7 +121,9 @@ func loadDir(dir, scope string) ([]Skill, error) {
 	}
 	var skills []Skill
 	for _, e := range entries {
-		if !e.IsDir() {
+		// Resolve symlinks (os.Stat, not e.IsDir) so a skill directory linked in by
+		// a dotfile manager is discovered rather than silently skipped.
+		if fi, err := os.Stat(filepath.Join(dir, e.Name())); err != nil || !fi.IsDir() {
 			continue
 		}
 		manifest := filepath.Join(dir, e.Name(), fileName)
@@ -136,9 +138,10 @@ func loadDir(dir, scope string) ([]Skill, error) {
 		if name == "" {
 			name = e.Name() // fall back to the directory name
 		}
-		// A name that can't be referenced (carrying whitespace or a slash) is
-		// skipped rather than registered un-invocably.
-		if name == "" || strings.ContainsAny(name, " \t\n/") {
+		// A name that can't be referenced (carrying whitespace or a path
+		// separator — slash or, on Windows, backslash) is skipped rather than
+		// registered un-invocably.
+		if name == "" || strings.ContainsAny(name, " \t\n/\\") {
 			continue
 		}
 		abs, err := filepath.Abs(manifest)
@@ -168,6 +171,11 @@ func parseFrontmatter(content string) (name, desc string, meta map[string]string
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	if !strings.HasPrefix(content, "---\n") {
 		return "", "", meta, content
+	}
+	// A fenced file that ends exactly at the closing fence has no trailing
+	// newline, so the fence search below would miss it; normalize it to end in one.
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
 	}
 	end := strings.Index(content[4:], "\n---\n")
 	if end < 0 {

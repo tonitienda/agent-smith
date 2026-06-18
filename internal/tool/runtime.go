@@ -414,16 +414,14 @@ func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody) e
 // AS-034; an MCP server/tool, AS-036). The tool name is authoritative and is
 // never overwritten by the merge.
 func attribution(toolName string, extra *schema.Attribution) *schema.Attribution {
-	attr := &schema.Attribution{Tool: toolName}
 	if extra == nil {
-		return attr
+		return &schema.Attribution{Tool: toolName}
 	}
-	attr.Skill = extra.Skill
-	attr.MCPServer = extra.MCPServer
-	attr.MCPTool = extra.MCPTool
-	attr.Hook = extra.Hook
-	attr.Ext = extra.Ext
-	return attr
+	// Copy every field the tool supplied, then assert the authoritative tool name;
+	// copying the whole struct stays correct as new attribution fields are added.
+	attr := *extra
+	attr.Tool = toolName
+	return &attr
 }
 
 // truncateText bounds a single string at r.maxBytes on a UTF-8 rune boundary,
