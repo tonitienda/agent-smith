@@ -157,6 +157,14 @@ func Compile(specs []Spec) (*Set, []Warning, error) {
 			warnings = append(warnings, Warning{i, "missing command; skipped"})
 			continue
 		}
+		// A malformed glob would make path.Match error at run time and so silently
+		// never match; reject it here instead, like a bad timeout or unknown event.
+		if s.Matcher != "" && s.Matcher != "*" {
+			if _, err := path.Match(s.Matcher, ""); err != nil {
+				warnings = append(warnings, Warning{i, fmt.Sprintf("invalid matcher %q; skipped", s.Matcher)})
+				continue
+			}
+		}
 		to := DefaultTimeout
 		if s.Timeout != "" {
 			d, err := time.ParseDuration(s.Timeout)

@@ -192,13 +192,14 @@ func TestCompileWarnings(t *testing.T) {
 		{Event: "bogus", Command: "true"},
 		{Event: string(PreToolUse)},                                 // missing command
 		{Event: string(PreToolUse), Command: "true", Timeout: "x"},  // bad timeout
+		{Event: string(PreToolUse), Command: "true", Matcher: "[a"}, // bad glob
 		{Event: string(PreToolUse), Command: "true", Timeout: "1s"}, // ok
 	})
 	if err != nil {
 		t.Fatalf("Compile: %v", err)
 	}
-	if len(warns) != 3 {
-		t.Fatalf("expected 3 warnings, got %d: %v", len(warns), warns)
+	if len(warns) != 4 {
+		t.Fatalf("expected 4 warnings, got %d: %v", len(warns), warns)
 	}
 }
 
