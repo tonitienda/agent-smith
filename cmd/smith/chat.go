@@ -10,6 +10,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
@@ -110,11 +111,18 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	}
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd)
-	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate)}
+	// Build the slash-command registry, then layer custom commands (AS-033) over
+	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
+	// dir becomes invocable without a restart; the TUI runs it as the palette opens.
+	cmds := chatCommands(ctl)
+	builtins := builtinNames(cmds)
+	rescanCustom := func() { registerCustomCommands(cmds, builtins, wd) }
+	rescanCustom()
+	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate), tui.WithCommandRefresh(rescanCustom)}
 	if noSplash {
 		opts = append(opts, tui.WithoutSplash())
 	}
-	app := tui.New(ctl.Meta, chatCommands(ctl), ctl.Meter, opts...)
+	app := tui.New(ctl.Meta, cmds, ctl.Meter, opts...)
 	// Wire the permission gate before the first engine is built, so every tool
 	// call is approved through the TUI (AS-016/AS-024). The Asker delivers prompts
 	// into the running app, which app.Run starts below.
@@ -257,6 +265,66 @@ func mustRegisterCommand(reg *command.Registry, c command.Command) {
 	if err := reg.Register(c); err != nil {
 		panic(fmt.Sprintf("register built-in command %q: %v", c.Name, err))
 	}
+}
+
+// builtinNames snapshots the names already in the registry — the built-ins — so a
+// custom command (AS-033) is never allowed to shadow `/cost`, `/clear`, etc. The
+// snapshot is taken once, before any custom command is layered on.
+func builtinNames(reg *command.Registry) map[string]bool {
+	names := map[string]bool{}
+	for _, c := range reg.All() {
+		names[c.Name] = true
+	}
+	return names
+}
+
+// registerCustomCommands discovers the user- and project-level custom commands
+// (AS-033) and upserts each into reg as a command whose handler expands the
+// template into a prompt for the model to run. A name colliding with a built-in
+// is skipped so a dropped file can't hijack `/cost` and friends. It is called at
+// startup and again whenever the palette opens, so a newly added file is picked
+// up without a restart; a discovery error degrades to leaving the registry as-is
+// rather than aborting the session.
+func registerCustomCommands(reg *command.Registry, builtins map[string]bool, wd string) {
+	cmds, err := customcmd.Load(customcmd.UserDir(), customcmd.ProjectDir(wd))
+	if err != nil {
+		return
+	}
+	for _, c := range cmds {
+		if builtins[c.Name] {
+			continue
+		}
+		cc := c // capture per iteration for the closure
+		_ = reg.Upsert(command.Command{
+			Name:    cc.Name,
+			Summary: customSummary(cc),
+			Args:    cc.ArgHint,
+			Mode:    command.Inline,
+			// The expansion is submitted as a model turn by the interactive face; the
+			// headless face has no such submission seam yet, so it is marked
+			// interactive-only with a Reason rather than silently no-op when scripted.
+			Scriptability: command.InteractiveOnly,
+			Reason:        "expands a prompt template into a model turn, which only the interactive face submits today",
+			Run: func(_ context.Context, args []string) (command.Output, error) {
+				return command.Output{Prompt: cc.Expand(args)}, nil
+			},
+		})
+	}
+}
+
+// customSummary builds the /help one-liner for a custom command: its description
+// (or a default) plus its source path, so it is visibly marked as custom and a
+// project command that shadows a user one says so (AS-033).
+func customSummary(c customcmd.Command) string {
+	s := c.Description
+	if s == "" {
+		s = "Custom command"
+	}
+	tag := "custom: " + c.Source
+	if c.Overrides {
+		tag += "; overrides user command"
+	}
+	return s + " (" + tag + ")"
 }
 
 // chatModel returns the model ID for interactive turns, honoring SMITH_MODEL.

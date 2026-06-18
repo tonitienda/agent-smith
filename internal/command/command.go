@@ -84,6 +84,13 @@ type Output struct {
 	// state). A non-interactive face ignores it and renders Text instead. Advisory
 	// and additive (D2).
 	Selector *Selector
+	// Prompt, when non-empty, asks the face to submit this text as a fresh user
+	// turn — the expansion of a custom slash command (AS-033), whose whole purpose
+	// is to feed a templated prompt to the model rather than print to the
+	// transcript. A face that drives turns runs it like typed input; one that
+	// cannot ignores it. Advisory and additive (D2); a handler setting Prompt
+	// normally leaves Text empty.
+	Prompt string
 }
 
 // Picker is an interactive single-select list a Handler offers to interactive
@@ -198,25 +205,47 @@ func NewRegistry() *Registry {
 // "registering a command makes it appear everywhere" contract can't be violated
 // by a malformed entry.
 func (r *Registry) Register(c Command) error {
-	name := c.Name
+	if err := validate(c); err != nil {
+		return err
+	}
+	if _, dup := r.byName[c.Name]; dup {
+		return fmt.Errorf("command %q: already registered", c.Name)
+	}
+	r.byName[c.Name] = c
+	return nil
+}
+
+// Upsert adds c, replacing any command already registered under the same name.
+// Unlike Register it tolerates a clobber: it is the entry point for the custom
+// slash commands (AS-033), which are rediscovered from disk on palette open and
+// must be allowed to replace their prior version when their file changes. It
+// applies the same name/handler validation as Register.
+func (r *Registry) Upsert(c Command) error {
+	if err := validate(c); err != nil {
+		return err
+	}
+	r.byName[c.Name] = c
+	return nil
+}
+
+// validate enforces the rules shared by Register and Upsert: a non-empty name
+// with no leading slash or whitespace, a non-nil handler, and a Reason on any
+// interactive-only command.
+func validate(c Command) error {
 	switch {
-	case name == "":
+	case c.Name == "":
 		return fmt.Errorf("command: empty name")
-	case strings.HasPrefix(name, "/"):
-		return fmt.Errorf("command %q: name must not include the leading slash", name)
-	case strings.ContainsAny(name, " \t\n"):
-		return fmt.Errorf("command %q: name must not contain whitespace", name)
+	case strings.HasPrefix(c.Name, "/"):
+		return fmt.Errorf("command %q: name must not include the leading slash", c.Name)
+	case strings.ContainsAny(c.Name, " \t\n"):
+		return fmt.Errorf("command %q: name must not contain whitespace", c.Name)
 	case c.Run == nil:
-		return fmt.Errorf("command %q: nil handler", name)
+		return fmt.Errorf("command %q: nil handler", c.Name)
 	case c.Scriptability == InteractiveOnly && strings.TrimSpace(c.Reason) == "":
 		// UX.md §17.5: an interactive-only command must say why it can't be
 		// scripted, so the parity table never lists a silent interactive-only one.
-		return fmt.Errorf("command %q: interactive-only command must state a Reason", name)
+		return fmt.Errorf("command %q: interactive-only command must state a Reason", c.Name)
 	}
-	if _, dup := r.byName[name]; dup {
-		return fmt.Errorf("command %q: already registered", name)
-	}
-	r.byName[name] = c
 	return nil
 }
 

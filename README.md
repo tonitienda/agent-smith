@@ -119,6 +119,16 @@ Inside the chat, type `/` to open the command palette. `/cost` (AS-020) shows th
 
 `/clean` (AS-028) edits the window by removing segments you no longer need — pass the handles from `/context`: `/clean <handle>…` previews exactly what would leave the window and the tokens/$ it reclaims (tool-call/result pairs are removed together, and very recent blocks draw a warning) without changing anything; `/clean --apply` confirms, `/clean --undo` restores the most recent removal, `/clean --cancel` discards a preview. Nothing ever leaves the log — a removal is an appended exclusion event and an undo is its exact reversal (PRD D3) — and excluded blocks stay browsable in the "Excluded from the window" section of `/context`.
 
+**Custom slash commands** (AS-033) let you define your own commands as Markdown files — a prompt template the model runs. Drop `name.md` into `.agent-smith/commands/` (per project) or `<user-config-dir>/smith/commands/` (everywhere); it becomes `/name` the next time you open the palette, no restart needed. The body is the prompt, with `$ARGUMENTS` (the whole argument string) and `$1`, `$2`, … (positional) substituted in; an optional `---`-fenced frontmatter sets a `description` and `argument-hint` for `/help`. The layout matches Claude Code's, so an existing command file works unmodified. A project command beats a user one of the same name (and `/help` says so); a built-in name like `/cost` always wins. Example — `.agent-smith/commands/review.md`:
+
+```markdown
+---
+description: Review a file for bugs
+argument-hint: "<path>"
+---
+Review $1 for correctness bugs and suggest fixes.
+```
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).

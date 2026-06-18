@@ -222,3 +222,28 @@ func names(cmds []Command) []string {
 	}
 	return out
 }
+
+func TestUpsertReplacesAndValidates(t *testing.T) {
+	r := NewRegistry()
+	mustRegister(t, r, Command{Name: "ship", Summary: "first", Run: noop})
+
+	// Register refuses to clobber; Upsert replaces.
+	if err := r.Register(Command{Name: "ship", Summary: "second", Run: noop}); err == nil {
+		t.Fatal("Register over an existing name succeeded, want duplicate error")
+	}
+	if err := r.Upsert(Command{Name: "ship", Summary: "second", Run: noop}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	got, ok := r.Lookup("ship")
+	if !ok || got.Summary != "second" {
+		t.Fatalf("after Upsert: got %+v ok=%v, want Summary=second", got, ok)
+	}
+
+	// Upsert enforces the same validation as Register.
+	if err := r.Upsert(Command{Name: "nope"}); err == nil {
+		t.Error("Upsert with nil handler succeeded, want error")
+	}
+	if err := r.Upsert(Command{Name: "/slash", Run: noop}); err == nil {
+		t.Error("Upsert with leading slash succeeded, want error")
+	}
+}

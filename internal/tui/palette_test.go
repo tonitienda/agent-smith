@@ -30,7 +30,7 @@ func (r *recorder) handler(out command.Output) command.Handler {
 func newCommandModel(t *testing.T, reg *command.Registry) model {
 	t.Helper()
 	m := newModel(&fakeRunner{}, staticMeta(Meta{Provider: "anthropic", Model: "m", Session: "s"}),
-		make(chan loop.UIEvent), nil, reg, nil, false, nil)
+		make(chan loop.UIEvent), nil, reg, nil, false, nil, nil)
 	return update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 }
 
@@ -306,7 +306,7 @@ func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
 			t.Fatalf("register %q: %v", n, err)
 		}
 	}
-	m := newModel(&fakeRunner{}, staticMeta(Meta{}), make(chan loop.UIEvent), nil, reg, nil, false, nil)
+	m := newModel(&fakeRunner{}, staticMeta(Meta{}), make(chan loop.UIEvent), nil, reg, nil, false, nil, nil)
 	// A short window: only a couple of rows beyond the input + status chrome.
 	m = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 8})
 	m = typeString(t, m, "/cmd") // matches all six
@@ -337,4 +337,37 @@ func paletteNames(cmds []command.Command) []string {
 		out[i] = c.Name
 	}
 	return out
+}
+
+// TestCustomCommandSubmitsExpandedPrompt verifies the AS-033 path: a command that
+// returns Output.Prompt is submitted as a user turn — the expanded text becomes a
+// user segment and a turn starts — rather than printed to the transcript.
+func TestCustomCommandSubmitsExpandedPrompt(t *testing.T) {
+	reg := sampleRegistry(t, command.Command{
+		Name: "fixit",
+		Mode: command.Inline,
+		Run: func(_ context.Context, args []string) (command.Output, error) {
+			return command.Output{Prompt: "please fix " + strings.Join(args, " ")}, nil
+		},
+	})
+	m := newCommandModel(t, reg)
+	m.textarea.SetValue("/fixit the bug")
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	m = runCmd(t, m, cmd) // applies commandDoneMsg, which submits the prompt
+
+	if !m.busy {
+		t.Fatal("custom command did not start a turn (busy=false)")
+	}
+	last := m.segs[len(m.segs)-1]
+	if last.kind != segUser || last.text != "please fix the bug" {
+		t.Fatalf("last segment = %+v, want user segment %q", last, "please fix the bug")
+	}
+	// The command itself must not also render an inline command segment.
+	for _, s := range m.segs {
+		if s.kind == segCommand {
+			t.Fatalf("unexpected command segment rendered for a prompt command: %+v", s)
+		}
+	}
 }
