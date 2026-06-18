@@ -273,6 +273,14 @@ func originFor(b schema.Block) string {
 	if b.Attribution != nil && b.Attribution.Skill != "" {
 		return "skill: " + b.Attribution.Skill // a portable skill (AS-034)
 	}
+	if b.Attribution != nil && b.Attribution.MCPServer != "" {
+		// An MCP tool result (AS-036): attribute it to its server (and tool) so
+		// /context credits MCP output per server, not just by the namespaced tool.
+		if b.Attribution.MCPTool != "" {
+			return "mcp: " + b.Attribution.MCPServer + "/" + b.Attribution.MCPTool
+		}
+		return "mcp: " + b.Attribution.MCPServer
+	}
 	switch {
 	case b.FileRead != nil && b.FileRead.Path != "":
 		return b.FileRead.Path
