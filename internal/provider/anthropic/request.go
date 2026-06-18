@@ -191,7 +191,10 @@ func systemText(b *schema.Block) string {
 func contentFor(b *schema.Block, breakpoints map[string]string) ([]any, error) {
 	cc := cacheControlFor(b, breakpoints)
 	switch b.Kind {
-	case schema.KindText:
+	case schema.KindText, schema.KindCompaction:
+		// A compaction block is a derived summary that stands in for the
+		// conversation it replaced (AS-038); it carries a text body, so it renders
+		// exactly like a text block and must reach the model.
 		return textContent(b, cc), nil
 	case schema.KindReasoning:
 		return reasoningContent(b), nil
@@ -202,8 +205,8 @@ func contentFor(b *schema.Block, breakpoints map[string]string) ([]any, error) {
 	case schema.KindFileRead:
 		return fileReadContent(b, cc), nil
 	default:
-		// Unknown/derived kinds (compaction, fallback markers) carry no
-		// model-facing content of their own; skip them rather than guess a shape.
+		// Other unknown/derived kinds (e.g. fallback markers) carry no model-facing
+		// content of their own; skip them rather than guess a shape.
 		return nil, nil
 	}
 }

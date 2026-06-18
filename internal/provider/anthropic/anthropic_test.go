@@ -15,6 +15,32 @@ import (
 
 func floatp(f float64) *float64 { return &f }
 
+// TestBuildWireRequestRendersCompaction confirms a derived compaction block
+// (AS-038) reaches the model as a user message rather than being skipped: the
+// summary must be visible for the session to continue coherently.
+func TestBuildWireRequestRendersCompaction(t *testing.T) {
+	req := provider.Request{
+		Model: "claude-opus-4-8",
+		Context: []schema.Block{
+			{ID: "c1", Kind: schema.KindCompaction, Role: schema.RoleUser, Text: &schema.TextBody{Text: "summary of earlier"}},
+			{ID: "u1", Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "and now this"}},
+		},
+	}
+	w, err := buildWireRequest(req, DefaultMaxTokens)
+	if err != nil {
+		t.Fatalf("buildWireRequest: %v", err)
+	}
+	if len(w.Messages) != 1 || w.Messages[0].Role != "user" {
+		t.Fatalf("messages = %+v, want one merged user message", w.Messages)
+	}
+	if len(w.Messages[0].Content) != 2 {
+		t.Fatalf("content = %+v, want compaction + text", w.Messages[0].Content)
+	}
+	if tx, ok := w.Messages[0].Content[0].(wireText); !ok || tx.Text != "summary of earlier" {
+		t.Errorf("first content = %+v, want the summary text", w.Messages[0].Content[0])
+	}
+}
+
 // --- request building -------------------------------------------------------
 
 func TestBuildWireRequestExtractsSystemAndAlternates(t *testing.T) {

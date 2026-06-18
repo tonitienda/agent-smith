@@ -13,6 +13,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/clean"
 	"github.com/tonitienda/agent-smith/internal/command"
+	"github.com/tonitienda/agent-smith/internal/compact"
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
@@ -93,6 +94,13 @@ type chatSession struct {
 	// invalidates it rather than rewinding the wrong log (mirrors pendingClean).
 	pendingRewind    *rewind.Plan
 	pendingRewindFor *session.Session
+
+	// pendingCompact holds the previewed /compact plan awaiting confirmation
+	// (/compact --apply) or discard (/compact --cancel), keyed to the session it
+	// was previewed against so a /clear or /resume between preview and apply
+	// invalidates it rather than compacting the wrong log (mirrors pendingClean).
+	pendingCompact    *compact.Plan
+	pendingCompactFor *session.Session
 
 	// meter memo: recomputed only when the active log, its length, or the model
 	// changes, so the per-delta status-line refresh stays O(1) (mirrors AS-025).
@@ -776,6 +784,292 @@ func rewindLabel(c rewind.Checkpoint) string {
 		return fmt.Sprintf("%s⚑ mark: %s", stamp, c.Label)
 	}
 	return fmt.Sprintf("%sturn %d: %s", stamp, c.Turn, c.Label)
+}
+
+// cmdCompact summarizes the older conversation into one derived block (AS-038
+// /compact, PRD §7.16, Appendix A): the fallback for when /clean and /tidy
+// aren't enough. The summary is produced by the cheap-tier model and recorded as
+// a schema.KindCompaction block whose source blocks are excluded but kept on the
+// log (D3) — so the window shrinks, the log keeps everything, and /compact --undo
+// restores the exact prior projection.
+//
+//   - /compact          preview what would be summarized (mutates nothing) and stage it
+//   - /compact --apply   confirm: summarize with the cheap tier and append the compaction
+//   - /compact --undo    reverse the most recent compaction
+//   - /compact --cancel  discard the staged preview
+func (s *chatSession) cmdCompact(ctx context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		switch args[0] {
+		case "--apply":
+			return s.compactApply(ctx)
+		case "--undo":
+			return s.compactUndo()
+		case "--cancel":
+			return s.compactCancel()
+		default:
+			return command.Output{}, fmt.Errorf("unknown /compact flag %q (use --apply, --undo, or --cancel)", args[0])
+		}
+	}
+	return s.compactPreview()
+}
+
+// compactPreview stages a compaction: it projects the live window, selects the
+// compactable span, and stores the plan pending confirmation. Nothing is
+// appended to the log and no model is called.
+func (s *chatSession) compactPreview() (command.Output, error) {
+	// Snapshot under the lock, then project after releasing it: the projection and
+	// composition can be heavy on a large session, and holding s.mu through them
+	// would stall the status-line meter and concurrent command dispatch (mirrors
+	// cmdContext / rehydrate).
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model, pricing, sess := s.model, s.pricing, s.sess
+	s.mu.Unlock()
+
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	plan := compact.Preview(proj, pricing, model, time.Now())
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sess != sess {
+		// A /clear or /resume landed while we were projecting; the plan is for a
+		// stale log, so discard it rather than staging it against the wrong session.
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: "The session changed while previewing. Run /compact again."}, nil
+	}
+	if plan.Empty() {
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: compact.RenderPreview(plan)}, nil
+	}
+	s.pendingCompact, s.pendingCompactFor = &plan, s.sess
+	return command.Output{Text: compact.RenderPreview(plan)}, nil
+}
+
+// compactApply confirms the staged preview: it fires the pre-compact hook, runs
+// the cheap-tier summarization, then appends the usage record and the derived
+// compaction block. The plan is recomputed against the current log so any turns
+// appended since the preview are folded in too (mirrors rewindApply). The plan is
+// discarded once applied.
+func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) {
+	s.mu.Lock()
+	if s.pendingCompact == nil {
+		s.mu.Unlock()
+		return command.Output{Text: "Nothing staged. Run /compact to preview a compaction first."}, nil
+	}
+	if s.pendingCompactFor != s.sess {
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		s.mu.Unlock()
+		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /compact again."}, nil
+	}
+	// Recompute against the current log rather than trusting the preview snapshot:
+	// newer turns must be summarized too, or they would stay live and the window
+	// would not shrink as the preview promised.
+	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
+	plan := compact.Preview(proj, s.pricing, s.model, time.Now())
+	log, sessID := s.sess.Log, s.sess.ID
+	vendor, model := s.cheapModel()
+	prov := s.providers[vendor]
+	s.mu.Unlock()
+
+	if plan.Empty() {
+		s.clearPendingCompact()
+		return command.Output{Text: "Nothing to compact."}, nil
+	}
+	if prov == nil {
+		return command.Output{}, fmt.Errorf("no provider configured for vendor %q", vendor)
+	}
+
+	// Fire the pre-compact lifecycle hook (AS-035) before any summarization: a
+	// hook may veto the compaction (e.g. a policy that forbids lossy edits).
+	out := fireLifecycle(ctx, s.hooks, log, hook.Payload{
+		Event:   hook.PreCompact,
+		Session: sessID,
+		Reason:  "user", // /compact is user-invoked, not auto-triggered
+	})
+	if out.Blocked {
+		s.clearPendingCompact()
+		return command.Output{Text: "Compaction blocked by a pre-compact hook: " + out.Reason}, nil
+	}
+
+	summary, tokens, stopReason, err := summarize(ctx, prov, model, plan.Sources)
+	if err != nil {
+		return command.Output{}, fmt.Errorf("summarize for /compact: %w", err)
+	}
+	block, ok := compact.Build(plan, summary)
+	if !ok {
+		s.clearPendingCompact()
+		return command.Output{Text: "The summarizer returned nothing; the conversation was left unchanged."}, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Record the summarization's token usage so /cost itemizes it on the cheap
+	// tier (AS-038 AC4); a nil-usage surface simply records nothing.
+	if tokens != nil {
+		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
+			return command.Output{}, fmt.Errorf("record compaction usage: %w", err)
+		}
+	}
+	if _, err := s.sess.Log.Append(block); err != nil {
+		return command.Output{}, fmt.Errorf("record compaction: %w", err)
+	}
+	s.pendingCompact, s.pendingCompactFor = nil, nil
+	return command.Output{
+		Text: fmt.Sprintf("Compacted %s into one summary, reclaiming ~%d tokens. Restore with /compact --undo.",
+			pluralBlocks(len(plan.SourceIDs)), plan.Tokens),
+		ResetView: true,
+	}, nil
+}
+
+// compactUndo reverses the most recent compaction by appending a
+// counter-exclusion. The log is never rewritten, so the restoration is exact.
+func (s *chatSession) compactUndo() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, removed, ok := compact.Undo(s.sess.Log.Events())
+	if !ok {
+		return command.Output{Text: "No /compact to undo in this session."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record compaction undo: %w", err)
+	}
+	return command.Output{
+		Text:      fmt.Sprintf("Restored %s to the window.", pluralBlocks(removed)),
+		ResetView: true,
+	}, nil
+}
+
+// compactCancel discards a staged preview without touching the log.
+func (s *chatSession) compactCancel() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingCompact == nil {
+		return command.Output{Text: "Nothing staged to cancel."}, nil
+	}
+	s.pendingCompact, s.pendingCompactFor = nil, nil
+	return command.Output{Text: "Discarded the staged /compact preview. Nothing changed."}, nil
+}
+
+// clearPendingCompact drops a staged plan under the lock. It is used on the
+// abort paths of compactApply, which release the lock to run the model call.
+func (s *chatSession) clearPendingCompact() {
+	s.mu.Lock()
+	s.pendingCompact, s.pendingCompactFor = nil, nil
+	s.mu.Unlock()
+}
+
+// cheapModel resolves the cheap-tier model to summarize with, keeping the active
+// vendor (so its provider is already configured) and dropping to that vendor's
+// cheapest family (AS-038 AC4). An unknown vendor falls back to the active model
+// rather than guessing an id the provider would reject.
+func (s *chatSession) cheapModel() (vendor, model string) {
+	switch s.provName {
+	case "anthropic":
+		return s.provName, "claude-haiku-4-5"
+	case "openai":
+		return s.provName, "gpt-4o-mini"
+	default:
+		return s.provName, s.model
+	}
+}
+
+// pluralBlocks labels a block count for the compact confirm/undo lines.
+func pluralBlocks(n int) string {
+	if n == 1 {
+		return "1 block"
+	}
+	return strconv.Itoa(n) + " blocks"
+}
+
+// summarize runs a one-shot, non-streaming-consumed summarization turn against
+// prov with model, asking it to condense the rendered transcript of the
+// compactable blocks. It returns the summary text, the turn's reported token
+// usage (nil when the surface reports none), and the turn's stop reason (so the
+// recorded usage event reflects max_tokens/refusal rather than asserting
+// end_turn). Caching is disabled — this prefix recurs only once.
+func summarize(ctx context.Context, prov provider.Provider, model string, sources []schema.Block) (string, *schema.Tokens, string, error) {
+	req := provider.Request{
+		Model: model,
+		Context: []schema.Block{
+			{
+				ID:   schema.NewID(),
+				Kind: schema.KindText,
+				Role: schema.RoleSystem,
+				Text: &schema.TextBody{Text: summarizeInstruction, Subtype: schema.TextSubtypeNormal},
+			},
+			{
+				ID:   schema.NewID(),
+				Kind: schema.KindText,
+				Role: schema.RoleUser,
+				Text: &schema.TextBody{Text: "Transcript to summarize:\n\n" + compact.Transcript(sources), Subtype: schema.TextSubtypeNormal},
+			},
+		},
+		Params: provider.SamplingParams{MaxTokens: 1024},
+		Cache:  provider.CacheHints{Disabled: true},
+	}
+	stream, err := prov.Stream(ctx, req)
+	if err != nil {
+		return "", nil, "", err
+	}
+	defer stream.Close() //nolint:errcheck // best-effort once drained
+
+	var text strings.Builder
+	var usage *schema.Tokens
+	var stopReason string
+	for stream.Next() {
+		ev := stream.Event()
+		switch ev.Type {
+		case provider.EventTextDelta:
+			text.WriteString(ev.TextDelta)
+		case provider.EventUsage:
+			usage = mergeTokens(usage, ev.Usage)
+		case provider.EventTurnStop:
+			stopReason = ev.StopReason
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return "", nil, "", err
+	}
+	return text.String(), usage, stopReason, nil
+}
+
+// summarizeInstruction is the cheap-tier summarizer's system prompt.
+const summarizeInstruction = "You compress conversation history. Summarize the transcript below into a concise " +
+	"summary that preserves decisions made, facts established, file paths, identifiers, and any open or pending tasks, " +
+	"so the assistant can keep working without the full history. Write the summary as plain prose. Output only the summary."
+
+// mergeTokens sums two optional usage breakdowns field-wise, treating a nil
+// field as unreported (not zero), so the disjoint usage events a turn reports
+// (input at the start, output at the end) accumulate. It mirrors the loop's own
+// accumulation; a nil result means neither side reported anything.
+func mergeTokens(dst, src *schema.Tokens) *schema.Tokens {
+	if src == nil {
+		return dst
+	}
+	if dst == nil {
+		dst = &schema.Tokens{}
+	}
+	dst.Input = addInt(dst.Input, src.Input)
+	dst.Output = addInt(dst.Output, src.Output)
+	dst.CacheRead = addInt(dst.CacheRead, src.CacheRead)
+	dst.CacheWrite = addInt(dst.CacheWrite, src.CacheWrite)
+	dst.Reasoning = addInt(dst.Reasoning, src.Reasoning)
+	return dst
+}
+
+// addInt sums two optional counts, preserving "nil means unreported": nil + nil
+// stays nil, and a reported value (even zero) makes the result present. When one
+// side is nil the other pointer is returned as-is — no caller mutates the
+// pointed-to int, so sharing it avoids a needless heap allocation.
+func addInt(a, b *int) *int {
+	if a == nil {
+		return b
+	}
+	if b == nil {
+		return a
+	}
+	sum := *a + *b
+	return &sum
 }
 
 // cmdClear ends the current session and starts a fresh one (AS-023 /clear). The

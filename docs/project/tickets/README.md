@@ -71,7 +71,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-035](AS-035-hooks.md) | Lifecycle hooks | capability | done | 013, 018, 031 |
 | [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | done | 013, 016, 031 |
 | [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | done | 006, 022 |
-| [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | ready | 006, 022 |
+| [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | done | 006, 022 |
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | ready | 020, 022, 031 |
@@ -111,6 +111,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
 | [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | ready | 036 |
 | [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | **needs clarification** | 037 |
+| [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | ready | 038, 025, 031 |
 
 ## Suggested build order
 
