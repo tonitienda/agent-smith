@@ -817,10 +817,26 @@ func (s *chatSession) cmdCompact(ctx context.Context, args []string) (command.Ou
 // compactable span, and stores the plan pending confirmation. Nothing is
 // appended to the log and no model is called.
 func (s *chatSession) compactPreview() (command.Output, error) {
+	// Snapshot under the lock, then project after releasing it: the projection and
+	// composition can be heavy on a large session, and holding s.mu through them
+	// would stall the status-line meter and concurrent command dispatch (mirrors
+	// cmdContext / rehydrate).
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model, pricing, sess := s.model, s.pricing, s.sess
+	s.mu.Unlock()
+
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	plan := compact.Preview(proj, pricing, model, time.Now())
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
-	plan := compact.Preview(proj, s.pricing, s.model, time.Now())
+	if s.sess != sess {
+		// A /clear or /resume landed while we were projecting; the plan is for a
+		// stale log, so discard it rather than staging it against the wrong session.
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: "The session changed while previewing. Run /compact again."}, nil
+	}
 	if plan.Empty() {
 		s.pendingCompact, s.pendingCompactFor = nil, nil
 		return command.Output{Text: compact.RenderPreview(plan)}, nil
@@ -1038,18 +1054,17 @@ func mergeTokens(dst, src *schema.Tokens) *schema.Tokens {
 }
 
 // addInt sums two optional counts, preserving "nil means unreported": nil + nil
-// stays nil, and a reported value (even zero) makes the result present.
+// stays nil, and a reported value (even zero) makes the result present. When one
+// side is nil the other pointer is returned as-is — no caller mutates the
+// pointed-to int, so sharing it avoids a needless heap allocation.
 func addInt(a, b *int) *int {
-	if a == nil && b == nil {
-		return nil
+	if a == nil {
+		return b
 	}
-	sum := 0
-	if a != nil {
-		sum += *a
+	if b == nil {
+		return a
 	}
-	if b != nil {
-		sum += *b
-	}
+	sum := *a + *b
 	return &sum
 }
 
