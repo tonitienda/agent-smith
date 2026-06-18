@@ -95,6 +95,39 @@ func TestMemorySegmentAttributed(t *testing.T) {
 	}
 }
 
+// TestSkillSegmentAttributed is AS-034 AC2: a skill's loaded instructions (which
+// ride in on a tool_result attributed to the skill) show in /context under a
+// dedicated "skill" group, attributed to "skill: <name>", with a non-zero token
+// estimate — so skill cost is visible and accountable.
+func TestSkillSegmentAttributed(t *testing.T) {
+	sk := schema.Block{
+		ID:          "s1",
+		Kind:        schema.KindToolResult,
+		Role:        schema.RoleTool,
+		TS:          base.Add(-time.Minute),
+		Attribution: &schema.Attribution{Tool: "skill", Skill: "research"},
+		ToolResult: &schema.ToolResultBody{
+			ToolUseID: "u1",
+			Content:   []schema.Part{{Type: "text", Text: strings.Repeat("z", 200)}},
+		},
+	}
+
+	c := build(t, []schema.Block{sk}, composition.SortSize)
+	if len(c.Segments) != 1 {
+		t.Fatalf("got %d segments, want 1", len(c.Segments))
+	}
+	seg := c.Segments[0]
+	if seg.Group != "skill" {
+		t.Errorf("Group = %q, want skill", seg.Group)
+	}
+	if seg.Origin != "skill: research" {
+		t.Errorf("Origin = %q, want \"skill: research\"", seg.Origin)
+	}
+	if seg.Tokens == 0 {
+		t.Error("skill segment estimated to 0 tokens")
+	}
+}
+
 // TestTopConsumersRanked confirms the largest segments lead the list, so a user
 // can read the top consumers off the top (PRD AC: top 3 in under 5s).
 func TestTopConsumersRanked(t *testing.T) {

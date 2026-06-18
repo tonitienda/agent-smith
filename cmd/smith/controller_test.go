@@ -34,7 +34,7 @@ func newTestController(t *testing.T) *chatSession {
 		"anthropic": anthropic.New("k"),
 		"openai":    openai.New("k"),
 	}
-	ctl := newChatSession(store, tool.NewRegistry(), cost.Embedded(), providers, sess, "anthropic", "claude-opus-4-8", t.TempDir())
+	ctl := newChatSession(store, tool.NewRegistry(), cost.Embedded(), providers, sess, "anthropic", "claude-opus-4-8", t.TempDir(), nil)
 	if err := ctl.start(func(loop.UIEvent) {}); err != nil {
 		t.Fatalf("start: %v", err)
 	}

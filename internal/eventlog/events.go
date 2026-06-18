@@ -101,6 +101,35 @@ func NewModelSwitch(producer, vendor, model string) schema.Block {
 	}
 }
 
+// KindSkillLoad is the event kind for a skill-load event: a control event
+// recording that a portable skill (AS-034) was available to the model this
+// session, so the living-skills analyzers (AS-047/048/049) have a stable hook
+// point for "what skills were loaded" without re-scanning the filesystem. It is
+// a non-content kind carrying no content body — the skill name lives on
+// Attribution.Skill and the producer ("skill-loader") on Provenance.
+//
+// Like the other control kinds above it lives here rather than in the frozen
+// content-block schema (AS-003) because it is a harness/log control event, not a
+// content block; the schema tolerates non-content kinds (Block.Validate imposes
+// no body constraint on them) and the projection engine (AS-006) never renders
+// it into model-facing context. A skill's actual instructions enter the context
+// (and so /context) only when the model invokes the skill — that activation is
+// recorded as the skill tool's tool_result, attributed to the skill.
+const KindSkillLoad schema.Kind = "skill_load"
+
+// NewSkillLoad builds a skill-load event for the named skill, attributed to
+// producer (the loader). The returned block has a fresh ID; its Seq and append
+// timestamp are assigned when it is appended to a Log.
+func NewSkillLoad(producer, name string) schema.Block {
+	return schema.Block{
+		ID:          schema.NewID(),
+		Kind:        KindSkillLoad,
+		Role:        schema.RoleHarness,
+		Provenance:  &schema.Provenance{Producer: producer},
+		Attribution: &schema.Attribution{Skill: name},
+	}
+}
+
 // Derive stamps a caller-built replacement block as a derived-block event:
 // derived from the given source block IDs and attributed to producer. The
 // derived block replaces its sources in the projection — the sources are

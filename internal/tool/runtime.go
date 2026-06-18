@@ -362,7 +362,7 @@ func (r *Runtime) record(call schema.Block, out Output) (schema.Block, error) {
 			Producer:    producer,
 			DerivedFrom: []string{call.ID},
 		},
-		Attribution: &schema.Attribution{Tool: call.ToolCall.Name},
+		Attribution: attribution(call.ToolCall.Name, out.Attribution),
 		ToolResult: &schema.ToolResultBody{
 			ToolUseID: call.ToolCall.ToolUseID,
 			Content:   parts,
@@ -407,6 +407,21 @@ func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody) e
 		return fmt.Errorf("tool: log file_read: %w", err)
 	}
 	return nil
+}
+
+// attribution builds the result block's attribution: the tool's own name always,
+// merged with any extra source a tool supplied via Output.Attribution (a skill,
+// AS-034; an MCP server/tool, AS-036). The tool name is authoritative and is
+// never overwritten by the merge.
+func attribution(toolName string, extra *schema.Attribution) *schema.Attribution {
+	if extra == nil {
+		return &schema.Attribution{Tool: toolName}
+	}
+	// Copy every field the tool supplied, then assert the authoritative tool name;
+	// copying the whole struct stays correct as new attribution fields are added.
+	attr := *extra
+	attr.Tool = toolName
+	return &attr
 }
 
 // truncateText bounds a single string at r.maxBytes on a UTF-8 rune boundary,

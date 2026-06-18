@@ -129,6 +129,16 @@ argument-hint: "<path>"
 Review $1 for correctness bugs and suggest fixes.
 ```
 
+**Portable skills** (AS-034) are instruction bundles the model loads on demand. Each skill is a directory holding a `SKILL.md` — a `---`-fenced frontmatter with `name` and `description`, then a Markdown body of instructions. Drop them under `.agent-smith/skills/<name>/` (per project) or `<user-config-dir>/smith/skills/<name>/` (everywhere); a project skill shadows a user one of the same name. Discovered skills are offered to the model through a single `skill` tool: when a request matches a skill's description the model invokes it by name and the instructions enter the conversation, attributed to the skill so `/context` shows their token cost under a **skill** group. The layout matches Claude Code's, so an existing skill loads unmodified. Example — `.agent-smith/skills/changelog/SKILL.md`:
+
+```markdown
+---
+name: changelog
+description: Write a release changelog from the git history
+---
+Summarize the commits since the last tag into a Keep-a-Changelog entry.
+```
+
 ## License
 
 Apache-2.0 (Decision Log D8 — OSS-first). See [LICENSE](LICENSE).

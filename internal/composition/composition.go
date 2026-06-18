@@ -238,6 +238,12 @@ func priceTokens(tokens int, rate cost.Rate, priced bool) float64 {
 // text each get their own; system and harness blocks (memory, instructions)
 // fold into "system+memory" per §7.11.
 func groupFor(b schema.Block) string {
+	// A skill's loaded instructions (AS-034) ride in on a tool_result but are
+	// standing context, not a one-off tool answer; give them their own group so
+	// /context shows skill cost distinctly from ordinary tool output.
+	if b.Attribution != nil && b.Attribution.Skill != "" {
+		return "skill"
+	}
 	switch b.Kind {
 	case schema.KindFileRead:
 		return "file read"
@@ -263,6 +269,9 @@ func groupFor(b schema.Block) string {
 func originFor(b schema.Block) string {
 	if path, ok := memory.Source(b); ok {
 		return path // a memory file (AS-032): attribute the segment to its source
+	}
+	if b.Attribution != nil && b.Attribution.Skill != "" {
+		return "skill: " + b.Attribution.Skill // a portable skill (AS-034)
 	}
 	switch {
 	case b.FileRead != nil && b.FileRead.Path != "":

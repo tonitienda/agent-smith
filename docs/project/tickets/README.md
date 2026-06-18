@@ -67,7 +67,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-031](AS-031-config-system.md) | Layered configuration system | foundation | done | 001 |
 | [AS-032](AS-032-memory-files.md) | Memory files (AGENT/CLAUDE/AGENTS.md merge) | capability | done | 006, 018, 031 |
 | [AS-033](AS-033-custom-slash-commands.md) | Custom slash commands | commands | done | 022, 031 |
-| [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | ready | 018, 031 |
+| [AS-034](AS-034-skills-loading.md) | Portable skills loading | capability | done | 018, 031 |
 | [AS-035](AS-035-hooks.md) | Lifecycle hooks | capability | ready | 013, 018, 031 |
 | [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | ready | 013, 016, 031 |
 | [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | ready | 006, 022 |

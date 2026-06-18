@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
@@ -63,6 +64,17 @@ func startChat(resumeID string, noSplash bool, override string) error {
 			return err
 		}
 	}
+	// Scan portable skills once (AS-034); the same snapshot builds the skill tool
+	// below and seeds the skill_load events, so the offered catalog and the logged
+	// events can't diverge. seedSkills reconciles (deduped), so it is safe on a
+	// fresh, cleared, or resumed session alike.
+	skills, err := skill.Load(skill.UserDir(), skill.ProjectDir(wd))
+	if err != nil {
+		return fmt.Errorf("load skills: %w", err)
+	}
+	if err := seedSkills(sess, skills); err != nil {
+		return err
+	}
 	debugLog, err := openDebugLog(sess.Dir)
 	if err != nil {
 		return err
@@ -87,6 +99,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	if err := reg.Register(shell); err != nil {
 		return fmt.Errorf("register shell tool: %w", err)
 	}
+	if err := registerSkillTool(reg, skills); err != nil {
+		return err
+	}
 
 	pricing, err := sessionPricing(override)
 	if err != nil {
@@ -110,7 +125,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		}
 	}
 
-	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd)
+	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills)
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.

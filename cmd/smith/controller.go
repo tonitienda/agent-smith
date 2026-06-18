@@ -21,6 +21,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/schema"
@@ -58,6 +59,11 @@ type chatSession struct {
 	// wd is the working directory the session runs in; it is the root for memory
 	// file discovery (AS-032) when a fresh session is created mid-run (/clear).
 	wd string
+	// skills is the portable-skill snapshot scanned once at startup (AS-034). It
+	// builds the skill tool and seeds skill_load events, so a fresh session created
+	// mid-run (/clear) records exactly the catalog the tool offers — they cannot
+	// diverge from an in-flight filesystem change.
+	skills []skill.Skill
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -93,7 +99,7 @@ type chatSession struct {
 // the default Anthropic + OpenAI providers and the model for the first turn. The
 // engine is not built yet: the caller sets the observer (from the TUI) and calls
 // start so turn progress is wired before the first turn runs.
-func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string) *chatSession {
+func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string, skills []skill.Skill) *chatSession {
 	return &chatSession{
 		store:     store,
 		tools:     tools,
@@ -104,6 +110,7 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 		model:     model,
 		project:   filepath.Base(wd),
 		wd:        wd,
+		skills:    skills,
 	}
 }
 
@@ -533,6 +540,10 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	// session starts from the same standing context a freshly launched one does
 	// (AS-032). A discovery error is surfaced rather than silently dropping it.
 	if err := seedMemory(s.wd, fresh); err != nil {
+		_ = fresh.Log.Close()
+		return command.Output{}, err
+	}
+	if err := seedSkills(fresh, s.skills); err != nil {
 		_ = fresh.Log.Close()
 		return command.Output{}, err
 	}
