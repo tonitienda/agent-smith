@@ -14,7 +14,7 @@ C4Container
     System_Ext(github, "GitHub")
 
     System_Boundary(repo, "agent-smith repository") {
-        Container(smith, "smith binary", "Go CLI/TUI", "Single user-facing executable built from cmd/smith.")
+        Container(smith, "smith binary", "Go CLI/TUI", "Single user-facing executable: cmd/smith is the process composition root, while internal/smithapp owns reusable app wiring.")
         Container(schema_guard, "schema-guard", "Go command", "Checks additive-only schema evolution for the open content-block schema.")
         Container(ticket_sync, "ticket-sync", "Go command", "Mirrors ticket markdown files to GitHub issues after merge.")
         ContainerDb(pricing, "Pricing data", "JSON", "Bundled model pricing table with optional user override.")
@@ -44,7 +44,7 @@ C4Container
 
 | Container | Code | Criticality | Notes |
 |---|---|---:|---|
-| `smith` binary | `cmd/smith`, `internal/*`, `schema` | Critical | Main product. Contains the TUI, headless CLI, shared command handlers, agent loop, providers, tools, and storage wiring. See [Core components](core-components.md) for C4 level 3. |
+| `smith` binary | `cmd/smith`, `internal/smithapp`, `internal/*`, `schema` | Critical | Main product. `cmd/smith` stays thin around process entry, streams, TTY detection, flags, and the command tree; reusable router, provider/model, session, and built-in tool wiring lives in `internal/smithapp`. The TUI, headless CLI, shared command handlers, agent loop, providers, tools, and storage remain in-process. See [Core components](core-components.md) for C4 level 3. |
 | Session store | `internal/session`, `internal/eventlog` | Critical | Project-scoped durable JSONL event log plus small metadata. This is the audit/replay substrate. See [Core components](core-components.md). |
 | Provider APIs | `internal/provider`, `internal/provider/anthropic`, `internal/provider/openai` | Critical | External systems, but critical to the harness boundary because all vendor wire formats normalize into one stream. See [Core components](core-components.md). |
 | Tool/capability integrations | `internal/tool`, `internal/mcp`, `internal/hook`, `internal/skill`, `internal/customcmd`, `internal/memory` | Important | Extension surface for local action and reusable context. Covered at component level because tools are central to safety and observability. |
