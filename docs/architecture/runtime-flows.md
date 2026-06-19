@@ -11,28 +11,28 @@ sequenceDiagram
     participant ChatController as chatSession controller
     participant EventLog as event log
     participant ProjectionEngine as projection engine
-    participant AgentEngine as agent engine
+    participant AgentLoop as Agent turn engine
     participant ProviderAdapter as provider adapter/API
     participant ToolRuntime as tool runtime
 
     User->>TUIFace: Submit prompt
     TUIFace->>ChatController: Run(ctx, prompt)
     ChatController->>EventLog: Append user block
-    ChatController->>AgentEngine: Run turn
-    AgentEngine->>ProjectionEngine: Project(log events, target model)
-    ProjectionEngine-->>AgentEngine: Live context blocks
-    AgentEngine->>ProviderAdapter: Stream(request with context/tools)
-    ProviderAdapter-->>AgentEngine: Text / reasoning / tool-call / usage events
-    AgentEngine->>EventLog: Append assistant and tool-call blocks
+    ChatController->>AgentLoop: Run turn
+    AgentLoop->>ProjectionEngine: Project(log events, target model)
+    ProjectionEngine-->>AgentLoop: Live context blocks
+    AgentLoop->>ProviderAdapter: Stream(request with context/tools)
+    ProviderAdapter-->>AgentLoop: Text / reasoning / tool-call / usage events
+    AgentLoop->>EventLog: Append assistant and tool-call blocks
     alt model requests tools
-        AgentEngine->>ToolRuntime: ExecuteBatch(tool calls)
+        AgentLoop->>ToolRuntime: ExecuteBatch(tool calls)
         ToolRuntime->>ToolRuntime: Validate args, permission gate, hooks, timeout, truncation
         ToolRuntime->>EventLog: Append linked tool_result blocks
-        ToolRuntime-->>AgentEngine: Tool results
-        AgentEngine->>ProjectionEngine: Re-project updated log
-        AgentEngine->>ProviderAdapter: Continue with tool results in context
+        ToolRuntime-->>AgentLoop: Tool results
+        AgentLoop->>ProjectionEngine: Re-project updated log
+        AgentLoop->>ProviderAdapter: Continue with tool results in context
     end
-    AgentEngine-->>ChatController: Stop reason and usage events
+    AgentLoop-->>ChatController: Stop reason and usage events
     ChatController-->>TUIFace: UI events, transcript updates, meter data
     TUIFace-->>User: Render response and status
 ```
@@ -69,15 +69,15 @@ sequenceDiagram
     participant SessionStore as session store
     participant EventLog as event log
     participant ChatController as controller
-    participant AgentEngine as agent engine
+    participant AgentLoop as Agent turn engine
 
     User->>CommandFace: smith session resume ID or /resume
     CommandFace->>SessionStore: Open(project-scoped session id)
     SessionStore->>EventLog: Replay events.jsonl
     EventLog-->>SessionStore: In-memory log with monotonic sequence state
     SessionStore-->>ChatController: Session metadata and log
-    ChatController->>AgentEngine: Rebuild engine over resumed log/provider/tools
-    AgentEngine-->>ChatController: Ready for next projected turn
+    ChatController->>AgentLoop: Rebuild engine over resumed log/provider/tools
+    AgentLoop-->>ChatController: Ready for next projected turn
     ChatController-->>User: Resume summary
 ```
 
@@ -89,13 +89,13 @@ sequenceDiagram
     participant CLIRouter as CLI router
     participant HeadlessRunner as headless runner
     participant ChatController as session wiring
-    participant AgentEngine as agent engine
+    participant AgentLoop as Agent turn engine
     participant OutputRenderer as stdout and stderr renderer
 
     Script->>CLIRouter: smith run "prompt" --output json|plain|stream-json
     CLIRouter->>HeadlessRunner: Parse prompt, config, output mode
     HeadlessRunner->>ChatController: Create/open session, providers, tools, hooks
-    ChatController->>AgentEngine: Run prompt to stop condition
-    AgentEngine-->>HeadlessRunner: Normalized UI events and final state
+    ChatController->>AgentLoop: Run prompt to stop condition
+    AgentLoop-->>HeadlessRunner: Normalized UI events and final state
     HeadlessRunner->>OutputRenderer: Write result to stdout; diagnostics to stderr
 ```
