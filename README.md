@@ -82,7 +82,10 @@ Background/async runner, replayable runs + OpenTelemetry, cross-session analytic
 
 ## Repository layout
 
+Architecture docs live under [`docs/architecture/`](docs/architecture/README.md). Start with the C4 [system context](docs/architecture/system-context.md), then the [container](docs/architecture/containers.md) and [core component](docs/architecture/core-components.md) views when changing runtime seams.
+
 ```
+docs/architecture/         C4 architecture docs and runtime flow diagrams
 docs/project/PRD.md        product spec — read the Decision Log (D0–D9) first
 docs/project/tickets/      one file per ticket (AS-NNN-slug.md) + index README
 cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
