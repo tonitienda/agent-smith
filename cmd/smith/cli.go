@@ -22,7 +22,6 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/tool"
-	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -203,12 +202,12 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := smithapp.ProvidersFn()
-	model := smithapp.ChatModel()
+	providers := appRuntime.Providers()
+	model := appRuntime.ChatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
 		model = m
 	}
-	provName, model := smithapp.SelectProviderModel(pricing, providers, model)
+	provName, model := appRuntime.SelectProviderModel(pricing, providers, model)
 	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil, nil)
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
@@ -401,7 +400,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 		return err
 	}
 
-	tools, err := headlessTools(wd)
+	tools, err := appRuntime.BuiltinTools(wd)
 	if err != nil {
 		return err
 	}
@@ -476,35 +475,13 @@ func headlessProvider(override string) (provider.Provider, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := smithapp.ProvidersFn()
-	provName, model := smithapp.SelectProviderModel(pricing, providers, smithapp.ChatModel())
+	providers := appRuntime.Providers()
+	provName, model := appRuntime.SelectProviderModel(pricing, providers, appRuntime.ChatModel())
 	prov, ok := providers[provName]
 	if !ok {
 		return nil, "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
 	}
 	return prov, model, nil
-}
-
-// headlessTools builds the built-in file and shell tools for a headless run.
-func headlessTools(wd string) (*tool.Registry, error) {
-	reg := tool.NewRegistry()
-	fs, err := builtin.NewFS(wd)
-	if err != nil {
-		return nil, fmt.Errorf("init file tools: %w", err)
-	}
-	for _, t := range fs.Tools() {
-		if err := reg.Register(t); err != nil {
-			return nil, fmt.Errorf("register tool: %w", err)
-		}
-	}
-	shell, err := builtin.NewShell(wd)
-	if err != nil {
-		return nil, fmt.Errorf("init shell tool: %w", err)
-	}
-	if err := reg.Register(shell); err != nil {
-		return nil, fmt.Errorf("register shell tool: %w", err)
-	}
-	return reg, nil
 }
 
 // configCommand reads and writes layered config (D-CLI-6). `get` resolves a key

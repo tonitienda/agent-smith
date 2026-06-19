@@ -57,3 +57,16 @@ func TestBuildCLIBareHandlerIsInjected(t *testing.T) {
 		t.Fatal("bare handler was not called")
 	}
 }
+
+func TestRuntimeUsesInjectedEnvironmentForModel(t *testing.T) {
+	rt := NewRuntime(RuntimeConfig{Getenv: func(key string) string {
+		if key == "SMITH_MODEL" {
+			return "gpt-test"
+		}
+		return ""
+	}})
+
+	if got := rt.ChatModel(); got != "gpt-test" {
+		t.Fatalf("ChatModel() = %q, want injected model", got)
+	}
+}

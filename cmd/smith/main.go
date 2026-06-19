@@ -10,6 +10,8 @@ import (
 	"github.com/tonitienda/agent-smith/internal/smithapp"
 )
 
+var appRuntime = smithapp.NewRuntime(smithapp.RuntimeConfig{})
+
 func main() {
 	os.Exit(buildApp().Run(os.Args[1:]))
 }

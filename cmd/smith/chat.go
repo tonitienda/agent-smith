@@ -15,8 +15,6 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
-	"github.com/tonitienda/agent-smith/internal/tool"
-	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/internal/version"
 )
@@ -75,22 +73,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	defer func() { _ = debugLog.Close() }()
 	debugLog.Printf("interactive session start id=%s project=%q cwd=%q", sess.ID, wd, wd)
 
-	reg := tool.NewRegistry()
-	fs, err := builtin.NewFS(wd)
+	reg, err := appRuntime.BuiltinTools(wd)
 	if err != nil {
-		return fmt.Errorf("init file tools: %w", err)
-	}
-	for _, t := range fs.Tools() {
-		if err := reg.Register(t); err != nil {
-			return fmt.Errorf("register tool: %w", err)
-		}
-	}
-	shell, err := builtin.NewShell(wd)
-	if err != nil {
-		return fmt.Errorf("init shell tool: %w", err)
-	}
-	if err := reg.Register(shell); err != nil {
-		return fmt.Errorf("register shell tool: %w", err)
+		return err
 	}
 	if err := registerSkillTool(reg, skills); err != nil {
 		return err
@@ -115,16 +100,16 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	mcpClients := connectMCPServers(context.Background(), cfg, reg, os.Stderr)
 	defer closeMCPClients(mcpClients)
 
-	providers := wrapProvidersWithDebugLog(smithapp.ProvidersFn(), debugLog)
+	providers := wrapProvidersWithDebugLog(appRuntime.Providers(), debugLog)
 	// A resumed session keeps the model it last used so its window/cost meter
 	// matches; otherwise start on the configured default (Anthropic). The model is
 	// adopted only when its provider is configured, so the provider and model never
 	// disagree (a model with no provider would fail at turn time).
-	model := smithapp.ChatModel()
+	model := appRuntime.ChatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
 		model = m
 	}
-	provName, model := smithapp.SelectProviderModel(pricing, providers, model)
+	provName, model := appRuntime.SelectProviderModel(pricing, providers, model)
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
 	// Apply the configured budget defaults (AS-041): a default ceiling for new

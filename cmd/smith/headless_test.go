@@ -20,11 +20,13 @@ import (
 func useMockProvider(t *testing.T, mock *provider.Mock) {
 	t.Helper()
 	t.Chdir(t.TempDir())
-	prev := smithapp.ProvidersFn
-	smithapp.ProvidersFn = func() map[string]provider.Provider {
-		return map[string]provider.Provider{"anthropic": mock}
-	}
-	t.Cleanup(func() { smithapp.ProvidersFn = prev })
+	prev := appRuntime
+	appRuntime = smithapp.NewRuntime(smithapp.RuntimeConfig{
+		Providers: func() map[string]provider.Provider {
+			return map[string]provider.Provider{"anthropic": mock}
+		},
+	})
+	t.Cleanup(func() { appRuntime = prev })
 }
 
 // TestRunOutputJSON covers AC1: a scripted run completes end-to-end and emits a

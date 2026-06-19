@@ -17,11 +17,13 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/tool"
+	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/version"
 )
 
 // DefaultModel is the model a fresh Smith session starts on. SMITH_MODEL may
-// override it through ChatModel.
+// override it through Runtime.ChatModel.
 const DefaultModel = "claude-opus-4-8"
 
 // CLIConfig is the process-level wiring needed to build the public smith router.
@@ -42,9 +44,9 @@ type CLIConfig struct {
 // BuildCLI builds the face-neutral smith router shell. It intentionally does not
 // inspect os.Args or call os.Exit, keeping process entry in cmd/smith.
 func BuildCLI(cfg CLIConfig) *cli.App {
-	version := cfg.Version
-	if version == "" {
-		version = versionString()
+	appVersion := cfg.Version
+	if appVersion == "" {
+		appVersion = version.String()
 	}
 	getenv := cfg.Getenv
 	if getenv == nil {
@@ -53,7 +55,7 @@ func BuildCLI(cfg CLIConfig) *cli.App {
 	return &cli.App{
 		Name:      "smith",
 		Tagline:   "Agent Smith is a provider-agnostic coding agent harness.",
-		Version:   version,
+		Version:   appVersion,
 		Stdin:     cfg.Stdin,
 		Stdout:    cfg.Stdout,
 		Stderr:    cfg.Stderr,
@@ -65,25 +67,43 @@ func BuildCLI(cfg CLIConfig) *cli.App {
 	}
 }
 
-func versionString() string { return version.String() }
-
-// ProvidersFn resolves the configured provider set. It is a package variable so
-// tests can substitute mocks without network-backed providers.
-var ProvidersFn = DefaultProviders
-
-// DefaultProviders is the configured provider set. Constructing it performs no
-// network calls; providers connect only when a turn runs.
-func DefaultProviders() map[string]provider.Provider {
-	return map[string]provider.Provider{
-		"anthropic": anthropic.New(""),
-		"openai":    openai.New(""),
-	}
+// RuntimeConfig contains injectable wiring for Smith runtime dependencies. A
+// concrete Runtime keeps tests and future faces from mutating package-level
+// globals while still letting the executable opt into the production defaults.
+type RuntimeConfig struct {
+	Providers func() map[string]provider.Provider
+	Getenv    func(string) string
 }
+
+// Runtime owns reusable provider, model, session, and tool wiring for Smith
+// faces. It is intentionally concrete rather than an App interface so callers can
+// depend on only the methods they need.
+type Runtime struct {
+	providers func() map[string]provider.Provider
+	getenv    func(string) string
+}
+
+// NewRuntime returns runtime wiring with production defaults filled in.
+func NewRuntime(cfg RuntimeConfig) *Runtime {
+	providers := cfg.Providers
+	if providers == nil {
+		providers = DefaultProviders
+	}
+	getenv := cfg.Getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	return &Runtime{providers: providers, getenv: getenv}
+}
+
+// Providers resolves the configured provider set. Constructing the default set
+// performs no network calls; providers connect only when a turn runs.
+func (r *Runtime) Providers() map[string]provider.Provider { return r.providers() }
 
 // ChatModel returns the configured starting model from SMITH_MODEL, or
 // DefaultModel when unset.
-func ChatModel() string {
-	if v := os.Getenv("SMITH_MODEL"); v != "" {
+func (r *Runtime) ChatModel() string {
+	if v := r.getenv("SMITH_MODEL"); v != "" {
 		return v
 	}
 	return DefaultModel
@@ -92,10 +112,10 @@ func ChatModel() string {
 // SelectProviderModel maps a desired model to one of the available providers via
 // the pricing table. When the model is unknown or its vendor is unavailable, it
 // preserves the historical anthropic/default-model fallback.
-func SelectProviderModel(pricing *cost.Table, providers map[string]provider.Provider, desired string) (string, string) {
+func (r *Runtime) SelectProviderModel(pricing *cost.Table, providers map[string]provider.Provider, desired string) (string, string) {
 	provName, model := "anthropic", desired
 	if model == "" {
-		model = ChatModel()
+		model = r.ChatModel()
 	}
 	if r, ok := pricing.Lookup(model); ok && r.Vendor != "" {
 		if _, ok := providers[r.Vendor]; ok {
@@ -103,6 +123,36 @@ func SelectProviderModel(pricing *cost.Table, providers map[string]provider.Prov
 		}
 	}
 	return provName, model
+}
+
+// BuiltinTools builds the common built-in file and shell tools for Smith faces.
+func (r *Runtime) BuiltinTools(wd string) (*tool.Registry, error) {
+	reg := tool.NewRegistry()
+	fs, err := builtin.NewFS(wd)
+	if err != nil {
+		return nil, fmt.Errorf("init file tools: %w", err)
+	}
+	for _, t := range fs.Tools() {
+		if err := reg.Register(t); err != nil {
+			return nil, fmt.Errorf("register tool: %w", err)
+		}
+	}
+	shell, err := builtin.NewShell(wd)
+	if err != nil {
+		return nil, fmt.Errorf("init shell tool: %w", err)
+	}
+	if err := reg.Register(shell); err != nil {
+		return nil, fmt.Errorf("register shell tool: %w", err)
+	}
+	return reg, nil
+}
+
+// DefaultProviders is the production provider set.
+func DefaultProviders() map[string]provider.Provider {
+	return map[string]provider.Provider{
+		"anthropic": anthropic.New(""),
+		"openai":    openai.New(""),
+	}
 }
 
 // OpenOrCreate resumes the session named by resumeID, or creates a fresh one
