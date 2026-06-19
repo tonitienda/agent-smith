@@ -12,24 +12,24 @@ sequenceDiagram
     participant EventLog as event log
     participant ProjectionEngine as projection engine
     participant AgentLoop as Agent turn engine
-    participant ProviderAdapter as provider adapter/API
+    participant ProviderAdapter as provider adapter
     participant ToolRuntime as tool runtime
 
     User->>TUIFace: Submit prompt
-    TUIFace->>ChatController: Run(ctx, prompt)
+    TUIFace->>ChatController: Run prompt
     ChatController->>EventLog: Append user block
     ChatController->>AgentLoop: Run turn
-    AgentLoop->>ProjectionEngine: Project(log events, target model)
+    AgentLoop->>ProjectionEngine: Project log events for target model
     ProjectionEngine-->>AgentLoop: Live context blocks
-    AgentLoop->>ProviderAdapter: Stream(request with context/tools)
-    ProviderAdapter-->>AgentLoop: Text / reasoning / tool-call / usage events
-    AgentLoop->>EventLog: Append assistant and tool-call blocks
+    AgentLoop->>ProviderAdapter: Stream request with context and tools
+    ProviderAdapter-->>AgentLoop: Text reasoning tool call and usage events
+    AgentLoop->>EventLog: Append assistant and tool call blocks
     alt model requests tools
-        AgentLoop->>ToolRuntime: ExecuteBatch(tool calls)
-        ToolRuntime->>ToolRuntime: Validate args, permission gate, hooks, timeout, truncation
-        ToolRuntime->>EventLog: Append linked tool_result blocks
+        AgentLoop->>ToolRuntime: Execute tool calls
+        ToolRuntime->>ToolRuntime: Validate gate run and truncate
+        ToolRuntime->>EventLog: Append linked tool result blocks
         ToolRuntime-->>AgentLoop: Tool results
-        AgentLoop->>ProjectionEngine: Re-project updated log
+        AgentLoop->>ProjectionEngine: Project updated log
         AgentLoop->>ProviderAdapter: Continue with tool results in context
     end
     AgentLoop-->>ChatController: Stop reason and usage events
@@ -47,15 +47,15 @@ sequenceDiagram
     participant CleanPlanner as clean planner
     participant EventLog as event log
 
-    User->>CleanCommand: /clean <handle>...
+    User->>CleanCommand: Preview clean handles
     CleanCommand->>ProjectionEngine: Project current log
     ProjectionEngine-->>CleanCommand: Live and excluded blocks
     CleanCommand->>CleanPlanner: Build removal plan
-    CleanPlanner-->>CleanCommand: Preview: blocks, warnings, reclaimed tokens/cost
-    CleanCommand-->>User: Show preview; wait for --apply/--cancel
-    User->>CleanCommand: /clean --apply
+    CleanPlanner-->>CleanCommand: Preview blocks warnings and reclaimed cost
+    CleanCommand-->>User: Show preview and wait for confirmation
+    User->>CleanCommand: Apply clean preview
     CleanCommand->>EventLog: Append exclusion event derived from target blocks
-    CleanCommand->>ProjectionEngine: Re-project log
+    CleanCommand->>ProjectionEngine: Project log
     ProjectionEngine-->>CleanCommand: Updated context with excluded blocks visible as excluded
     CleanCommand-->>User: Show applied summary
 ```
@@ -71,12 +71,12 @@ sequenceDiagram
     participant ChatController as controller
     participant AgentLoop as Agent turn engine
 
-    User->>CommandFace: smith session resume ID or /resume
-    CommandFace->>SessionStore: Open(project-scoped session id)
+    User->>CommandFace: Resume session by ID
+    CommandFace->>SessionStore: Open project scoped session ID
     SessionStore->>EventLog: Replay events.jsonl
-    EventLog-->>SessionStore: In-memory log with monotonic sequence state
+    EventLog-->>SessionStore: In memory log with monotonic sequence state
     SessionStore-->>ChatController: Session metadata and log
-    ChatController->>AgentLoop: Rebuild engine over resumed log/provider/tools
+    ChatController->>AgentLoop: Rebuild engine over resumed session wiring
     AgentLoop-->>ChatController: Ready for next projected turn
     ChatController-->>User: Resume summary
 ```
@@ -90,12 +90,12 @@ sequenceDiagram
     participant HeadlessRunner as headless runner
     participant ChatController as session wiring
     participant AgentLoop as Agent turn engine
-    participant OutputRenderer as stdout and stderr renderer
+    participant OutputRenderer as output renderer
 
-    Script->>CLIRouter: smith run "prompt" --output json|plain|stream-json
-    CLIRouter->>HeadlessRunner: Parse prompt, config, output mode
-    HeadlessRunner->>ChatController: Create/open session, providers, tools, hooks
+    Script->>CLIRouter: Start smith run with a prompt
+    CLIRouter->>HeadlessRunner: Parse prompt config and output mode
+    HeadlessRunner->>ChatController: Create or open session providers tools and hooks
     ChatController->>AgentLoop: Run prompt to stop condition
     AgentLoop-->>HeadlessRunner: Normalized UI events and final state
-    HeadlessRunner->>OutputRenderer: Write result to stdout; diagnostics to stderr
+    HeadlessRunner->>OutputRenderer: Write result to stdout and diagnostics to stderr
 ```
