@@ -23,6 +23,12 @@ import (
 //     slice to analyze; it returns its findings and the dollars it spent (0 for a
 //     purely passive analyzer). This is the only place a sub-agent may use its
 //     model tier, and the only place that spends against its budget cap.
+//
+// A SubAgent is stateful (Init/Observe accumulate per-scope state), so instances
+// are never shared across sessions: the Registry stores a Factory and each
+// session's Runner builds its own instances (see Factory, NewRunner). One Runner
+// serves one session, so a sub-agent's methods are never called concurrently for
+// different scopes by the framework.
 type SubAgent interface {
 	// Manifest returns the sub-agent's declaration (validated at registration).
 	Manifest() Manifest
@@ -33,6 +39,12 @@ type SubAgent interface {
 	// Teardown analyzes the scope's context slice and returns its result.
 	Teardown(scope Scope, slice []schema.Block) Result
 }
+
+// Factory builds a fresh SubAgent instance. The Registry stores factories, not
+// instances, so every session's Runner instantiates its own sub-agents and a
+// stateful sub-agent never shares mutable state across concurrent sessions. A
+// factory must return instances with the same (stable) manifest each call.
+type Factory func() SubAgent
 
 // Result is what a teardown produces: the findings to record and the dollars the
 // analysis spent, which the Runner charges against the sub-agent's per-session
@@ -69,29 +81,42 @@ type Warning struct{ Message string }
 
 func (w Warning) String() string { return "subagents: " + w.Message }
 
-// Registry holds the registered sub-agents (built-in and declarative third-party)
-// keyed by name, plus the per-sub-agent config overlay. It validates every
-// manifest the same way, so a third-party sub-agent loads through exactly the
-// same path as a built-in (§7.19 AC). It is built once before a session and read
-// concurrently during one, so registration happens up front and the live methods
-// only read.
+// entry is a registered sub-agent: its validated manifest (cached so config and
+// scheduling can be resolved without instantiating) and the factory that builds
+// per-session instances.
+type entry struct {
+	manifest Manifest
+	factory  Factory
+}
+
+// Registry holds the registered sub-agent factories (built-in and declarative
+// third-party) keyed by name, plus the per-sub-agent config overlay. It validates
+// every manifest the same way, so a third-party sub-agent loads through exactly
+// the same path as a built-in (§7.19 AC). It is built once before any session and
+// then read concurrently: registration happens up front and the live snapshot a
+// Runner takes only reads.
 type Registry struct {
-	mu     sync.RWMutex
-	agents map[string]SubAgent
-	cfg    map[string]Config
+	mu      sync.RWMutex
+	entries map[string]entry
+	cfg     map[string]Config
 }
 
 // NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
-	return &Registry{agents: map[string]SubAgent{}, cfg: map[string]Config{}}
+	return &Registry{entries: map[string]entry{}, cfg: map[string]Config{}}
 }
 
-// Register adds a built-in sub-agent. It validates the manifest and rejects a
-// duplicate name, so a misdeclared built-in fails at startup rather than mid-
-// session.
-func (r *Registry) Register(a SubAgent) error {
+// Register adds a built-in sub-agent by its factory. It builds one instance to
+// validate the manifest and rejects a duplicate name, so a misdeclared built-in
+// fails at startup rather than mid-session. The factory is what a Runner calls
+// per session to get its own instance.
+func (r *Registry) Register(f Factory) error {
+	if f == nil {
+		return fmt.Errorf("subagent: nil factory")
+	}
+	a := f()
 	if a == nil {
-		return fmt.Errorf("subagent: nil sub-agent")
+		return fmt.Errorf("subagent: factory returned nil")
 	}
 	m := a.Manifest()
 	if err := m.Validate(); err != nil {
@@ -99,24 +124,24 @@ func (r *Registry) Register(a SubAgent) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, dup := r.agents[m.Name]; dup {
+	if _, dup := r.entries[m.Name]; dup {
 		return fmt.Errorf("subagent %q: already registered", m.Name)
 	}
-	r.agents[m.Name] = a
+	r.entries[m.Name] = entry{manifest: m, factory: f}
 	return nil
 }
 
 // LoadManifest registers a third-party sub-agent from a declarative manifest
-// (D9): the manifest is parsed and validated, then wrapped in a passive
-// declarative sub-agent that runs through the same lifecycle as a built-in but
-// executes no third-party code. This is the enforced declarative boundary — a
-// third-party sub-agent is data, never logic.
+// (D9): the manifest is parsed and validated, then a factory yielding a passive
+// declarative sub-agent is registered through the same path as a built-in. The
+// declarative sub-agent executes no third-party code — this is the enforced
+// declarative boundary: a third-party sub-agent is data, never logic.
 func (r *Registry) LoadManifest(data []byte) error {
 	m, err := ParseManifest(data)
 	if err != nil {
 		return err
 	}
-	return r.Register(declarative{manifest: m})
+	return r.Register(func() SubAgent { return declarative{manifest: m} })
 }
 
 // Configure installs the per-sub-agent config overlay (typically from Load),
@@ -135,7 +160,7 @@ func (r *Registry) Configure(cfg map[string]Config) []Warning {
 	sort.Strings(names) // deterministic warning order
 	for _, name := range names {
 		c := cfg[name]
-		if _, known := r.agents[name]; !known {
+		if _, known := r.entries[name]; !known {
 			warnings = append(warnings, Warning{fmt.Sprintf("config for unknown sub-agent %q ignored", name)})
 			continue
 		}
@@ -173,19 +198,20 @@ func (r *Registry) Load(cfg configDecoder) ([]Warning, error) {
 
 // Effective returns the manifest for name with the config overlay applied
 // (enabled state, model, schedule, budget), and whether the sub-agent is
-// registered. It is how a consumer reads the resolved truth for one sub-agent.
+// registered. It is how a consumer reads the resolved truth for one sub-agent
+// without instantiating it.
 func (r *Registry) Effective(name string) (Manifest, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	a, ok := r.agents[name]
+	e, ok := r.entries[name]
 	if !ok {
 		return Manifest{}, false
 	}
-	return r.overlay(a.Manifest()), true
+	return r.overlay(e.manifest), true
 }
 
 // overlay applies the per-sub-agent config to a manifest. The caller holds the
-// lock (or is building from an immutable snapshot).
+// lock.
 func (r *Registry) overlay(m Manifest) Manifest {
 	c, ok := r.cfg[m.Name]
 	if !ok {
@@ -206,28 +232,38 @@ func (r *Registry) overlay(m Manifest) Manifest {
 	return m
 }
 
-// enabledFor returns the registered sub-agents that are enabled (after the config
-// overlay) and scheduled to tear down at scopeKind, in name order. A sub-agent
-// scheduled AtSessionEnd runs only on a session scope; one scheduled AtTeardown
-// runs on a span scope; AtRollup never runs in a live session.
-func (r *Registry) enabledFor(kind ScopeKind) []SubAgent {
+// active is one enabled sub-agent resolved for a session: a fresh instance and
+// its effective manifest, snapshotted once at Runner construction so the live
+// path needs no registry lock, sort, or allocation.
+type active struct {
+	agent    SubAgent
+	manifest Manifest
+}
+
+// snapshot instantiates every enabled sub-agent (after the config overlay) for a
+// session, returning a fresh instance and its effective manifest per sub-agent,
+// in name order. A sub-agent scheduled AtRollup is excluded: rollup is a cross-
+// session concern (AS-050), not a live-session one. This is the single point
+// where factories are called for a session, so a Runner's instances are its own.
+func (r *Registry) snapshot() []active {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.agents))
-	for name := range r.agents {
+	names := make([]string, 0, len(r.entries))
+	for name := range r.entries {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	var out []SubAgent
+	var out []active
 	for _, name := range names {
-		a := r.agents[name]
-		m := r.overlay(a.Manifest())
+		e := r.entries[name]
+		m := r.overlay(e.manifest)
 		if !m.EnabledByDefault {
 			continue
 		}
-		if scheduleScope(m.effectiveSchedule()) == kind {
-			out = append(out, a)
+		if scheduleScope(m.effectiveSchedule()) == ScopeKind("") {
+			continue // AtRollup / unrecognized: never runs in a live session.
 		}
+		out = append(out, active{agent: e.factory(), manifest: m})
 	}
 	return out
 }
@@ -252,26 +288,45 @@ func scheduleScope(s Schedule) ScopeKind {
 // them down off the hot path, enforcing each sub-agent's per-session budget cap
 // and recording findings into the Store. One Runner serves one session.
 //
-// Budget caps are per sub-agent per session: the Runner tracks each sub-agent's
-// cumulative spend across every teardown in the session and consults the AS-041
-// budget Guard before running a teardown, skipping it once the cap is reached —
-// so one decision rule (budget.Guard) governs sessions and sub-agents alike.
+// The enabled sub-agents (their own instances) and their schedule buckets are
+// resolved once, at construction, from a registry snapshot: the registry's config
+// is static for a session, so the live path holds no registry lock and does no
+// sorting or allocation. Budget caps are per sub-agent per session: the Runner
+// tracks each sub-agent's cumulative spend across every teardown and consults the
+// AS-041 budget Guard before running a teardown, skipping it once the cap is
+// reached — one decision rule (budget.Guard) for sessions and sub-agents alike.
 type Runner struct {
-	reg     *Registry
 	store   Store
 	session string
+
+	observe  []active               // every enabled sub-agent (for the per-block fan-out)
+	teardown map[ScopeKind][]active // enabled sub-agents bucketed by the scope that tears them down
 
 	mu    sync.Mutex
 	spent map[string]float64 // per-sub-agent cumulative spend this session
 }
 
-// NewRunner builds a Runner for one session over a registry and a findings Store.
-// A nil store defaults to a fresh in-memory store.
+// NewRunner builds a Runner for one session over a registry and a findings Store,
+// instantiating its own sub-agent instances from the registry's factories. A nil
+// store defaults to a fresh in-memory store.
 func NewRunner(reg *Registry, store Store, session string) *Runner {
 	if store == nil {
 		store = NewMemStore()
 	}
-	return &Runner{reg: reg, store: store, session: session, spent: map[string]float64{}}
+	rn := &Runner{
+		store:    store,
+		session:  session,
+		teardown: map[ScopeKind][]active{},
+		spent:    map[string]float64{},
+	}
+	if reg != nil {
+		for _, a := range reg.snapshot() {
+			rn.observe = append(rn.observe, a)
+			k := scheduleScope(a.manifest.effectiveSchedule())
+			rn.teardown[k] = append(rn.teardown[k], a)
+		}
+	}
+	return rn
 }
 
 // Store returns the findings store the Runner records into.
@@ -282,19 +337,19 @@ func (r *Runner) Store() Store { return r.store }
 // caller cannot misattribute findings.
 func (r *Runner) Begin(scope Scope) {
 	scope.Session = r.session
-	for _, a := range r.reg.enabledFor(scope.Kind) {
-		a.Init(scope)
+	for _, a := range r.teardown[scope.Kind] {
+		a.agent.Init(scope)
 	}
 }
 
 // Observe fans one appended block out to every enabled sub-agent (across both
 // scope kinds, since a session-scoped analyzer observes spans too). It is the
-// only per-block work and is passive by contract, so it stays off the cost path
-// and out of the interactive turn's critical section. A nil registry or no
-// enabled sub-agents makes it a cheap no-op.
+// only per-block work and is passive by contract; the enabled set is cached, so
+// this is a lock-free, allocation-free walk that stays out of the interactive
+// turn's critical section. No enabled sub-agents makes it a cheap no-op.
 func (r *Runner) Observe(block schema.Block) {
-	for _, a := range r.reg.enabledSubAgents() {
-		a.Observe(block)
+	for _, a := range r.observe {
+		a.agent.Observe(block)
 	}
 }
 
@@ -307,12 +362,11 @@ func (r *Runner) Observe(block schema.Block) {
 // ledger are concurrency-safe.
 func (r *Runner) End(scope Scope, slice []schema.Block) {
 	scope.Session = r.session
-	for _, a := range r.reg.enabledFor(scope.Kind) {
-		m := r.reg.overlay(a.Manifest())
-		guard := budget.Guard{LimitUSD: m.BudgetUSD}
+	for _, a := range r.teardown[scope.Kind] {
+		guard := budget.Guard{LimitUSD: a.manifest.BudgetUSD}
 
 		r.mu.Lock()
-		alreadySpent := r.spent[m.Name]
+		alreadySpent := r.spent[a.manifest.Name]
 		r.mu.Unlock()
 
 		// Enforce the cap before spending: a sub-agent at or past its ceiling does
@@ -321,16 +375,16 @@ func (r *Runner) End(scope Scope, slice []schema.Block) {
 			continue
 		}
 
-		res := a.Teardown(scope, slice)
+		res := a.agent.Teardown(scope, slice)
 		for _, f := range res.Findings {
-			f.SubAgent = m.Name
+			f.SubAgent = a.manifest.Name
 			f.Session = scope.Session
 			f.Span = scope.Span
 			r.store.Record(f)
 		}
 		if res.SpentUSD != 0 {
 			r.mu.Lock()
-			r.spent[m.Name] += res.SpentUSD
+			r.spent[a.manifest.Name] += res.SpentUSD
 			r.mu.Unlock()
 		}
 	}
@@ -344,31 +398,12 @@ func (r *Runner) SpentUSD(name string) float64 {
 	return r.spent[name]
 }
 
-// enabledSubAgents returns every enabled sub-agent regardless of schedule, for
-// the per-block Observe fan-out, in name order.
-func (r *Registry) enabledSubAgents() []SubAgent {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	names := make([]string, 0, len(r.agents))
-	for name := range r.agents {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	var out []SubAgent
-	for _, name := range names {
-		a := r.agents[name]
-		if r.overlay(a.Manifest()).EnabledByDefault {
-			out = append(out, a)
-		}
-	}
-	return out
-}
-
 // declarative is the passive sub-agent a third-party manifest is wrapped in: it
 // carries the manifest and does nothing on the lifecycle calls. It exists to
 // enforce the D9 declarative boundary — a third-party sub-agent contributes a
 // declaration only, never executable behavior — while still loading, configuring,
-// and scheduling through the same registry and Runner as a built-in.
+// and scheduling through the same registry and Runner as a built-in. Being
+// stateless, it is safe to reuse, but the factory yields a fresh value anyway.
 type declarative struct{ manifest Manifest }
 
 func (d declarative) Manifest() Manifest                    { return d.manifest }

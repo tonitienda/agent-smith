@@ -21,6 +21,7 @@
 package subagent
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -179,7 +180,7 @@ func (m Manifest) Validate() error {
 // sub-agent through the same registry and lifecycle as a built-in.
 func ParseManifest(data []byte) (Manifest, error) {
 	var m Manifest
-	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&m); err != nil {
 		return Manifest{}, fmt.Errorf("subagent: parse manifest: %w", err)

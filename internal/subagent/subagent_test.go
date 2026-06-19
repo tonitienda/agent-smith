@@ -87,7 +87,7 @@ func TestLoadManifestDeclarative(t *testing.T) {
 func TestConfigEnableDisable(t *testing.T) {
 	reg := NewRegistry()
 	a := &spyAgent{manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true}}
-	if err := reg.Register(a); err != nil {
+	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,7 +124,7 @@ func TestLifecycleOrder(t *testing.T) {
 		manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true, Emits: []string{"topic"}},
 		result:   Result{Findings: []Finding{{Kind: "topic", Summary: "auth"}}},
 	}
-	if err := reg.Register(a); err != nil {
+	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
 	rn := NewRunner(reg, nil, "s1")
@@ -162,7 +162,7 @@ func TestBudgetCapEnforced(t *testing.T) {
 		manifest: Manifest{Name: "pricey", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true, BudgetUSD: 0.10, ModelTier: "cheap"},
 		result:   Result{SpentUSD: 0.06, Findings: []Finding{{Kind: "x", Summary: "run"}}},
 	}
-	if err := reg.Register(a); err != nil {
+	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
 	rn := NewRunner(reg, nil, "s1")
@@ -193,7 +193,7 @@ func TestScheduleScoping(t *testing.T) {
 	sess := &spyAgent{manifest: Manifest{Name: "sess", Kind: KindAnalyzer, Schedule: AtSessionEnd, Scope: SessionScope, EnabledByDefault: true}}
 	roll := &spyAgent{manifest: Manifest{Name: "roll", Kind: KindAnalyzer, Schedule: AtRollup, EnabledByDefault: true}}
 	for _, a := range []*spyAgent{span, sess, roll} {
-		if err := reg.Register(a); err != nil {
+		if err := reg.Register(func() SubAgent { return a }); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,6 +209,37 @@ func TestScheduleScoping(t *testing.T) {
 	}
 }
 
+// Each Runner instantiates its own sub-agents from the registry factory, so two
+// concurrent sessions never share mutable state (the Gemini concurrency fix).
+func TestPerSessionInstancesAreIsolated(t *testing.T) {
+	reg := NewRegistry()
+	var created []*spyAgent
+	if err := reg.Register(func() SubAgent {
+		a := &spyAgent{manifest: Manifest{Name: "iso", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true}}
+		created = append(created, a)
+		return a
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// created[0] is the validation instance built at Register; each NewRunner adds
+	// one more, distinct, instance.
+	r1 := NewRunner(reg, nil, "s1")
+	r2 := NewRunner(reg, nil, "s2")
+	r1.Observe(block("x"))
+	r1.Observe(block("y"))
+	r2.Observe(block("z"))
+
+	if len(created) != 3 {
+		t.Fatalf("want 3 instances (validation + one per runner), got %d", len(created))
+	}
+	if created[0].observes != 0 {
+		t.Fatalf("validation instance was driven: %d", created[0].observes)
+	}
+	if created[1].observes != 2 || created[2].observes != 1 {
+		t.Fatalf("instances not isolated: r1=%d r2=%d", created[1].observes, created[2].observes)
+	}
+}
+
 func TestConfigWarnsUnknownAgent(t *testing.T) {
 	reg := NewRegistry()
 	warns := reg.Configure(map[string]Config{"ghost": {Enabled: boolp(true)}})
@@ -220,10 +251,10 @@ func TestConfigWarnsUnknownAgent(t *testing.T) {
 func TestRegisterDuplicate(t *testing.T) {
 	reg := NewRegistry()
 	a := &spyAgent{manifest: Manifest{Name: "dup", Kind: KindAnalyzer}}
-	if err := reg.Register(a); err != nil {
+	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Register(a); err == nil {
+	if err := reg.Register(func() SubAgent { return a }); err == nil {
 		t.Fatal("want duplicate-name error, got nil")
 	}
 }
@@ -245,7 +276,7 @@ func (f fakeDecoder) Decode(path string, v any) (bool, error) {
 func TestLoadFromConfig(t *testing.T) {
 	reg := NewRegistry()
 	a := &spyAgent{manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, EnabledByDefault: false}}
-	if err := reg.Register(a); err != nil {
+	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
 	warns, err := reg.Load(fakeDecoder{ok: true, sub: map[string]Config{"labeler": {Enabled: boolp(true), BudgetUSD: 0.5}}})
