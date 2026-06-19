@@ -77,7 +77,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | **needs clarification** | 008, 031, 044 |
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | **needs clarification** | 006, 027, 028 |
-| [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | ready | 006, 018, 020, 031 |
+| [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | ready | 020, 022, 044 |
 | [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | ready | 034 |
@@ -114,6 +114,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
 | [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
+| [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | ready | 044 |
 
 ## Suggested build order
 

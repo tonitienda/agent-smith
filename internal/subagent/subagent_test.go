@@ -1,0 +1,267 @@
+package subagent
+
+import (
+	"testing"
+
+	"github.com/tonitienda/agent-smith/schema"
+)
+
+// spyAgent is a built-in test sub-agent that records its lifecycle calls and
+// emits a configurable result from teardown, so the tests can assert exactly when
+// (and whether) the framework drives it and what it spends.
+type spyAgent struct {
+	manifest  Manifest
+	inits     int
+	observes  int
+	teardowns int
+	result    Result
+}
+
+func (a *spyAgent) Manifest() Manifest { return a.manifest }
+func (a *spyAgent) Init(Scope)         { a.inits++ }
+func (a *spyAgent) Observe(schema.Block) {
+	a.observes++
+}
+func (a *spyAgent) Teardown(scope Scope, slice []schema.Block) Result {
+	a.teardowns++
+	return a.result
+}
+
+func boolp(b bool) *bool { return &b }
+
+func block(text string) schema.Block {
+	return schema.Block{Kind: schema.KindText, Role: schema.RoleAssistant, Text: &schema.TextBody{Text: text}}
+}
+
+func TestManifestValidate(t *testing.T) {
+	cases := []struct {
+		name string
+		m    Manifest
+		ok   bool
+	}{
+		{"ok", Manifest{Name: "a", Kind: KindAnalyzer}, true},
+		{"defaults filled", Manifest{Name: "a", Kind: KindAnalyzer, Schedule: "", Scope: ""}, true},
+		{"no name", Manifest{Kind: KindAnalyzer}, false},
+		{"bad kind", Manifest{Name: "a", Kind: "watcher"}, false},
+		{"bad schedule", Manifest{Name: "a", Kind: KindAnalyzer, Schedule: "whenever"}, false},
+		{"bad scope", Manifest{Name: "a", Kind: KindAnalyzer, Scope: "galaxy"}, false},
+		{"bad perm", Manifest{Name: "a", Kind: KindAnalyzer, Permissions: []Permission{"rm -rf"}}, false},
+		{"negative budget", Manifest{Name: "a", Kind: KindAnalyzer, BudgetUSD: -1}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.m.Validate()
+			if c.ok && err != nil {
+				t.Fatalf("want valid, got %v", err)
+			}
+			if !c.ok && err == nil {
+				t.Fatalf("want invalid, got nil")
+			}
+		})
+	}
+}
+
+// AC: a third-party declarative manifest loads through the same registry as
+// built-ins — and only as data (no code path).
+func TestLoadManifestDeclarative(t *testing.T) {
+	reg := NewRegistry()
+	data := []byte(`{"name":"vendor-x","kind":"analyzer","schedule":"session_end","enabledByDefault":true,"emits":["note"]}`)
+	if err := reg.LoadManifest(data); err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	m, ok := reg.Effective("vendor-x")
+	if !ok {
+		t.Fatal("declarative sub-agent not registered")
+	}
+	if m.Schedule != AtSessionEnd || !m.EnabledByDefault {
+		t.Fatalf("unexpected effective manifest: %+v", m)
+	}
+
+	// A manifest with an unknown field is rejected: declarative input is strict.
+	if err := reg.LoadManifest([]byte(`{"name":"y","kind":"analyzer","exec":"./evil"}`)); err == nil {
+		t.Fatal("want error for unknown manifest field, got nil")
+	}
+}
+
+// AC: enabling/disabling is one config line; a disabled analyzer is never driven.
+func TestConfigEnableDisable(t *testing.T) {
+	reg := NewRegistry()
+	a := &spyAgent{manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true}}
+	if err := reg.Register(a); err != nil {
+		t.Fatal(err)
+	}
+
+	// Default-on: the registry reports it enabled.
+	if m, _ := reg.Effective("labeler"); !m.EnabledByDefault {
+		t.Fatal("want enabled by default")
+	}
+
+	// One config line disables it.
+	warns := reg.Configure(map[string]Config{"labeler": {Enabled: boolp(false)}})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if m, _ := reg.Effective("labeler"); m.EnabledByDefault {
+		t.Fatal("config did not disable")
+	}
+
+	// A disabled analyzer is never inited, observed, or torn down → zero cost.
+	rn := NewRunner(reg, nil, "s1")
+	scope := Scope{Kind: SpanScope, Span: "span-1"}
+	rn.Begin(scope)
+	rn.Observe(block("hello"))
+	rn.End(scope, []schema.Block{block("hello")})
+	if a.inits != 0 || a.observes != 0 || a.teardowns != 0 {
+		t.Fatalf("disabled agent was driven: %+v", a)
+	}
+}
+
+// AC: an enabled analyzer runs without slowing the interactive turn — observe is
+// the only per-block work and teardown happens at the scope boundary, not inline.
+func TestLifecycleOrder(t *testing.T) {
+	reg := NewRegistry()
+	a := &spyAgent{
+		manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true, Emits: []string{"topic"}},
+		result:   Result{Findings: []Finding{{Kind: "topic", Summary: "auth"}}},
+	}
+	if err := reg.Register(a); err != nil {
+		t.Fatal(err)
+	}
+	rn := NewRunner(reg, nil, "s1")
+	scope := Scope{Kind: SpanScope, Span: "span-1"}
+
+	rn.Begin(scope)
+	if a.inits != 1 {
+		t.Fatalf("want 1 init, got %d", a.inits)
+	}
+	// Observe is cheap and does not analyze: no teardown, no findings yet.
+	rn.Observe(block("a"))
+	rn.Observe(block("b"))
+	if a.observes != 2 || a.teardowns != 0 {
+		t.Fatalf("observe phase wrong: observes=%d teardowns=%d", a.observes, a.teardowns)
+	}
+	if got := rn.Store().Findings("s1"); len(got) != 0 {
+		t.Fatalf("findings recorded before teardown: %v", got)
+	}
+
+	// Teardown at the boundary records the finding, attributed to the scope.
+	rn.End(scope, []schema.Block{block("a"), block("b")})
+	if a.teardowns != 1 {
+		t.Fatalf("want 1 teardown, got %d", a.teardowns)
+	}
+	got := rn.Store().Findings("s1")
+	if len(got) != 1 || got[0].SubAgent != "labeler" || got[0].Span != "span-1" || got[0].Session != "s1" {
+		t.Fatalf("finding not attributed: %+v", got)
+	}
+}
+
+// AC: budget caps are enforced per sub-agent per session.
+func TestBudgetCapEnforced(t *testing.T) {
+	reg := NewRegistry()
+	a := &spyAgent{
+		manifest: Manifest{Name: "pricey", Kind: KindAnalyzer, Schedule: AtTeardown, EnabledByDefault: true, BudgetUSD: 0.10, ModelTier: "cheap"},
+		result:   Result{SpentUSD: 0.06, Findings: []Finding{{Kind: "x", Summary: "run"}}},
+	}
+	if err := reg.Register(a); err != nil {
+		t.Fatal(err)
+	}
+	rn := NewRunner(reg, nil, "s1")
+
+	// Span 1: spent 0 < cap → runs, charges 0.06.
+	rn.End(Scope{Kind: SpanScope, Span: "1"}, nil)
+	// Span 2: spent 0.06 < 0.10 → runs, charges to 0.12.
+	rn.End(Scope{Kind: SpanScope, Span: "2"}, nil)
+	// Span 3: spent 0.12 >= cap → skipped.
+	rn.End(Scope{Kind: SpanScope, Span: "3"}, nil)
+
+	if a.teardowns != 2 {
+		t.Fatalf("want 2 teardowns before cap, got %d", a.teardowns)
+	}
+	if got := rn.SpentUSD("pricey"); got != 0.12 {
+		t.Fatalf("want spend 0.12, got %v", got)
+	}
+	if got := len(rn.Store().Findings("s1")); got != 2 {
+		t.Fatalf("want 2 findings (capped run produced none), got %d", got)
+	}
+}
+
+// Schedule decides which scope boundary drives a sub-agent: a session_end
+// analyzer does not run at a span teardown, and vice versa.
+func TestScheduleScoping(t *testing.T) {
+	reg := NewRegistry()
+	span := &spyAgent{manifest: Manifest{Name: "span", Kind: KindAnalyzer, Schedule: AtTeardown, Scope: SpanScope, EnabledByDefault: true}}
+	sess := &spyAgent{manifest: Manifest{Name: "sess", Kind: KindAnalyzer, Schedule: AtSessionEnd, Scope: SessionScope, EnabledByDefault: true}}
+	roll := &spyAgent{manifest: Manifest{Name: "roll", Kind: KindAnalyzer, Schedule: AtRollup, EnabledByDefault: true}}
+	for _, a := range []*spyAgent{span, sess, roll} {
+		if err := reg.Register(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rn := NewRunner(reg, nil, "s1")
+
+	rn.End(Scope{Kind: SpanScope, Span: "1"}, nil)
+	if span.teardowns != 1 || sess.teardowns != 0 || roll.teardowns != 0 {
+		t.Fatalf("span boundary drove wrong agents: span=%d sess=%d roll=%d", span.teardowns, sess.teardowns, roll.teardowns)
+	}
+	rn.End(Scope{Kind: SessionScope}, nil)
+	if sess.teardowns != 1 || roll.teardowns != 0 {
+		t.Fatalf("session boundary wrong: sess=%d roll=%d", sess.teardowns, roll.teardowns)
+	}
+}
+
+func TestConfigWarnsUnknownAgent(t *testing.T) {
+	reg := NewRegistry()
+	warns := reg.Configure(map[string]Config{"ghost": {Enabled: boolp(true)}})
+	if len(warns) != 1 {
+		t.Fatalf("want 1 warning for unknown sub-agent, got %v", warns)
+	}
+}
+
+func TestRegisterDuplicate(t *testing.T) {
+	reg := NewRegistry()
+	a := &spyAgent{manifest: Manifest{Name: "dup", Kind: KindAnalyzer}}
+	if err := reg.Register(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := reg.Register(a); err == nil {
+		t.Fatal("want duplicate-name error, got nil")
+	}
+}
+
+// fakeDecoder satisfies configDecoder for Load without importing config.
+type fakeDecoder struct {
+	sub map[string]Config
+	ok  bool
+}
+
+func (f fakeDecoder) Decode(path string, v any) (bool, error) {
+	if !f.ok || path != "subagents" {
+		return false, nil
+	}
+	*(v.(*map[string]Config)) = f.sub
+	return true, nil
+}
+
+func TestLoadFromConfig(t *testing.T) {
+	reg := NewRegistry()
+	a := &spyAgent{manifest: Manifest{Name: "labeler", Kind: KindAnalyzer, EnabledByDefault: false}}
+	if err := reg.Register(a); err != nil {
+		t.Fatal(err)
+	}
+	warns, err := reg.Load(fakeDecoder{ok: true, sub: map[string]Config{"labeler": {Enabled: boolp(true), BudgetUSD: 0.5}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	m, _ := reg.Effective("labeler")
+	if !m.EnabledByDefault || m.BudgetUSD != 0.5 {
+		t.Fatalf("config overlay not applied: %+v", m)
+	}
+
+	// A missing key is not an error and changes nothing.
+	if _, err := reg.Load(fakeDecoder{ok: false}); err != nil {
+		t.Fatalf("missing key should be no-op, got %v", err)
+	}
+}
