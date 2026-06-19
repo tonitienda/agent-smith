@@ -16,8 +16,8 @@ const (
 	// OutputJSON is a single structured result.
 	OutputJSON OutputMode = "json"
 	// OutputStreamJSON is incremental events from the same substrate the TUI
-	// renders (the streaming machinery itself lands in AS-051; for now it shares
-	// OutputJSON's rendering).
+	// renders: `smith run --output stream-json` writes one JSON object per line as
+	// the run progresses, then a final result object (AS-051).
 	OutputStreamJSON OutputMode = "stream-json"
 )
 
@@ -121,6 +121,13 @@ func (c *Context) Emit(text string) error {
 		return err
 	}
 }
+
+// WriteJSON marshals v as one compact JSON line to the command's stdout, without
+// HTML-escaping so prompts/answers carrying <, >, & stay readable (D-CLI-5: data
+// to stdout). It is the seam a handler with a richer structured result than the
+// shared {text} envelope uses — `smith run --output json` emits answer, cost,
+// session id, and stop reason this way (AS-051).
+func (c *Context) WriteJSON(v any) error { return writeJSON(c.Stdout, v, "") }
 
 // writeJSON marshals v to w without HTML-escaping (so prompts containing <, >, &
 // stay readable) and appends a newline. indent "" emits compact JSON.

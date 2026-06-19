@@ -9,8 +9,8 @@
 // so a slash-command and its CLI subcommand dispatch to one handler. The package
 // knows nothing about the provider/tool/session layers or the TUI: cmd/smith
 // wires the real handlers and the bare-invocation TUI launch. The headless
-// feature set (output streaming, budgets, permission posture) lands on top in
-// AS-051; full slash<->subcommand parity in AS-066.
+// feature set (output streaming, budgets, permission posture) lives on `run`
+// (AS-051, cmd/smith/headless.go); full slash<->subcommand parity in AS-066.
 package cli
 
 import (
@@ -23,14 +23,42 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 )
 
-// Exit codes — the universal three V1 commits to (D-CLI-7). The richer taxonomy
-// (permission-stop, budget-stop, …) is reserved and assigned additively in
-// AS-051; codes are append-only.
+// Exit codes — the universal three V1 commits to (D-CLI-7) plus the headless
+// taxonomy AS-051 assigns additively on top (UX.md §17.2 / D-CLI-7). Codes are
+// append-only: a script may treat any unknown nonzero code as a generic failure,
+// so widening the set never breaks an existing consumer.
 const (
 	ExitOK    = 0 // success
-	ExitFail  = 1 // runtime/task failure
+	ExitFail  = 1 // runtime/task failure (the generic internal-error bucket)
 	ExitUsage = 2 // invalid usage (bad flag/arg/command)
+
+	// The headless classes (AS-051): a `smith run` outcome that is neither plain
+	// success nor a usage error carries one of these so a script can branch on
+	// *why* it stopped. A handler signals one by returning an *ExitError.
+	ExitPermission = 3 // a tool call was denied by the headless permission posture (D-CLI-9)
+	ExitBudget     = 4 // the run stopped at the budget ceiling (AS-041)
+	ExitCanceled   = 5 // the run was canceled (context cancellation / interrupt)
+	ExitProvider   = 6 // a provider error ended the run (auth, rate limit, overloaded, …)
 )
+
+// ExitError lets a handler choose its process exit code beyond the usage/runtime
+// split: App.Run maps it to Code. Err, when non-nil, is printed as the stderr
+// diagnostic the way any other handler error is; a nil Err exits with Code
+// silently (the handler already wrote a structured result to stdout). It is the
+// seam the headless taxonomy (AS-051) uses to surface permission/budget/provider
+// stops as distinct codes.
+type ExitError struct {
+	Code int
+	Err  error
+}
+
+func (e *ExitError) Error() string {
+	if e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+func (e *ExitError) Unwrap() error { return e.Err }
 
 // UsageError marks an invalid-usage failure (bad flag, missing/unknown
 // subcommand): App.Run renders it to stderr and exits ExitUsage. Any other error
@@ -230,6 +258,16 @@ func (a *App) exit(err error) int {
 		return ExitOK
 	case errors.Is(err, errUsageSilent):
 		return ExitUsage // helper already printed its own diagnostic
+	}
+	// A handler that chose its own exit code (the headless taxonomy, AS-051) wins:
+	// print its diagnostic only when it carries one, since it has typically already
+	// written a structured result to stdout.
+	var ee *ExitError
+	if errors.As(err, &ee) {
+		if ee.Err != nil {
+			write(a.Stderr, fmt.Sprintf("%s: %v\n", a.Name, ee.Err))
+		}
+		return ee.Code
 	}
 	write(a.Stderr, fmt.Sprintf("%s: %v\n", a.Name, err))
 	var ue *UsageError

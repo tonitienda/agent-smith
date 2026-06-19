@@ -1,7 +1,7 @@
 ---
 id: AS-051
 title: Headless CLI mode (scripting / CI)
-status: ready-to-implement
+status: done
 github_issue: 51
 depends_on: [AS-018, AS-031, AS-065]
 area: faces
@@ -38,10 +38,29 @@ Builds on the CLI router/contract (AS-065); this ticket adds the headless
 
 ## Acceptance criteria
 
-- [ ] A scripted run completes end-to-end in CI (keys via env vars) with parseable JSON output.
-- [ ] A permission-requiring action in headless mode fails fast with a machine-readable reason.
-- [ ] Budget stop produces the documented exit code and partial-result JSON.
-- [ ] A headless session is `/resume`-able interactively afterward.
+- [x] A scripted run completes end-to-end in CI (keys via env vars) with parseable JSON output.
+- [x] A permission-requiring action in headless mode fails fast with a machine-readable reason.
+- [x] Budget stop produces the documented exit code and partial-result JSON.
+- [x] A headless session is `/resume`-able interactively afterward.
+
+## Implementation notes
+
+- `smith run` now renders per `--output`: plain prints the assistant's final text;
+  `--output json` emits a structured `runResult` (`text`, `session_id`,
+  `stop_reason`, `cost_usd`, `iterations`, `denied[]`); `--output stream-json`
+  writes one loop `UIEvent` per line as the run progresses, then the terminal
+  result object (`cmd/smith/headless.go`).
+- Permission posture (D-CLI-9): `headlessPermission` builds the project/user
+  permission policy with **no Asker**, so a call that would prompt is denied with a
+  structured report (allowlist-then-deny); `--auto` opts into auto mode. Denied
+  calls are recorded and surfaced in the result.
+- `--budget <$>` wires AS-041/AS-086 budget enforcement (pre-turn reservation +
+  boundary check) priced against the same table as `/cost`.
+- Exit codes extend AS-065's `0/1/2` additively (`internal/cli`): `3`
+  permission-stop, `4` budget-stop, `5` cancellation, `6` provider-error;
+  internal errors stay `1`. A handler signals one via `cli.ExitError`.
+- Headless sessions are normal sessions on the project store — created, seeded
+  with memory files, and listable/resumable afterward.
 
 ## Dependencies
 
