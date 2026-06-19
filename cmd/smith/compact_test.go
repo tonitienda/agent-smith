@@ -158,3 +158,91 @@ func hasCompactUsage(ctl *chatSession) bool {
 	}
 	return false
 }
+
+func usageProducer(ctl *chatSession, producer string) bool {
+	for _, b := range ctl.sess.Log.Events() {
+		if b.Kind == eventlog.KindUsage && b.Provenance != nil && b.Provenance.Producer == producer {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAutoCompactDisabledByDefault is AS-085 AC1: with the flag off, a turn's
+// pre-turn hook compacts nothing.
+func TestAutoCompactDisabledByDefault(t *testing.T) {
+	ctl, _ := newCompactController(t)
+	seedConversation(t, ctl)
+	before := len(ctl.sess.Log.Events())
+
+	ctl.maybeAutoCompact(context.TODO())
+
+	if got := len(ctl.sess.Log.Events()); got != before {
+		t.Errorf("log grew from %d to %d with auto-compact off", before, got)
+	}
+}
+
+// TestAutoCompactBelowThresholdNoop: enabled but the window is well under the
+// threshold, so nothing compacts.
+func TestAutoCompactBelowThresholdNoop(t *testing.T) {
+	ctl, _ := newCompactController(t)
+	seedConversation(t, ctl)
+	ctl.setAutoCompact(true, 0.99) // ~200k-token window; the seeded context is tiny
+	before := len(ctl.sess.Log.Events())
+
+	ctl.maybeAutoCompact(context.TODO())
+
+	if got := len(ctl.sess.Log.Events()); got != before {
+		t.Errorf("log grew from %d to %d below the threshold", before, got)
+	}
+}
+
+// TestAutoCompactTriggersOnThreshold is AS-085 AC2/AC3/AC4: crossing the
+// threshold compacts the older span before the turn, the result is reversible
+// (/compact --undo), it is surfaced (UIAutoCompact, never silent), and its
+// summarization cost is itemized under the distinct auto producer.
+func TestAutoCompactTriggersOnThreshold(t *testing.T) {
+	ctl, mock := newCompactController(t)
+	var notices []string
+	ctl.observer = func(ev loop.UIEvent) {
+		if ev.Kind == loop.UIAutoCompact {
+			notices = append(notices, ev.Text)
+		}
+	}
+	seedConversation(t, ctl)
+	ctl.setAutoCompact(true, 0.0001) // a tiny threshold the seeded context clears
+
+	ctl.maybeAutoCompact(context.TODO())
+
+	// The cheap tier summarized.
+	if len(mock.Requests()) != 1 || mock.Requests()[0].Model != "claude-haiku-4-5" {
+		t.Errorf("summarization requests = %+v, want one on claude-haiku-4-5", mock.Requests())
+	}
+	// Older sources left the window; the recent turn is kept.
+	if liveContains(t, ctl, "blk_old0user") || liveContains(t, ctl, "blk_old0asst") {
+		t.Error("an auto-compacted source is still live")
+	}
+	if !liveContains(t, ctl, "blk_new0user") {
+		t.Error("the recent turn was auto-compacted away")
+	}
+	// Cost itemized under the distinct auto producer (not the manual /compact one).
+	if !usageProducer(ctl, compact.AutoUsageProducer) {
+		t.Error("no auto-compact usage event recorded for /cost itemization")
+	}
+	if hasCompactUsage(ctl) {
+		t.Error("auto-compaction recorded manual /compact usage; producers must stay distinct")
+	}
+	// Surfaced, never silent (D0).
+	if len(notices) == 0 {
+		t.Error("auto-compaction emitted no UIAutoCompact notice")
+	}
+	// Reversible via the same /compact --undo path.
+	if _, err := ctl.cmdCompact(context.TODO(), []string{"--undo"}); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	for _, id := range []string{"blk_old0user", "blk_old0asst", "blk_new0user"} {
+		if !liveContains(t, ctl, id) {
+			t.Errorf("block %s not restored after undoing auto-compaction", id)
+		}
+	}
+}

@@ -131,6 +131,9 @@ func (m *model) apply(ev loop.UIEvent) {
 		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: fmt.Sprintf(
 			"budget not enforceable: the active model has no pricing, so spend against your %s%.2f ceiling cannot be tracked. Set pricing for it (see $SMITH_PRICING) or switch models with /model.",
 			sym, ev.BudgetLimitUSD)})
+
+	case loop.UIAutoCompact:
+		m.segs = append(m.segs, segment{kind: segNotice, done: true, text: ev.Text})
 	}
 }
 

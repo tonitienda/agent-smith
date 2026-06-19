@@ -29,10 +29,18 @@ import (
 // Producers attribute the events compact appends, so an undo can find the
 // compaction it should reverse without mistaking its own counter-event for one.
 const (
-	// Producer attributes the derived compaction block.
+	// Producer attributes the derived compaction block. The auto-compaction path
+	// (AS-085) reuses it for the block too, so /compact --undo finds and reverses
+	// an auto-compaction exactly as it does a manual one.
 	Producer = "/compact"
 	// UndoProducer attributes the counter-exclusion an undo appends.
 	UndoProducer = "/compact --undo"
+	// AutoUsageProducer attributes the summarization usage event of an
+	// auto-compaction (AS-085), distinct from the manual /compact usage producer
+	// so /cost itemizes both and /insights can tell auto from user-invoked spend.
+	// Only the usage event differs; the compaction block keeps Producer so undo
+	// works uniformly.
+	AutoUsageProducer = "/compact (auto)"
 )
 
 // header prefixes the summary text so the model reads the compaction block for

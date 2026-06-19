@@ -87,6 +87,15 @@ type chatSession struct {
 	// cannot enforce the ceiling against it). Default false: warn once, proceed.
 	budgetHaltUnpriced bool
 
+	// autoCompact (AS-085) enables compacting the older span before a turn when the
+	// projected window crosses autoCompactThreshold (a fraction of the model's
+	// context window). Off by default — the product prefers /clean and /tidy; this
+	// is the blunt last-resort guard against a context-window-exceeded stop.
+	// autoCompactThreshold is the trigger fraction; it falls back to a default when
+	// the flag is on but no threshold is configured (or it is out of (0,1)).
+	autoCompact          bool
+	autoCompactThreshold float64
+
 	mu       sync.Mutex
 	sess     *session.Session
 	provName string
@@ -159,6 +168,23 @@ func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64, haltUn
 	s.budgetDefaultUSD = defaultUSD
 	s.budgetWarnFraction = warnFraction
 	s.budgetHaltUnpriced = haltUnpriced
+}
+
+// defaultAutoCompactThreshold is the window fraction auto-compaction triggers at
+// when enabled without an explicit (or in-range) compact.auto_threshold. 0.85
+// leaves headroom for the turn's own output before the window limit.
+const defaultAutoCompactThreshold = 0.85
+
+// setAutoCompact records the auto-compaction config (AS-085), read once from
+// layered config at startup. enabled off (default) is a no-op at turn time. A
+// threshold outside (0,1) falls back to defaultAutoCompactThreshold so a stray 0
+// or 1 cannot disable the guard or make it fire every turn.
+func (s *chatSession) setAutoCompact(enabled bool, threshold float64) {
+	s.autoCompact = enabled
+	if threshold <= 0 || threshold >= 1 {
+		threshold = defaultAutoCompactThreshold
+	}
+	s.autoCompactThreshold = threshold
 }
 
 // setPolicy installs the permission gate used by every engine this controller
@@ -265,7 +291,103 @@ func (s *chatSession) Run(ctx context.Context, userText string) (loop.Result, er
 			}
 		}
 	}
+	// Auto-compact the older span before the turn if the projected window is over
+	// the configured threshold (AS-085), so a near-full window does not push the
+	// turn into a context-window-exceeded stop. Best-effort: any failure surfaces a
+	// notice and the turn proceeds, never blocking on the blunt-instrument guard.
+	s.maybeAutoCompact(ctx)
 	return eng.Run(ctx, userText)
+}
+
+// maybeAutoCompact runs one compaction before the turn when auto-compaction is
+// enabled and the projected window has crossed the configured threshold (AS-085).
+// It reuses the manual /compact engine unchanged — same Preview → cheap-tier
+// summarize → Build path — so the result is the same reversible compaction block
+// (/compact --undo restores it) and its cost is itemized in /cost, attributed to
+// AutoUsageProducer so it reads distinctly from a user-invoked /compact. The
+// compaction is surfaced via UIAutoCompact (D0: never silent). The lock is held
+// only around log snapshots/appends, released across the projection and model
+// call (mirrors compactApply).
+func (s *chatSession) maybeAutoCompact(ctx context.Context) {
+	s.mu.Lock()
+	if !s.autoCompact {
+		s.mu.Unlock()
+		return
+	}
+	events := s.sess.Log.Events()
+	model, pricing, sess := s.model, s.pricing, s.sess
+	threshold := s.autoCompactThreshold
+	s.mu.Unlock()
+
+	proj := projection.Project(events, projection.Options{TargetModel: model})
+	comp := composition.Build(proj, pricing, model, time.Now(), composition.SortSize)
+	// Window unknown (unpriced/unlisted model): the threshold is a fraction of it,
+	// so without it the guard cannot be evaluated — leave the turn alone.
+	if comp.Window <= 0 || float64(comp.TotalTokens) < threshold*float64(comp.Window) {
+		return
+	}
+
+	plan := compact.Preview(proj, pricing, model, time.Now())
+	if plan.Empty() {
+		return // nothing older than the recent turn to compact; let the turn proceed
+	}
+
+	s.mu.Lock()
+	if s.sess != sess {
+		s.mu.Unlock()
+		return // /clear or /resume landed mid-projection; abandon this stale plan
+	}
+	vendor, cheap := s.cheapModel()
+	prov := s.providers[vendor]
+	log, sessID := s.sess.Log, s.sess.ID
+	s.mu.Unlock()
+	if prov == nil {
+		return
+	}
+
+	// Fire the pre-compact hook (AS-035) with the auto reason so a policy can
+	// distinguish (and veto) machine-triggered compaction from /compact.
+	if out := fireLifecycle(ctx, s.hooks, log, hook.Payload{
+		Event:   hook.PreCompact,
+		Session: sessID,
+		Reason:  "auto",
+	}); out.Blocked {
+		return
+	}
+
+	summary, tokens, stopReason, err := summarize(ctx, prov, cheap, plan.Sources)
+	if err != nil {
+		s.emit(loop.UIEvent{Kind: loop.UIAutoCompact, Text: "auto-compact failed: " + err.Error() + " — continuing with the full context."})
+		return
+	}
+	block, ok := compact.Build(plan, summary)
+	if !ok {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sess != sess {
+		return // session swapped during the model call; do not append to the new log
+	}
+	if tokens != nil {
+		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.AutoUsageProducer, vendor, cheap, stopReason, tokens, nil)); err != nil {
+			return
+		}
+	}
+	if _, err := s.sess.Log.Append(block); err != nil {
+		return
+	}
+	s.emit(loop.UIEvent{Kind: loop.UIAutoCompact, Text: fmt.Sprintf(
+		"auto-compacted %s into one summary (~%d tokens) as the context neared the window limit. Restore with /compact --undo.",
+		pluralBlocks(len(plan.SourceIDs)), plan.Tokens)})
+}
+
+// emit delivers a UIEvent to the face observer if one is wired (nil in tests).
+func (s *chatSession) emit(ev loop.UIEvent) {
+	if s.observer != nil {
+		s.observer(ev)
+	}
 }
 
 // promptRewrite extracts a rewritten prompt string from a user-prompt-submit
