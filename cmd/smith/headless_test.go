@@ -9,6 +9,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/tool"
 )
 
@@ -19,11 +20,13 @@ import (
 func useMockProvider(t *testing.T, mock *provider.Mock) {
 	t.Helper()
 	t.Chdir(t.TempDir())
-	prev := providersFn
-	providersFn = func() map[string]provider.Provider {
-		return map[string]provider.Provider{"anthropic": mock}
-	}
-	t.Cleanup(func() { providersFn = prev })
+	prev := appRuntime
+	appRuntime = smithapp.NewRuntime(smithapp.RuntimeConfig{
+		Providers: func() map[string]provider.Provider {
+			return map[string]provider.Provider{"anthropic": mock}
+		},
+	})
+	t.Cleanup(func() { appRuntime = prev })
 }
 
 // TestRunOutputJSON covers AC1: a scripted run completes end-to-end and emits a

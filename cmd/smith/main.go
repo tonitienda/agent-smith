@@ -7,8 +7,10 @@ import (
 	"os"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
-	"github.com/tonitienda/agent-smith/internal/version"
+	"github.com/tonitienda/agent-smith/internal/smithapp"
 )
+
+var appRuntime = smithapp.NewRuntime(smithapp.RuntimeConfig{})
 
 func main() {
 	os.Exit(buildApp().Run(os.Args[1:]))
@@ -17,10 +19,7 @@ func main() {
 // buildApp assembles the router: the IO streams, TTY detection, the verb tree,
 // and the bare-invocation TUI launch.
 func buildApp() *cli.App {
-	app := &cli.App{
-		Name:      "smith",
-		Tagline:   "Agent Smith is a provider-agnostic coding agent harness.",
-		Version:   version.String(),
+	return smithapp.BuildCLI(smithapp.CLIConfig{
 		Stdin:     os.Stdin,
 		Stdout:    os.Stdout,
 		Stderr:    os.Stderr,
@@ -28,7 +27,6 @@ func buildApp() *cli.App {
 		StdoutTTY: isTerminal(os.Stdout),
 		Getenv:    os.Getenv,
 		Bare:      bareTUI,
-	}
-	app.Commands = commands()
-	return app
+		Commands:  commands(),
+	})
 }
