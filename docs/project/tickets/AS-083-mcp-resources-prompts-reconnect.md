@@ -1,7 +1,7 @@
 ---
 id: AS-083
 title: MCP resources, prompts, reconnect, and tools/list pagination
-status: ready-to-implement
+status: done
 github_issue: 140
 depends_on: [AS-036]
 area: capability
@@ -34,11 +34,30 @@ explicitly, not silently):
 
 ## Acceptance criteria
 
-- [ ] MCP resources can be listed and read into context, attributed per server.
-- [ ] MCP prompts appear in the command palette and expand into the conversation.
-- [ ] A crashed-then-restarted server's tools recover via reconnect, no session restart.
-- [ ] A server that pages `tools/list` exposes all of its tools.
+- [x] MCP resources can be listed and read into context, attributed per server.
+- [x] MCP prompts appear in the command palette and expand into the conversation.
+- [x] A crashed-then-restarted server's tools recover via reconnect, no session restart.
+- [x] A server that pages `tools/list` exposes all of its tools.
 
 ## Dependencies
 
 - AS-036 (MCP client tools path)
+
+## Implementation notes
+
+- `internal/mcp`: `initialize` now records the server's `resources`/`prompts`
+  capability flags (`HasResources`/`HasPrompts`); `tools/list`, `resources/list`,
+  and `prompts/list` all follow `nextCursor` through a shared `pageThrough` helper
+  (capped to guard a misbehaving server). `ListResources`/`ReadResource`,
+  `ListPrompts`/`GetPrompt`, and a `Reconnect` that re-dials from the stored config
+  and atomically swaps the transport in. A new `rpc` helper centralises the §7.4
+  isolation contract (health check, timeout, circuit-break) across every method.
+- `cmd/smith`: a resource-capable server gets synthetic `mcp__<server>__list_resources`
+  and `mcp__<server>__read_resource` tools; the read returns the content in a
+  `file_read` block sourced `mcp_resource` and attributed to the server.
+  `recordFileRead` now merges the tool's `Output.Attribution`, so the resource
+  read's cost is credited per server in `/context`. Each server prompt becomes an
+  `mcp__<server>__<prompt>` command that expands into a fresh user turn via
+  `command.Output.Prompt`. A `/mcp` command reports server health and re-dials a
+  crashed server (`/mcp reconnect [server]`) — the on-demand reconnect trigger that
+  keeps the deliberate circuit-break semantics for the automatic path.

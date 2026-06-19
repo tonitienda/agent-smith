@@ -448,7 +448,7 @@ func (r *Runtime) ensureLogged(call schema.Block) (schema.Block, error) {
 // tool_result linked to its call, and returns the stored tool_result block.
 func (r *Runtime) record(call schema.Block, out Output) (schema.Block, error) {
 	if out.FileRead != nil {
-		if err := r.recordFileRead(call, out.FileRead); err != nil {
+		if err := r.recordFileRead(call, out.FileRead, out.Attribution); err != nil {
 			return schema.Block{}, err
 		}
 	}
@@ -482,8 +482,11 @@ func (r *Runtime) record(call schema.Block, out Output) (schema.Block, error) {
 // block's envelope — provenance, attribution, the read call's tool_use_id, and a
 // default Source — so the tool only supplies path, range, content, and hash. The
 // content is bounded by the same byte budget as tool_result text, so a huge file
-// cannot flood the window even if the tool failed to cap it itself.
-func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody) error {
+// cannot flood the window even if the tool failed to cap it itself. extra is the
+// tool's own attribution (an MCP server for a resource read, AS-083), merged on
+// top of the authoritative tool name so /context credits the read's cost to its
+// source rather than only the tool.
+func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody, extra *schema.Attribution) error {
 	fr := *body
 	fr.Content = r.truncateText(fr.Content)
 	if fr.ProducedBy == "" {
@@ -500,7 +503,7 @@ func (r *Runtime) recordFileRead(call schema.Block, body *schema.FileReadBody) e
 			Producer:    producer,
 			DerivedFrom: []string{call.ID},
 		},
-		Attribution: &schema.Attribution{Tool: call.ToolCall.Name},
+		Attribution: attribution(call.ToolCall.Name, extra),
 		FileRead:    &fr,
 	}
 	if _, err := r.log.Append(block); err != nil {

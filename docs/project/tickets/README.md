@@ -109,7 +109,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
 | [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
 | [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
-| [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | ready | 036 |
+| [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | done | 036 |
 | [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | **needs clarification** | 037 |
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
