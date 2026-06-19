@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
@@ -23,13 +24,15 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
+	"github.com/tonitienda/agent-smith/schema"
 )
 
 // commands builds the noun-grouped verb tree (D-CLI-1). The read-only verbs
 // (`cost`, `context show`, `session list|resume`) dispatch through the same
 // command.Registry the TUI palette renders (chatCommands), so a slash-command and
 // its subcommand share one handler (D-CLI-10). The richer headless behaviour —
-// streaming output, budgets, permission posture — lands on top in AS-051.
+// streaming output, budgets, permission posture — lives on `run` (AS-051,
+// headless.go).
 func commands() []*cli.Command {
 	// reg is a metadata-only view of the shared registry (no controller needed to
 	// read names/summaries/scriptability); registryLeaf reads the descriptors so
@@ -201,7 +204,7 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := defaultProviders()
+	providers := providersFn()
 	provName, model := "anthropic", chatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
 		if r, ok := pricing.Lookup(m); ok && r.Vendor != "" {
@@ -234,6 +237,11 @@ func latestSession(store *session.Store) (*session.Session, error) {
 	return sess, nil
 }
 
+// providersFn resolves the configured provider set. It is a package var so a test
+// can substitute a mock provider for the network-backed default, letting the
+// headless run path (AS-051) be exercised end-to-end in CI without real keys.
+var providersFn = defaultProviders
+
 // defaultProviders is the configured provider set (no network until a turn runs).
 func defaultProviders() map[string]provider.Provider {
 	return map[string]provider.Provider{
@@ -250,27 +258,53 @@ func defaultProviders() map[string]provider.Provider {
 // structured reason rather than acting unattended.
 func runCommand() *cli.Command {
 	var file string
+	var budgetFlag string
+	var auto bool
 	return &cli.Command{
 		Name:          "run",
 		Summary:       "Run a single task non-interactively",
 		Usage:         "<prompt>",
 		Scriptability: command.Scriptable.String(),
+		OutputSchema:  "text, session_id, stop_reason, cost_usd, iterations, denied[]",
 		Examples: []string{
 			`smith run "fix the failing test"`,
 			`echo "summarize CHANGELOG" | smith run`,
 			"smith run -f task.md",
+			`smith run "ship it" --output json --budget 0.25 --auto`,
 		},
 		Flags: func(fs *flag.FlagSet) {
 			fs.StringVar(&file, "f", "", "read the prompt from a file")
+			fs.StringVar(&budgetFlag, "budget", "", "halt the run at this dollar ceiling (e.g. 0.25)")
+			fs.BoolVar(&auto, "auto", false, "auto-approve tool calls (unattended); default denies what would prompt")
 		},
 		Run: func(c *cli.Context) error {
 			prompt, err := resolvePrompt(c, file)
 			if err != nil {
 				return err
 			}
-			return runHeadless(context.Background(), c, prompt)
+			budgetUSD, err := parseBudgetFlag(budgetFlag)
+			if err != nil {
+				return err
+			}
+			return runHeadless(context.Background(), c, prompt, headlessOpts{budgetUSD: budgetUSD, auto: auto})
 		},
 	}
+}
+
+// parseBudgetFlag parses the --budget value into a dollar ceiling, tolerating a
+// leading currency symbol the way /budget does. An empty value means "no
+// ceiling" (0). A negative or unparseable amount is a usage error.
+func parseBudgetFlag(v string) (float64, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, nil
+	}
+	v = strings.TrimPrefix(v, "$")
+	amount, err := strconv.ParseFloat(v, 64)
+	if err != nil || amount < 0 {
+		return 0, cli.Usagef("run: invalid --budget %q: want a non-negative dollar amount", v)
+	}
+	return amount, nil
 }
 
 // resolvePrompt resolves the task prompt per D-CLI-3 precedence: a positional
@@ -364,10 +398,23 @@ func nonEmptyPrompt(s string) (string, error) {
 	return s, nil
 }
 
-// runHeadless drives a single turn for `smith run`, writing the assistant's final
-// text to stdout (D-CLI-5). It builds a fresh session and an engine with a
-// deny-by-default tool gate.
-func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
+// headlessOpts carries the run-specific posture flags `smith run` resolves from
+// its flags: a dollar budget ceiling (0 = unmetered) and whether to auto-approve
+// tool calls (AS-051).
+type headlessOpts struct {
+	budgetUSD float64
+	auto      bool
+}
+
+// runHeadless drives a single task for `smith run` and renders the outcome per
+// --output (D-CLI-4): the assistant's final text on stdout for plain mode, or a
+// structured runResult (answer, cost, session id, stop reason, permission denials)
+// for json/stream-json. It builds a fresh session — resumable later (AS-051 AC4) —
+// wires the allowlist-then-deny permission posture (D-CLI-9, or auto with
+// `--auto`), the lifecycle hooks (AS-035), and budget enforcement (AS-041/AS-086)
+// when --budget is set, then maps how the run ended to the additive exit-code
+// taxonomy (permission/budget/cancellation/provider).
+func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headlessOpts) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
@@ -396,6 +443,17 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 	if err != nil {
 		return err
 	}
+	pricing, err := sessionPricing(c.Globals.Config)
+	if err != nil {
+		return fmt.Errorf("load pricing table: %w", err)
+	}
+
+	// Permission posture (D-CLI-9): allowlist-then-deny by default, auto with
+	// --auto. The gate is wrapped so denied calls surface in the result.
+	gate, err := headlessPermission(wd, c.Globals.Config, opts.auto)
+	if err != nil {
+		return fmt.Errorf("load permission policy: %w", err)
+	}
 
 	// Load and wire the lifecycle hooks (AS-035) so a headless run honors the same
 	// pre/post-tool-use and prompt-submit automation an interactive session does.
@@ -405,9 +463,25 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 	}
 	hooks := loadHooks(cfg, c.Stderr)
 
-	rtOpts := append([]tool.Option{tool.WithPermission(denyHeadless)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
+	rtOpts := append([]tool.Option{tool.WithPermission(gate.decide)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
-	eng, err := loop.New(prov, sess.Log, rt, tools, model)
+
+	engOpts := []loop.Option{}
+	if obs := streamObserver(c); obs != nil {
+		engOpts = append(engOpts, loop.WithObserver(obs))
+	}
+	// Budget enforcement (AS-041/AS-086): --budget sets the ceiling for this run,
+	// priced against the same table as /cost. Without --budget the run is unmetered.
+	if opts.budgetUSD > 0 {
+		log := sess.Log
+		spent := func() float64 { return cost.Summarize(log.Events(), pricing).TotalUSD }
+		reserve := func(c []schema.Block) (float64, bool) { return cost.EstimateTurnCostUSD(c, model, pricing) }
+		engOpts = append(engOpts,
+			loop.WithBudget(spent, opts.budgetUSD, 0),
+			loop.WithBudgetReservation(reserve, false),
+		)
+	}
+	eng, err := loop.New(prov, sess.Log, rt, tools, model, engOpts...)
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
@@ -421,11 +495,9 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string) error {
 		prompt = rewritten
 	}
 
-	res, err := eng.Run(ctx, prompt)
-	if err != nil {
-		return err // runtime failure → exit 1
-	}
-	return c.Emit(res.FinalText)
+	res, runErr := eng.Run(ctx, prompt)
+	totalUSD := cost.Summarize(sess.Log.Events(), pricing).TotalUSD
+	return emitResult(c, sess.ID, res, totalUSD, gate.denied(), runErr)
 }
 
 // headlessProvider resolves the provider and model for a headless run from the
@@ -438,7 +510,7 @@ func headlessProvider(override string) (provider.Provider, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := defaultProviders()
+	providers := providersFn()
 	provName, model := "anthropic", chatModel()
 	if r, ok := pricing.Lookup(model); ok && r.Vendor != "" {
 		if _, ok := providers[r.Vendor]; ok {
@@ -450,12 +522,6 @@ func headlessProvider(override string) (provider.Provider, string, error) {
 		return nil, "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
 	}
 	return prov, model, nil
-}
-
-// denyHeadless refuses every tool call: headless mode never opens an interactive
-// permission prompt (D-CLI-8), and the allowlist/`--auto` posture is AS-051.
-func denyHeadless(context.Context, tool.Call) tool.Decision {
-	return tool.Denied("headless run denies tool calls by default; --auto/allowlist arrives in AS-051")
 }
 
 // headlessTools builds the built-in file and shell tools for a headless run.

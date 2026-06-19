@@ -134,10 +134,11 @@ substrate, many renderers.
 
 ## 3. Exit codes
 
-V1: `0` success · `1` task/runtime failure · `2` invalid usage. The richer
-taxonomy (permission-stop, budget-stop, cancellation, provider-error,
-internal-error) is reserved and assigned additively in AS-051. Scripts should
-treat unknown nonzero codes as failure.
+V1: `0` success · `1` task/runtime failure · `2` invalid usage. AS-051 assigns
+the richer headless taxonomy additively on top: `3` permission-stop · `4`
+budget-stop · `5` cancellation · `6` provider-error (internal-error stays the
+generic `1`). Codes are append-only; scripts should treat unknown nonzero codes
+as failure.
 
 ## 4. How this maps to the architecture
 
