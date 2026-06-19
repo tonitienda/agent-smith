@@ -7,34 +7,34 @@ These sequence diagrams complement the C4 views with the most important executio
 ```mermaid
 sequenceDiagram
     actor User
-    participant TUI as TUI face
-    participant Controller as chatSession controller
-    participant Log as event log
-    participant Projection as projection engine
-    participant Loop as agent loop
-    participant Provider as provider adapter/API
-    participant Tools as tool runtime
+    participant TUIFace as TUI face
+    participant ChatController as chatSession controller
+    participant EventLog as event log
+    participant ProjectionEngine as projection engine
+    participant AgentEngine as agent engine
+    participant ProviderAdapter as provider adapter/API
+    participant ToolRuntime as tool runtime
 
-    User->>TUI: Submit prompt
-    TUI->>Controller: Run(ctx, prompt)
-    Controller->>Log: Append user block
-    Controller->>Loop: Run turn
-    Loop->>Projection: Project(log events, target model)
-    Projection-->>Loop: Live context blocks
-    Loop->>Provider: Stream(request with context/tools)
-    Provider-->>Loop: Text / reasoning / tool-call / usage events
-    Loop->>Log: Append assistant and tool-call blocks
+    User->>TUIFace: Submit prompt
+    TUIFace->>ChatController: Run(ctx, prompt)
+    ChatController->>EventLog: Append user block
+    ChatController->>AgentEngine: Run turn
+    AgentEngine->>ProjectionEngine: Project(log events, target model)
+    ProjectionEngine-->>AgentEngine: Live context blocks
+    AgentEngine->>ProviderAdapter: Stream(request with context/tools)
+    ProviderAdapter-->>AgentEngine: Text / reasoning / tool-call / usage events
+    AgentEngine->>EventLog: Append assistant and tool-call blocks
     alt model requests tools
-        Loop->>Tools: ExecuteBatch(tool calls)
-        Tools->>Tools: Validate args, permission gate, hooks, timeout, truncation
-        Tools->>Log: Append linked tool_result blocks
-        Tools-->>Loop: Tool results
-        Loop->>Projection: Re-project updated log
-        Loop->>Provider: Continue with tool results in context
+        AgentEngine->>ToolRuntime: ExecuteBatch(tool calls)
+        ToolRuntime->>ToolRuntime: Validate args, permission gate, hooks, timeout, truncation
+        ToolRuntime->>EventLog: Append linked tool_result blocks
+        ToolRuntime-->>AgentEngine: Tool results
+        AgentEngine->>ProjectionEngine: Re-project updated log
+        AgentEngine->>ProviderAdapter: Continue with tool results in context
     end
-    Loop-->>Controller: Stop reason and usage events
-    Controller-->>TUI: UI events, transcript updates, meter data
-    TUI-->>User: Render response and status
+    AgentEngine-->>ChatController: Stop reason and usage events
+    ChatController-->>TUIFace: UI events, transcript updates, meter data
+    TUIFace-->>User: Render response and status
 ```
 
 ## `/clean` preview and apply
@@ -42,22 +42,22 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor User
-    participant Command as /clean handler
-    participant Projection as projection engine
-    participant Clean as clean planner
-    participant Log as event log
+    participant CleanCommand as clean command handler
+    participant ProjectionEngine as projection engine
+    participant CleanPlanner as clean planner
+    participant EventLog as event log
 
-    User->>Command: /clean <handle>...
-    Command->>Projection: Project current log
-    Projection-->>Command: Live and excluded blocks
-    Command->>Clean: Build removal plan
-    Clean-->>Command: Preview: blocks, warnings, reclaimed tokens/cost
-    Command-->>User: Show preview; wait for --apply/--cancel
-    User->>Command: /clean --apply
-    Command->>Log: Append exclusion event derived from target blocks
-    Command->>Projection: Re-project log
-    Projection-->>Command: Updated context with excluded blocks visible as excluded
-    Command-->>User: Show applied summary
+    User->>CleanCommand: /clean <handle>...
+    CleanCommand->>ProjectionEngine: Project current log
+    ProjectionEngine-->>CleanCommand: Live and excluded blocks
+    CleanCommand->>CleanPlanner: Build removal plan
+    CleanPlanner-->>CleanCommand: Preview: blocks, warnings, reclaimed tokens/cost
+    CleanCommand-->>User: Show preview; wait for --apply/--cancel
+    User->>CleanCommand: /clean --apply
+    CleanCommand->>EventLog: Append exclusion event derived from target blocks
+    CleanCommand->>ProjectionEngine: Re-project log
+    ProjectionEngine-->>CleanCommand: Updated context with excluded blocks visible as excluded
+    CleanCommand-->>User: Show applied summary
 ```
 
 ## Session resume
@@ -65,20 +65,20 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor User
-    participant CLI as CLI/TUI command
-    participant Store as session store
-    participant Log as event log
-    participant Controller as controller
-    participant Loop as agent loop
+    participant CommandFace as CLI or TUI command
+    participant SessionStore as session store
+    participant EventLog as event log
+    participant ChatController as controller
+    participant AgentEngine as agent engine
 
-    User->>CLI: smith session resume <id> or /resume
-    CLI->>Store: Open(project-scoped session id)
-    Store->>Log: Replay events.jsonl
-    Log-->>Store: In-memory log with monotonic sequence state
-    Store-->>Controller: Session{metadata, log}
-    Controller->>Loop: Rebuild engine over resumed log/provider/tools
-    Loop-->>Controller: Ready for next projected turn
-    Controller-->>User: Resume summary
+    User->>CommandFace: smith session resume ID or /resume
+    CommandFace->>SessionStore: Open(project-scoped session id)
+    SessionStore->>EventLog: Replay events.jsonl
+    EventLog-->>SessionStore: In-memory log with monotonic sequence state
+    SessionStore-->>ChatController: Session metadata and log
+    ChatController->>AgentEngine: Rebuild engine over resumed log/provider/tools
+    AgentEngine-->>ChatController: Ready for next projected turn
+    ChatController-->>User: Resume summary
 ```
 
 ## Headless `smith run`
@@ -86,16 +86,16 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Script
-    participant CLI as CLI router
-    participant Headless as headless runner
-    participant Controller as session wiring
-    participant Loop as agent loop
-    participant Output as stdout/stderr renderer
+    participant CLIRouter as CLI router
+    participant HeadlessRunner as headless runner
+    participant ChatController as session wiring
+    participant AgentEngine as agent engine
+    participant OutputRenderer as stdout and stderr renderer
 
-    Script->>CLI: smith run "prompt" --output json|plain|stream-json
-    CLI->>Headless: Parse prompt, config, output mode
-    Headless->>Controller: Create/open session, providers, tools, hooks
-    Controller->>Loop: Run prompt to stop condition
-    Loop-->>Headless: Normalized UI events and final state
-    Headless->>Output: Write result to stdout; diagnostics to stderr
+    Script->>CLIRouter: smith run "prompt" --output json|plain|stream-json
+    CLIRouter->>HeadlessRunner: Parse prompt, config, output mode
+    HeadlessRunner->>ChatController: Create/open session, providers, tools, hooks
+    ChatController->>AgentEngine: Run prompt to stop condition
+    AgentEngine-->>HeadlessRunner: Normalized UI events and final state
+    HeadlessRunner->>OutputRenderer: Write result to stdout; diagnostics to stderr
 ```
