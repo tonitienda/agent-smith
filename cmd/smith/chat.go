@@ -160,6 +160,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.
 	cmds := chatCommands(ctl)
+	// Layer MCP commands (AS-083): /mcp health+reconnect, and one command per server
+	// prompt. Registered before builtinNames so custom commands can't clobber them.
+	registerMCPCommands(cmds, mcpClients, os.Stderr)
 	builtins := builtinNames(cmds)
 	rescanCustom := func() { registerCustomCommands(cmds, builtins, wd) }
 	rescanCustom()

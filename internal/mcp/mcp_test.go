@@ -23,9 +23,11 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// serveMock implements just enough of an MCP server for the tests: the handshake,
-// a tools/list of {echo, boom, crash}, and tools/call where echo returns its
-// arguments, boom reports a domain error, and crash exits the process.
+// serveMock implements just enough of an MCP server for the tests: the handshake
+// (advertising resources + prompts capabilities), a paginated tools/list of
+// {echo, boom, crash}, tools/call where echo returns its arguments, boom reports a
+// domain error, and crash exits the process, plus paginated resources/prompts
+// listings and resources/read + prompts/get.
 func serveMock(in io.Reader, out io.Writer) {
 	dec := json.NewDecoder(in)
 	enc := json.NewEncoder(out)
@@ -38,14 +40,36 @@ func serveMock(in io.Reader, out io.Writer) {
 			continue // a notification (e.g. notifications/initialized): no reply
 		}
 		resp := rpcResponse{JSONRPC: jsonRPCVersion, ID: req.ID}
+		cursor := cursorParam(req.Params)
 		switch req.Method {
 		case "initialize":
-			resp.Result = json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"mock"}}`)
+			resp.Result = json.RawMessage(`{"protocolVersion":"2025-06-18","capabilities":{"resources":{},"prompts":{}},"serverInfo":{"name":"mock"}}`)
 		case "tools/list":
-			resp.Result = json.RawMessage(`{"tools":[` +
-				`{"name":"echo","description":"echo args","inputSchema":{"type":"object"}},` +
-				`{"name":"boom","description":"domain error"},` +
-				`{"name":"crash","description":"kills the server"}]}`)
+			// Paged across two pages so the cursor path is exercised; the union is
+			// still {echo, boom, crash}.
+			if cursor == "" {
+				resp.Result = json.RawMessage(`{"tools":[` +
+					`{"name":"echo","description":"echo args","inputSchema":{"type":"object"}},` +
+					`{"name":"boom","description":"domain error"}],"nextCursor":"t2"}`)
+			} else {
+				resp.Result = json.RawMessage(`{"tools":[{"name":"crash","description":"kills the server"}]}`)
+			}
+		case "resources/list":
+			if cursor == "" {
+				resp.Result = json.RawMessage(`{"resources":[{"uri":"mem://a","name":"A","description":"first"}],"nextCursor":"r2"}`)
+			} else {
+				resp.Result = json.RawMessage(`{"resources":[{"uri":"mem://b","name":"B"}]}`)
+			}
+		case "resources/read":
+			resp.Result = json.RawMessage(`{"contents":[{"uri":"mem://a","text":"hello resource"}]}`)
+		case "prompts/list":
+			if cursor == "" {
+				resp.Result = json.RawMessage(`{"prompts":[{"name":"greet","description":"greet someone","arguments":[{"name":"who","required":true}]}],"nextCursor":"p2"}`)
+			} else {
+				resp.Result = json.RawMessage(`{"prompts":[{"name":"bare"}]}`)
+			}
+		case "prompts/get":
+			resp.Result = json.RawMessage(`{"messages":[{"role":"user","content":{"type":"text","text":"Hello there"}}]}`)
 		case "tools/call":
 			var p struct {
 				Name      string          `json:"name"`
@@ -71,6 +95,16 @@ func serveMock(in io.Reader, out io.Writer) {
 		}
 		_ = enc.Encode(resp)
 	}
+}
+
+// cursorParam extracts the pagination cursor from a list request's params, or ""
+// when none was sent (the first page).
+func cursorParam(raw json.RawMessage) string {
+	var p struct {
+		Cursor string `json:"cursor"`
+	}
+	_ = json.Unmarshal(raw, &p)
+	return p.Cursor
 }
 
 // pipeClient builds a Client whose transport is wired to an in-process serveMock
@@ -115,6 +149,102 @@ func TestStdioHandshakeAndCall(t *testing.T) {
 	}
 	if !c.Healthy() {
 		t.Fatal("a domain error must not break the circuit")
+	}
+}
+
+func TestToolListPaginationAndCapabilities(t *testing.T) {
+	c := pipeClient(t)
+	// tools/list is served across two pages; all three tools must surface.
+	tools := c.Tools()
+	if len(tools) != 3 {
+		t.Fatalf("paginated tools = %d, want 3 (echo/boom/crash)", len(tools))
+	}
+	if tools[0].Name != "echo" || tools[2].Name != "crash" {
+		t.Fatalf("tools out of order across pages: %+v", tools)
+	}
+	if !c.HasResources() || !c.HasPrompts() {
+		t.Fatalf("capabilities not parsed: resources=%v prompts=%v", c.HasResources(), c.HasPrompts())
+	}
+}
+
+func TestResources(t *testing.T) {
+	c := pipeClient(t)
+	res, err := c.ListResources(context.Background())
+	if err != nil {
+		t.Fatalf("list resources: %v", err)
+	}
+	if len(res) != 2 || res[0].URI != "mem://a" || res[1].URI != "mem://b" {
+		t.Fatalf("paginated resources = %+v, want mem://a, mem://b", res)
+	}
+	content, err := c.ReadResource(context.Background(), "mem://a")
+	if err != nil {
+		t.Fatalf("read resource: %v", err)
+	}
+	if content != "hello resource" {
+		t.Fatalf("resource content = %q", content)
+	}
+}
+
+func TestPrompts(t *testing.T) {
+	c := pipeClient(t)
+	prompts, err := c.ListPrompts(context.Background())
+	if err != nil {
+		t.Fatalf("list prompts: %v", err)
+	}
+	if len(prompts) != 2 || prompts[0].Name != "greet" || prompts[1].Name != "bare" {
+		t.Fatalf("paginated prompts = %+v, want greet, bare", prompts)
+	}
+	if len(prompts[0].Arguments) != 1 || prompts[0].Arguments[0].Name != "who" || !prompts[0].Arguments[0].Required {
+		t.Fatalf("prompt arguments = %+v", prompts[0].Arguments)
+	}
+	text, err := c.GetPrompt(context.Background(), "greet", map[string]string{"who": "world"})
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if text != "Hello there" {
+		t.Fatalf("expanded prompt = %q", text)
+	}
+}
+
+func TestReconnectAfterCrash(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skipf("no executable path: %v", err)
+	}
+	c, err := Dial(context.Background(), ServerConfig{
+		Name:    "proc",
+		Command: exe,
+		Env:     map[string]string{"GO_MCP_MOCK": "1"},
+		Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("dial subprocess: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+
+	if _, err := c.Call(context.Background(), "crash", nil); err == nil {
+		t.Fatal("crash call should fail")
+	}
+	if c.Healthy() {
+		t.Fatal("server should be unhealthy after a crash")
+	}
+	// Reconnect re-dials a fresh subprocess; the same tools recover and calls work
+	// again without a session restart.
+	if err := c.Reconnect(context.Background()); err != nil {
+		t.Fatalf("reconnect: %v", err)
+	}
+	if !c.Healthy() {
+		t.Fatal("server should be healthy after reconnect")
+	}
+	if got := len(c.Tools()); got != 3 {
+		t.Fatalf("post-reconnect tools = %d, want 3", got)
+	}
+	res, err := c.Call(context.Background(), "echo", json.RawMessage(`{"ok":1}`))
+	if err != nil {
+		t.Fatalf("post-reconnect echo: %v", err)
+	}
+	if !strings.Contains(res.Text, `"ok":1`) {
+		t.Fatalf("post-reconnect echo result = %+v", res)
 	}
 }
 
