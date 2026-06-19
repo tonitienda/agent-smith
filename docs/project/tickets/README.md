@@ -115,7 +115,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
 | [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
 | [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | ready | 044 |
-| [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | ready | 065, 066 |
+| [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | done | 065, 066 |
 | [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | ready | 066 |
 | [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | ready | — |
 | [AS-092](AS-092-shared-streamio.md) | Extract shared stream I/O mechanics for providers and MCP | architecture | ready | 010, 036, 083 |

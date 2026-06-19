@@ -85,7 +85,8 @@ Background/async runner, replayable runs + OpenTelemetry, cross-session analytic
 ```
 docs/project/PRD.md        product spec — read the Decision Log (D0–D9) first
 docs/project/tickets/      one file per ticket (AS-NNN-slug.md) + index README
-cmd/smith/                 Agent Smith CLI entrypoint (single-binary target)
+cmd/smith/                 Agent Smith CLI entrypoint and subcommand dispatch (single-binary target)
+internal/smithapp/         reusable Smith app wiring for router, providers, and sessions
 internal/                  internal Go packages shared by binaries
 cmd/ticket-sync/           mirrors ticket files to GitHub issues (files are the source of truth)
 internal/session/          project-scoped disk persistence for append-only session logs
