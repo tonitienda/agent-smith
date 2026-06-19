@@ -11,7 +11,7 @@ C4Component
     Container_Boundary(smith, "smith binary") {
         Component(cli, "CLI router shell", "internal/smithapp + internal/cli", "Builds the face-neutral smith app shell from injected streams, env, bare handler, and commands.")
         Component(entry, "Process composition root", "cmd/smith", "Supplies os.Args, process streams, TTY detection, bare TUI callback, and subcommand tree.")
-        Component(runtime, "Reusable app runtime", "internal/smithapp", "Owns shared provider, model, session, and built-in-tool construction for executable faces and tests.")
+        Component(runtime, "Reusable app runtime", "internal/smithapp", "Owns shared provider, model, session, and built-in tool construction for executable faces and tests.")
         Component(tui, "TUI face", "internal/tui", "Interactive terminal UI, command palette, meters, transcript, permission prompts.")
         Component(controller, "Session controller", "cmd/smith", "Owns face-specific session orchestration: config, capabilities, hooks, MCP, commands, loop lifecycle, and TUI/headless adapters.")
         Component(commands, "Command registry", "internal/command + feature packages", "Shared slash-command and CLI command descriptors/handlers.")

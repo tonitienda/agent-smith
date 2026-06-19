@@ -78,7 +78,8 @@ sequenceDiagram
     SessionStore->>EventLog: Replay events.jsonl
     EventLog-->>SessionStore: In memory log with monotonic sequence state
     SessionStore-->>SmithApp: Session metadata and log
-    SmithApp-->>ChatController: Resumed session
+    SmithApp-->>CommandFace: Resumed session
+    CommandFace->>ChatController: Initialize with resumed session
     ChatController->>AgentLoop: Rebuild engine over resumed session wiring
     AgentLoop-->>ChatController: Ready for next projected turn
     ChatController-->>User: Resume summary
@@ -103,7 +104,9 @@ sequenceDiagram
     ProcessRoot->>CLIRouter: Dispatch argv
     CLIRouter->>HeadlessRunner: Parse prompt config and output mode
     HeadlessRunner->>SmithApp: Resolve runtime defaults (providers, model, tools, session)
+    SmithApp-->>HeadlessRunner: Runtime defaults
     HeadlessRunner->>ChatController: Combine runtime defaults with config, permissions, hooks, MCP
+    ChatController-->>HeadlessRunner: Wired session and loop engine
     ChatController->>AgentLoop: Run prompt to stop condition
     AgentLoop-->>HeadlessRunner: Normalized UI events and final state
     HeadlessRunner->>OutputRenderer: Write result to stdout and diagnostics to stderr
