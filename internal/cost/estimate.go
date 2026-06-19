@@ -68,6 +68,27 @@ func EstimateContextTokens(events []schema.Block) int {
 	return total
 }
 
+// EstimateTurnCostUSD estimates the worst-case dollar cost of the next turn
+// against model under table, for the pre-turn budget reservation (AS-086): the
+// model-facing input context priced at the model's input rate (the same AS-063
+// per-block estimate the meter uses — never a second tokenizer path), plus the
+// model's maximum output priced at the output rate, the most a single turn can
+// generate. ok is false when the turn cannot be priced — the model has no
+// pricing entry, or its entry records no max-output ceiling — so the caller
+// handles the unpriced/unbounded turn conservatively (AS-086's unpriced-model
+// path) rather than reserving $0 and treating the turn as free. The estimate is
+// deliberately conservative: it assumes a fresh (uncached) input window and a
+// full-length completion, so a reservation that fits cannot overshoot.
+func EstimateTurnCostUSD(ctx []schema.Block, model string, table *Table) (usd float64, ok bool) {
+	rate, found := table.Lookup(model)
+	if !found || rate.MaxOutputTokens <= 0 {
+		return 0, false
+	}
+	inputUSD := perMTok(EstimateContextTokens(ctx), rate.InputPerMTok)
+	outputUSD := perMTok(rate.MaxOutputTokens, rate.OutputPerMTok)
+	return inputUSD + outputUSD, true
+}
+
 // blockRuneCount counts the runes of the textual payload a block presents to the
 // model, across whichever body matches its Kind, without allocating an
 // intermediate string. It mirrors how the provider adapters actually render each

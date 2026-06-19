@@ -95,6 +95,14 @@ type Engine struct {
 	spent              func() float64
 	budgetDefaultUSD   float64
 	budgetWarnFraction float64
+
+	// Conservative pre-turn enforcement (AS-086). reserve estimates the next
+	// turn's worst-case cost from the context about to be sent (nil disables the
+	// strict path, leaving AS-041's boundary check as the only guard); ok is false
+	// when the active model cannot be priced, in which case haltUnpriced decides
+	// whether the run stops rather than spending blind.
+	reserve      BudgetReservation
+	haltUnpriced bool
 }
 
 // Option configures an Engine.
@@ -145,9 +153,9 @@ func WithRetry(maxAttempts int, backoffBase time.Duration) Option {
 // turn is known only after it completes, so a single turn can carry the total
 // slightly past the ceiling before the next boundary halts the run, and a turn
 // the pricing table cannot price contributes $0 to spent — an unpriced model is
-// effectively unmetered. Strict, pre-turn non-overshoot (a reservation from a
-// request-size + max-output estimate) and conservative handling of unpriced
-// turns are tracked as a follow-up (AS-086).
+// effectively unmetered. WithBudgetReservation (AS-086) closes both gaps with a
+// conservative pre-turn estimate; without it this boundary path is the only
+// guard and remains the graceful fallback when no estimate is available.
 func WithBudget(spent func() float64, defaultLimitUSD, warnFraction float64) Option {
 	return func(e *Engine) {
 		if spent != nil {
@@ -155,6 +163,36 @@ func WithBudget(spent func() float64, defaultLimitUSD, warnFraction float64) Opt
 			e.budgetDefaultUSD = defaultLimitUSD
 			e.budgetWarnFraction = warnFraction
 		}
+	}
+}
+
+// BudgetReservation estimates the worst-case dollar cost of the next turn from
+// the model-facing context about to be sent (typically cost.EstimateTurnCostUSD:
+// request-size input at the input rate plus the model's max output at the output
+// rate). ok is false when the active model cannot be priced, so the loop handles
+// the unpriced bypass conservatively instead of treating an unmetered turn as
+// free.
+type BudgetReservation func(ctx []schema.Block) (worstCaseUSD float64, ok bool)
+
+// WithBudgetReservation installs conservative pre-turn budget enforcement
+// (AS-086) on top of WithBudget's boundary check, closing its two honest gaps:
+//
+//   - Single-turn overshoot: before issuing a turn the loop reserves reserve's
+//     worst-case estimate against the remaining budget and halts before the turn
+//     if spend plus the reservation would reach the ceiling, so the total cannot
+//     overshoot rather than catching it one boundary late.
+//   - Unpriced-model bypass: when reserve reports ok=false the model is unpriced
+//     and its spend is invisible to the guard; the loop surfaces a one-time
+//     UIBudgetUnpriced notice and, when haltUnpriced is set, stops rather than
+//     spending blind. Otherwise the turn proceeds after the notice.
+//
+// It is a no-op unless WithBudget also installed a spend source and a ceiling is
+// active; a nil reserve leaves only the boundary check, so behavior degrades
+// gracefully when no estimate is available.
+func WithBudgetReservation(reserve BudgetReservation, haltUnpriced bool) Option {
+	return func(e *Engine) {
+		e.reserve = reserve
+		e.haltUnpriced = haltUnpriced
 	}
 }
 
@@ -240,6 +278,7 @@ func (e *Engine) Run(ctx context.Context, userText string) (Result, error) {
 func (e *Engine) drive(ctx context.Context) (Result, error) {
 	res := Result{}
 	warned := false
+	unpricedWarned := false
 	// The ceiling is static for the life of one Run — /budget cannot be issued
 	// mid-turn — so resolve it once (a /budget override on the log wins over the
 	// configured default) rather than rescanning the log every iteration. Only the
@@ -259,10 +298,18 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			res.StopReason = StopMaxIterations
 			return res, nil
 		}
+		// Context is projected once per iteration and reused for both the pre-turn
+		// budget reservation (AS-086, which prices the window about to be sent) and
+		// the request itself, so the estimate is measured against exactly what the
+		// model receives.
+		proj := projection.Project(e.log.Events(), e.projectOpts)
+
 		// Budget enforcement (AS-041) runs at the turn boundary: the prior turn's
 		// usage is already recorded on the log, and any in-flight tool call has
 		// already been dispatched, so halting here finishes work in flight and
-		// stops before starting another priced turn.
+		// stops before starting another priced turn. The pre-turn reservation
+		// (AS-086) then tightens this to halt *before* a turn whose worst-case cost
+		// would overshoot, and to surface an unpriced model rather than spend blind.
 		if e.spent != nil {
 			guard := budget.Guard{LimitUSD: limit, WarnFraction: e.budgetWarnFraction}
 			if guard.Enabled() {
@@ -278,10 +325,32 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 						e.emit(UIEvent{Kind: UIBudgetWarning, Iteration: iter, BudgetSpentUSD: spent, BudgetLimitUSD: limit})
 					}
 				}
+				if e.reserve != nil {
+					if worst, ok := e.reserve(proj.Live()); ok {
+						// Halt before issuing a turn whose worst-case cost would carry the
+						// total to or past the ceiling, so spend cannot overshoot.
+						if guard.Check(spent+worst) == budget.Halt {
+							e.emit(UIEvent{Kind: UIBudgetHalt, Iteration: iter, BudgetSpentUSD: spent, BudgetLimitUSD: limit})
+							res.StopReason = StopBudget
+							return res, nil
+						}
+					} else {
+						// The active model is unpriced: its spend is invisible to the guard.
+						// Surface that once, and halt instead of spending blind when configured.
+						if !unpricedWarned {
+							unpricedWarned = true
+							e.emit(UIEvent{Kind: UIBudgetUnpriced, Iteration: iter, BudgetSpentUSD: spent, BudgetLimitUSD: limit})
+						}
+						if e.haltUnpriced {
+							res.StopReason = StopBudget
+							return res, nil
+						}
+					}
+				}
 			}
 		}
 
-		req := e.request()
+		req := e.requestFrom(proj)
 		turn, err := e.streamTurn(ctx, iter, req)
 		res.Iterations = iter + 1
 		res.StopReason = turn.stopReason
@@ -308,12 +377,13 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 	}
 }
 
-// request builds the provider request for the next turn: the live projection of
-// the log as model-facing context, the registered tools, and the engine's
-// per-turn sampling and cache settings. Context is always re-projected — never
-// cached state (PRD D3).
-func (e *Engine) request() provider.Request {
-	proj := projection.Project(e.log.Events(), e.projectOpts)
+// requestFrom builds the provider request for the next turn from an already-made
+// projection of the log: its live blocks as model-facing context, the registered
+// tools, and the engine's per-turn sampling and cache settings. drive projects
+// once per iteration (so the budget reservation and the request see the same
+// window) and hands the result here; context is always re-projected per turn —
+// never cached state (PRD D3).
+func (e *Engine) requestFrom(proj *projection.Projection) provider.Request {
 	return provider.Request{
 		Model:   e.model,
 		Context: proj.Live(),

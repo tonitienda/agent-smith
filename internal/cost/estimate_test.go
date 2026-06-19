@@ -172,3 +172,41 @@ func TestEstimateSanityAgainstReportedInput(t *testing.T) {
 		t.Errorf("estimate %d not within 2x of independent reference %d", est, reference)
 	}
 }
+
+// TestEstimateTurnCostUSD checks the pre-turn reservation estimate (AS-086):
+// request-size input priced at the input rate plus the model's max output at the
+// output rate, and ok=false for an unpriced or max-output-less model.
+func TestEstimateTurnCostUSD(t *testing.T) {
+	tbl, err := cost.ParseTable([]byte(`{
+		"version": 1, "currency": "USD",
+		"models": [
+			{"model": "priced", "input_per_mtok": 10.0, "output_per_mtok": 30.0, "max_output_tokens": 1000000},
+			{"model": "no-max", "input_per_mtok": 10.0, "output_per_mtok": 30.0}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseTable: %v", err)
+	}
+	// 8 runes -> 2 input tokens at $10/Mtok = $0.00002; max output 1,000,000 at
+	// $30/Mtok = $30. Worst-case dominated by the full-length completion.
+	ctx := []schema.Block{{Kind: schema.KindText, Text: &schema.TextBody{Text: "12345678"}}}
+
+	usd, ok := cost.EstimateTurnCostUSD(ctx, "priced", tbl)
+	if !ok {
+		t.Fatal("priced model: ok = false, want true")
+	}
+	want := 2*10.0/1_000_000 + 1_000_000*30.0/1_000_000
+	if usd != want {
+		t.Errorf("EstimateTurnCostUSD = %v, want %v", usd, want)
+	}
+
+	if _, ok := cost.EstimateTurnCostUSD(ctx, "no-max", tbl); ok {
+		t.Error("model without max_output_tokens: ok = true, want false (cannot bound the turn)")
+	}
+	if _, ok := cost.EstimateTurnCostUSD(ctx, "unknown", tbl); ok {
+		t.Error("unpriced model: ok = true, want false")
+	}
+	if _, ok := cost.EstimateTurnCostUSD(ctx, "priced", nil); ok {
+		t.Error("nil table: ok = true, want false")
+	}
+}

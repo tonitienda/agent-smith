@@ -144,7 +144,11 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// sessions and the warning fraction, both overridable per session by /budget.
 	budgetLimit, _, _ := cfg.Float64("budget.limit_usd")
 	budgetWarn, _, _ := cfg.Float64("budget.warn_fraction")
-	ctl.setBudgetDefaults(budgetLimit, budgetWarn)
+	// halt_unpriced (AS-086) decides whether a budgeted session stops, rather than
+	// spending blind, when the active model has no pricing entry and so cannot be
+	// enforced. Default off: warn once and proceed.
+	budgetHaltUnpriced, _, _ := cfg.Bool("budget.halt_unpriced")
+	ctl.setBudgetDefaults(budgetLimit, budgetWarn, budgetHaltUnpriced)
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.

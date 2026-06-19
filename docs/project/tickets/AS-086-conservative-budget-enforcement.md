@@ -1,7 +1,7 @@
 ---
 id: AS-086
 title: Conservative budget enforcement — pre-turn estimate + unpriced-turn handling
-status: ready-to-implement
+status: done
 github_issue: 148
 depends_on: [AS-041, AS-063]
 area: cost
@@ -34,16 +34,33 @@ gaps, documented in AS-041 rather than hidden:
 
 ## Acceptance criteria
 
-- [ ] With a pre-turn estimate, a session cannot start a turn whose worst-case
+- [x] With a pre-turn estimate, a session cannot start a turn whose worst-case
       cost would exceed the remaining budget (test with mock pricing + a known
-      `max_output`).
-- [ ] A session on an unpriced model with a budget set surfaces a clear "budget
+      `max_output`). — `loop.WithBudgetReservation` reserves the worst-case next
+      turn and halts before issuing it (`TestBudgetReservationHaltsBeforeOvershoot`).
+- [x] A session on an unpriced model with a budget set surfaces a clear "budget
       not enforceable (unpriced model)" notice rather than silently spending; the
-      halt-vs-warn behavior is config-flagged.
-- [ ] The estimate reuses AS-063 per-block token estimates rather than a second
-      tokenizer path.
-- [ ] AS-041's boundary-based path remains the fallback when no estimate is
-      available, so behavior degrades gracefully.
+      halt-vs-warn behavior is config-flagged. — `UIBudgetUnpriced` (once per run)
+      + `budget.halt_unpriced` config (`TestBudgetUnpricedWarnsOnce`,
+      `TestBudgetUnpricedHaltsWhenConfigured`).
+- [x] The estimate reuses AS-063 per-block token estimates rather than a second
+      tokenizer path. — `cost.EstimateTurnCostUSD` builds on
+      `cost.EstimateContextTokens` + the new `max_output_tokens` pricing field.
+- [x] AS-041's boundary-based path remains the fallback when no estimate is
+      available, so behavior degrades gracefully. — a nil reservation leaves only
+      the boundary check (`TestBudgetReservationFallsBackToBoundary`).
+
+## Implementation notes
+
+- `cost.Rate` gains an additive `max_output_tokens` field (populated for the
+  bundled models in `pricing.json`); `cost.EstimateTurnCostUSD(ctx, model, table)`
+  prices request-size input + max output, returning `ok=false` for an unpriced or
+  max-output-less model.
+- `loop.WithBudgetReservation(reserve, haltUnpriced)` adds the pre-turn check on
+  top of AS-041's `WithBudget`; the loop projects the context once per iteration
+  and reuses it for both the reservation and the request.
+- `budget.halt_unpriced` (default off) is read in `cmd/smith/chat.go` and wired
+  through the controller; the TUI renders the `UIBudgetUnpriced` notice.
 
 ## Dependencies
 
