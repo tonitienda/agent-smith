@@ -22,6 +22,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
+	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/rewind"
@@ -96,6 +97,12 @@ type chatSession struct {
 	autoCompact          bool
 	autoCompactThreshold float64
 
+	// pers is the Matrix personality layer (AS-053): it renders the themed status
+	// line and role names for the interactive chrome and backs /serious. It is
+	// chrome-only and never touches turn behavior or output. nil leaves the face
+	// on its plain defaults.
+	pers *personality.Personality
+
 	mu       sync.Mutex
 	sess     *session.Session
 	provName string
@@ -168,6 +175,24 @@ func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64, haltUn
 	s.budgetDefaultUSD = defaultUSD
 	s.budgetWarnFraction = warnFraction
 	s.budgetHaltUnpriced = haltUnpriced
+}
+
+// setPersonality installs the Matrix personality layer (AS-053), built from the
+// layered config for the interactive face. A nil personality leaves the chrome
+// on its plain defaults.
+func (s *chatSession) setPersonality(p *personality.Personality) {
+	s.pers = p
+}
+
+// workingLine yields the status-line text shown while a turn runs: the themed
+// line when the personality is active, the plain default otherwise. It is the
+// only seam the theme reaches the TUI through (the face never imports the flavor
+// package). A nil personality returns "" so the face keeps its plain default.
+func (s *chatSession) workingLine() string {
+	if s.pers == nil {
+		return ""
+	}
+	return s.pers.StatusLine()
 }
 
 // defaultAutoCompactThreshold is the window fraction auto-compaction triggers at

@@ -75,6 +75,13 @@ type model struct {
 	meter      MeterFunc
 	meterState Meter
 
+	// workingLine yields the status-line text shown while a turn runs — the
+	// Matrix layer's themed line (AS-053) or, muted, the plain "working…". It is
+	// the only seam the personality theme reaches the chrome through; nil keeps
+	// the plain default. The face never imports the flavor package: the closure
+	// is supplied by the command wiring.
+	workingLine func() string
+
 	textarea textarea.Model
 	viewport viewport.Model
 	spinner  spinner.Model
@@ -147,7 +154,7 @@ func defaultPanelHotkeys() map[string]string {
 // rendering (the transcript then shows raw text); commands may be nil to run
 // without any slash commands; meter may be nil to hide the context meter; splash
 // shows the startup header.
-func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc, rescan func()) model {
+func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend rendererFactory, commands *command.Registry, meter MeterFunc, splash bool, rehydrate RehydrateFunc, rescan func(), workingLine func() string) model {
 	ta := textarea.New()
 	ta.Placeholder = "Send a message (Enter to send, Alt+Enter for newline)…"
 	ta.Prompt = "┃ "
@@ -171,6 +178,7 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 		meter:        meter,
 		rehydrate:    rehydrate,
 		rescan:       rescan,
+		workingLine:  workingLine,
 		panelHotkeys: defaultPanelHotkeys(),
 		splash:       splash,
 		textarea:     ta,
@@ -634,7 +642,13 @@ func (m model) statusLine() string {
 	left := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model, m.meta.Session, goalLabel(m.meta.Goal)), " · ")
 	state := "ready"
 	if m.busy {
-		state = m.spinner.View() + "working… (Esc to cancel)"
+		work := "working…"
+		if m.workingLine != nil {
+			if line := strings.TrimSpace(m.workingLine()); line != "" {
+				work = line
+			}
+		}
+		state = m.spinner.View() + work + " (Esc to cancel)"
 	}
 	right := state
 	if gauge := m.meterState.render(); gauge != "" {

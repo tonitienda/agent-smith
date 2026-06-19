@@ -88,13 +88,14 @@ type MetaFunc func() Meta
 // App owns the Bubble Tea program and the bridge that carries loop events into
 // it. Build it with New, hand Observer to the loop engine, then call Run.
 type App struct {
-	meta      MetaFunc
-	events    chan loop.UIEvent
-	commands  *command.Registry
-	meter     MeterFunc
-	splash    bool
-	rehydrate RehydrateFunc
-	refresh   func()
+	meta        MetaFunc
+	events      chan loop.UIEvent
+	commands    *command.Registry
+	meter       MeterFunc
+	splash      bool
+	rehydrate   RehydrateFunc
+	refresh     func()
+	workingLine func() string
 
 	// mu guards prog, which is set when Run starts the program. The permission
 	// Asker (Ask) runs on the turn goroutine and reads prog to deliver a prompt
@@ -123,6 +124,15 @@ type RehydrateFunc func() []schema.Block
 // transcript on a session swap and at launch (AS-064).
 func WithRehydrate(f RehydrateFunc) Option {
 	return func(a *App) { a.rehydrate = f }
+}
+
+// WithWorkingLine wires the status-line text shown while a turn runs — the
+// Matrix layer's rotating themed line (AS-053), or the plain "working…" when the
+// theme is muted. The closure is the only path the personality theme reaches the
+// chrome through, so the face stays free of any import to the flavor package. A
+// nil closure (the default) keeps the plain default.
+func WithWorkingLine(f func() string) Option {
+	return func(a *App) { a.workingLine = f }
 }
 
 // WithCommandRefresh wires a callback the face runs as the command palette opens,
@@ -168,7 +178,7 @@ func (a *App) Observer() loop.Observer {
 // behave like a full-screen app. Mouse reporting stays off in V1 so terminal
 // text selection/copy keeps working (docs/project/TUI-UX.md D-TUI-12).
 func (a *App) Run(runner Runner) error {
-	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate, a.refresh)
+	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate, a.refresh, a.workingLine)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	a.mu.Lock()
 	a.prog = p

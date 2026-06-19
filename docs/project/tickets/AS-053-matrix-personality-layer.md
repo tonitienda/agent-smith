@@ -1,7 +1,7 @@
 ---
 id: AS-053
 title: The Matrix layer — personality theme + /serious kill switch
-status: ready-to-implement
+status: done
 github_issue: 53
 depends_on: [AS-021, AS-022, AS-031]
 area: polish
@@ -11,7 +11,7 @@ source: PRD.md §7.21, Appendix D, Appendix B
 
 # AS-053 · Matrix personality layer + /serious
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 

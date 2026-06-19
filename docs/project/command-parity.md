@@ -21,4 +21,5 @@ disagree. Interactive-only commands state a reason.
 | `/model` | both |  |
 | `/resume` | both |  |
 | `/rewind` | both |  |
+| `/serious` | interactive-only | mutes/restores interactive chrome flavor; non-interactive faces are already clean |
 | `/version` | both |  |

@@ -12,6 +12,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/memory"
+	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
@@ -156,6 +157,13 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	autoCompact, _, _ := cfg.Bool("compact.auto")
 	autoCompactThreshold, _, _ := cfg.Float64("compact.auto_threshold")
 	ctl.setAutoCompact(autoCompact, autoCompactThreshold)
+	// Build the Matrix personality layer (AS-053) from config for this interactive
+	// face: themed status line + role names, on by default in the TUI, with
+	// /serious as the runtime kill switch. It is chrome-only and never touches turn
+	// behavior or output. Must be set before chatCommands so /serious shares it.
+	var persSettings personality.Settings
+	_, _ = cfg.Decode("personality", &persSettings)
+	ctl.setPersonality(personality.New(persSettings, true))
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.
@@ -166,7 +174,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	builtins := builtinNames(cmds)
 	rescanCustom := func() { registerCustomCommands(cmds, builtins, wd) }
 	rescanCustom()
-	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate), tui.WithCommandRefresh(rescanCustom)}
+	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate), tui.WithCommandRefresh(rescanCustom), tui.WithWorkingLine(ctl.workingLine)}
 	if noSplash {
 		opts = append(opts, tui.WithoutSplash())
 	}
@@ -333,7 +341,38 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Examples:      []string{"smith session list", "smith session resume <id>"},
 		Run:           ctl.cmdResume,
 	})
+	mustRegisterCommand(reg, seriousCommand(ctl))
 	return reg
+}
+
+// seriousCommand builds the /serious toggle (AS-053): it flips the Matrix
+// personality layer's kill switch at runtime and reports the new state. Flavor
+// is confined to interactive chrome, so the command is interactive-only — a
+// headless/CI run already defaults to clean output and has no chrome to mute.
+// When ctl (or its personality) is nil — the metadata-only enumeration used by
+// the CLI router and the parity doc — it falls back to a throwaway personality
+// so the descriptor still lists, exactly as the handler would behave.
+func seriousCommand(ctl *chatSession) command.Command {
+	var pers *personality.Personality
+	if ctl != nil {
+		pers = ctl.pers
+	}
+	if pers == nil {
+		pers = personality.New(personality.Settings{}, true)
+	}
+	return command.Command{
+		Name:          "serious",
+		Summary:       "Toggle the Matrix personality theme off/on for this session",
+		Mode:          command.Inline,
+		Scriptability: command.InteractiveOnly,
+		Reason:        "mutes/restores interactive chrome flavor; non-interactive faces are already clean",
+		Run: func(context.Context, []string) (command.Output, error) {
+			if pers.ToggleSerious() {
+				return command.Output{Text: "Serious mode on — personality theme muted."}, nil
+			}
+			return command.Output{Text: "Serious mode off — personality theme restored."}, nil
+		},
+	}
 }
 
 // mustRegisterCommand registers a built-in command, panicking on error. The
