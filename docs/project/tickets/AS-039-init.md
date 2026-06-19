@@ -1,7 +1,7 @@
 ---
 id: AS-039
 title: /init — scaffold project config and memory file
-status: ready-to-implement
+status: done
 github_issue: 39
 depends_on: [AS-014, AS-022, AS-032]
 area: commands
@@ -11,7 +11,18 @@ source: PRD.md §7.16, Appendix A
 
 # AS-039 · /init
 
-**Status: ready to implement**
+**Status: done**
+
+## Implementation note
+
+Shipped as the `/init` slash command (and `smith init` registry handler) backed
+by `internal/initscaffold`. The repo scan is **deterministic, not model-assisted**:
+build/test/lint commands are read from the project's own Makefile targets and
+package.json scripts (Makefile wins), which names them exactly, costs zero
+tokens, and is fully unit-tested. Model-assisted prose enrichment of the draft
+is deferred to **AS-087**. The command follows the staged preview → `--apply` /
+`--cancel` lifecycle of `/clean` and `/compact`; existing memory files are
+amended with only their missing sections, never overwritten.
 
 ## Description
 

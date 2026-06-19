@@ -345,6 +345,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Examples:      []string{"smith session list", "smith session resume <id>"},
 		Run:           ctl.cmdResume,
 	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "init",
+		Summary:       "Scaffold project config and an AGENT.md memory file",
+		Args:          "[--apply | --cancel]",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith init", "smith init --apply"},
+		Run:           ctl.cmdInit,
+	})
 	mustRegisterCommand(reg, seriousCommand(ctl))
 	return reg
 }

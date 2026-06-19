@@ -1,0 +1,217 @@
+package initscaffold
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func write(t *testing.T, dir, name, content string) {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// changeFor returns the planned change for the given relative path, or fails.
+func changeFor(t *testing.T, p Plan, rel string) FileChange {
+	t.Helper()
+	for _, c := range p.Changes {
+		if c.Rel == rel {
+			return c
+		}
+	}
+	t.Fatalf("no planned change for %q; changes=%v", rel, relPaths(p))
+	return FileChange{}
+}
+
+func relPaths(p Plan) []string {
+	var out []string
+	for _, c := range p.Changes {
+		out = append(out, c.Rel)
+	}
+	return out
+}
+
+// AS-039 AC1: on a Go repo with a Makefile the memory file names the project's
+// own build/test/lint commands (Makefile targets win over language defaults).
+func TestScanGoRepoNamesMakeTargets(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n\ngo 1.22\n")
+	write(t, dir, "Makefile", "build:\n\tgo build ./...\ntest:\n\tgo test ./...\nlint:\n\tgolangci-lint run\n")
+	write(t, dir, "cmd/x/main.go", "package main\n")
+	write(t, dir, "internal/y/y.go", "package y\n")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := changeFor(t, plan, "AGENT.md")
+	for _, want := range []string{"`make build`", "`make test`", "`make lint`", "`cmd/`", "`internal/`"} {
+		if !strings.Contains(agent.NewContent, want) {
+			t.Errorf("AGENT.md missing %q\n%s", want, agent.NewContent)
+		}
+	}
+	if !agent.Created() {
+		t.Error("AGENT.md should be a creation")
+	}
+}
+
+// AS-039 AC1: a Go repo without a Makefile falls back to the go toolchain.
+func TestScanGoRepoFallsBackToGoToolchain(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := changeFor(t, plan, "AGENT.md")
+	for _, want := range []string{"`go build ./...`", "`go test ./...`", "`go vet ./...`"} {
+		if !strings.Contains(agent.NewContent, want) {
+			t.Errorf("AGENT.md missing %q\n%s", want, agent.NewContent)
+		}
+	}
+}
+
+// AS-039 AC1: a JS repo names its package.json scripts.
+func TestScanJSRepoNamesScripts(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"scripts":{"build":"tsc","test":"jest","lint":"eslint ."}}`)
+	write(t, dir, "src/index.js", "")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := changeFor(t, plan, "AGENT.md")
+	for _, want := range []string{"`npm run build`", "`npm test`", "`npm run lint`", "`src/`"} {
+		if !strings.Contains(agent.NewContent, want) {
+			t.Errorf("AGENT.md missing %q\n%s", want, agent.NewContent)
+		}
+	}
+}
+
+// AS-039 AC2: an existing CLAUDE.md is amended (its content preserved) rather
+// than overwritten or shadowed by a competing AGENT.md.
+func TestScanAmendsExistingMemoryFile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n")
+	write(t, dir, "CLAUDE.md", "# House rules\n\nAlways be kind.\n")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range plan.Changes {
+		if c.Rel == "AGENT.md" {
+			t.Fatalf("must not create a competing AGENT.md beside CLAUDE.md")
+		}
+	}
+	c := changeFor(t, plan, "CLAUDE.md")
+	if !strings.HasPrefix(c.NewContent, "# House rules\n\nAlways be kind.\n") {
+		t.Errorf("existing content not preserved:\n%s", c.NewContent)
+	}
+	if !strings.Contains(c.NewContent, "## Build & test") {
+		t.Errorf("missing sections not appended:\n%s", c.NewContent)
+	}
+	if c.Created() {
+		t.Error("amend should not report as a creation")
+	}
+}
+
+// AS-039 AC3: re-running on an initialized project proposes only deltas — once
+// everything is written, a second scan plans nothing.
+func TestScanReRunIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n")
+	write(t, dir, "Makefile", "build:\n\tgo build ./...\ntest:\n\tgo test ./...\n")
+
+	first, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Empty() {
+		t.Fatal("first scan should propose changes")
+	}
+	if err := first.Apply(); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Empty() {
+		t.Errorf("re-run proposed changes on an initialized project: %v", relPaths(second))
+	}
+}
+
+// AS-039 AC2/AC3: a memory file already carrying a section keeps it; only the
+// genuinely missing section is appended (a delta, not a rewrite).
+func TestScanAmendsOnlyMissingSections(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n")
+	write(t, dir, "cmd/x/main.go", "package main\n")
+	// Pre-existing AGENT.md already documents Build & test but not Layout.
+	write(t, dir, "AGENT.md", "# x\n\n## Build & test\n- Build: `custom`\n")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := changeFor(t, plan, "AGENT.md")
+	if strings.Contains(c.added(), "## Build & test") {
+		t.Errorf("re-proposed an existing section:\n%s", c.added())
+	}
+	if !strings.Contains(c.added(), "## Layout") {
+		t.Errorf("missing Layout section not appended:\n%s", c.added())
+	}
+	// The user's custom build command must survive untouched.
+	if !strings.Contains(c.NewContent, "- Build: `custom`") {
+		t.Errorf("user content clobbered:\n%s", c.NewContent)
+	}
+}
+
+// AS-039: the .agent-smith/ scaffold is created and Apply writes it to disk,
+// and the AGENT.md uses a recognized memory filename so it is picked up by the
+// loader next session (AC4).
+func TestApplyWritesScaffold(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n")
+
+	plan, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeFor(t, plan, filepath.Join(".agent-smith", "config.json"))
+	changeFor(t, plan, filepath.Join(".agent-smith", "commands", "README.md"))
+
+	if err := plan.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{
+		"AGENT.md",
+		filepath.Join(".agent-smith", "config.json"),
+		filepath.Join(".agent-smith", "commands", "README.md"),
+	} {
+		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
+			t.Errorf("expected %s on disk: %v", rel, err)
+		}
+	}
+}
+
+// An empty plan renders an explanatory no-op message rather than a diff.
+func TestRenderEmptyPlan(t *testing.T) {
+	var p Plan
+	p.Skipped = append(p.Skipped, "AGENT.md already covers build/test and layout")
+	out := p.Render()
+	if !strings.Contains(out, "already set up") {
+		t.Errorf("unexpected empty render:\n%s", out)
+	}
+}

@@ -72,7 +72,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-036](AS-036-mcp-client.md) | MCP client (stdio + HTTP/SSE) | capability | done | 013, 016, 031 |
 | [AS-037](AS-037-rewind.md) | `/rewind` checkpoint/restore | commands | done | 006, 022 |
 | [AS-038](AS-038-compact.md) | `/compact` (reversible, for once) | commands | done | 006, 022 |
-| [AS-039](AS-039-init.md) | `/init` project scaffold | commands | ready | 014, 022, 032 |
+| [AS-039](AS-039-init.md) | `/init` project scaffold | commands | done | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | **needs clarification** | 008, 031, 044 |
@@ -113,6 +113,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | **needs clarification** | 037 |
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
+| [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
 
 ## Suggested build order
 
