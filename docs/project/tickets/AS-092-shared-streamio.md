@@ -2,7 +2,7 @@
 id: AS-092
 title: Extract shared stream I/O mechanics for providers and MCP
 status: ready-to-implement
-github_issue: null
+github_issue: 162
 depends_on: [AS-010, AS-036, AS-083]
 area: architecture
 priority: P2

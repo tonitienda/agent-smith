@@ -2,7 +2,7 @@
 id: AS-087
 title: /init model-assisted draft enrichment
 status: ready-to-implement
-github_issue: null
+github_issue: 157
 depends_on: [AS-039]
 area: commands
 priority: P2

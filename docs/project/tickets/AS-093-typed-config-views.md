@@ -2,7 +2,7 @@
 id: AS-093
 title: Add typed consumer config views over layered config
 status: ready-to-implement
-github_issue: null
+github_issue: 163
 depends_on: [AS-031, AS-071]
 area: foundation
 priority: P2

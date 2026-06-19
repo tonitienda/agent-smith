@@ -2,7 +2,7 @@
 id: AS-091
 title: Audit interfaces and move small seams to consumer packages
 status: ready-to-implement
-github_issue: null
+github_issue: 161
 depends_on: []
 area: architecture
 priority: P2

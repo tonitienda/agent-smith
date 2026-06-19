@@ -2,7 +2,7 @@
 id: AS-097
 title: Modernize tests with Go 1.26 stdlib idioms
 status: ready-to-implement
-github_issue: null
+github_issue: 167
 depends_on: []
 area: quality
 priority: P2

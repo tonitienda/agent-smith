@@ -2,7 +2,7 @@
 id: AS-094
 title: Standardize filesystem traversal on fs.FS and WalkDir
 status: ready-to-implement
-github_issue: null
+github_issue: 164
 depends_on: []
 area: architecture
 priority: P2

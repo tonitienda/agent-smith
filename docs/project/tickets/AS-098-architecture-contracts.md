@@ -2,7 +2,7 @@
 id: AS-098
 title: Document and test package architecture contracts
 status: ready-to-implement
-github_issue: null
+github_issue: 168
 depends_on: [AS-095]
 area: architecture
 priority: P2

@@ -2,7 +2,7 @@
 id: AS-090
 title: Consolidate slash and subcommand semantics in one command catalog
 status: ready-to-implement
-github_issue: null
+github_issue: 160
 depends_on: [AS-066]
 area: commands
 priority: P2

@@ -2,7 +2,7 @@
 id: AS-088
 title: Wire the sub-agent Runner into the turn loop lifecycle
 status: ready-to-implement
-github_issue: null
+github_issue: 158
 depends_on: [AS-044, AS-018]
 area: subagents
 source: PRD.md §7.19, AS-044

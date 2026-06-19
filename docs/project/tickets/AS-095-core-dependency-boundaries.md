@@ -2,7 +2,7 @@
 id: AS-095
 title: Enforce stdlib-first dependency boundaries for core packages
 status: ready-to-implement
-github_issue: null
+github_issue: 165
 depends_on: []
 area: quality
 priority: P2

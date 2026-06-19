@@ -2,7 +2,7 @@
 id: AS-089
 title: Shrink cmd/smith into a thin composition root
 status: ready-to-implement
-github_issue: null
+github_issue: 159
 depends_on: [AS-065, AS-066]
 area: architecture
 priority: P2
