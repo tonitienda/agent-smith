@@ -20,6 +20,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/hook"
+	"github.com/tonitienda/agent-smith/internal/initscaffold"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/personality"
@@ -130,6 +131,15 @@ type chatSession struct {
 	// invalidates it rather than compacting the wrong log (mirrors pendingClean).
 	pendingCompact    *compact.Plan
 	pendingCompactFor *session.Session
+
+	// pendingInit holds the previewed /init scaffold awaiting confirmation
+	// (/init --apply) or discard (/init --cancel), keyed to the session it was
+	// previewed against so a /clear or /resume between preview and apply
+	// invalidates it rather than writing files staged for a different session
+	// (mirrors pendingClean). The scan reads the filesystem, not the log, but the
+	// keying keeps the confirm/cancel lifecycle identical across commands.
+	pendingInit    *initscaffold.Plan
+	pendingInitFor *session.Session
 
 	// meter memo: recomputed only when the active log, its length, or the model
 	// changes, so the per-delta status-line refresh stays O(1) (mirrors AS-025).
@@ -854,6 +864,109 @@ func (s *chatSession) cleanUndo() (command.Output, error) {
 		return command.Output{}, fmt.Errorf("record undo: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Restored %s to the window.", pluralSegments(removed))}, nil
+}
+
+// cmdInit implements /init (AS-039): bootstrap the project for Agent Smith.
+// Bare /init scans the repo and stages a preview of the files it would write —
+// an AGENT.md memory file (amending an existing one rather than clobbering it)
+// and the .agent-smith/ scaffold — without touching the filesystem. The writes
+// happen only on /init --apply; /init --cancel discards the staged plan. A
+// re-run on an initialized project proposes only the missing pieces.
+func (s *chatSession) cmdInit(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
+		switch args[0] {
+		case "--apply":
+			return s.initApply()
+		case "--cancel":
+			return s.initCancel()
+		default:
+			return command.Output{Text: "Unknown flag " + args[0] + ". Use /init, /init --apply, or /init --cancel."}, nil
+		}
+	}
+	return s.initPreview()
+}
+
+// initPreview scans the working directory and stages the resulting plan for
+// confirmation. Nothing is written; the plan is keyed to the active session so a
+// /clear or /resume before --apply invalidates it.
+func (s *chatSession) initPreview() (command.Output, error) {
+	// Scan the filesystem outside the lock — s.wd is immutable — so a slow disk
+	// scan never blocks the status-line Meter/Meta refresh that also takes s.mu.
+	plan, err := initscaffold.Scan(s.wd)
+	if err != nil {
+		return command.Output{}, fmt.Errorf("scan project: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if plan.Empty() {
+		s.pendingInit, s.pendingInitFor = nil, nil
+		return command.Output{Text: plan.Render()}, nil
+	}
+	s.pendingInit, s.pendingInitFor = &plan, s.sess
+	return command.Output{Text: plan.Render()}, nil
+}
+
+// initApply writes the staged scaffold to disk. The plan is discarded once
+// applied, so a second --apply is a no-op rather than a double write. When no
+// valid plan is staged for this session — e.g. a scripted `smith init --apply`
+// in a fresh process, or after a /clear invalidated the staged one — it re-scans
+// and applies, which is safe because the scan is deterministic and never clobbers.
+func (s *chatSession) initApply() (command.Output, error) {
+	// Take the staged plan under the lock, then release it: the scan and the
+	// file writes below are blocking disk I/O and must not hold s.mu, or they
+	// would stall the status-line Meter/Meta refresh that shares it.
+	s.mu.Lock()
+	var plan initscaffold.Plan
+	hasPending := s.pendingInit != nil && s.pendingInitFor == s.sess
+	if hasPending {
+		plan = *s.pendingInit
+	}
+	s.mu.Unlock()
+
+	if !hasPending {
+		fresh, err := initscaffold.Scan(s.wd)
+		if err != nil {
+			return command.Output{}, fmt.Errorf("scan project: %w", err)
+		}
+		plan = fresh
+	}
+	if plan.Empty() {
+		s.clearPendingInit()
+		return command.Output{Text: plan.Render()}, nil
+	}
+	if err := plan.Apply(); err != nil {
+		return command.Output{}, fmt.Errorf("write scaffold: %w", err)
+	}
+	s.clearPendingInit()
+	var b strings.Builder
+	b.WriteString("Wrote:\n")
+	for _, c := range plan.Changes {
+		b.WriteString("  · " + c.Rel + "\n")
+	}
+	b.WriteString("The memory file is picked up automatically next session (or after /clear).")
+	return command.Output{Text: b.String()}, nil
+}
+
+// clearPendingInit drops any staged scaffold under the lock, but only when it
+// still belongs to the active session — a /clear or /resume during the unlocked
+// Apply may have staged a new one we must not clobber.
+func (s *chatSession) clearPendingInit() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingInitFor == s.sess {
+		s.pendingInit, s.pendingInitFor = nil, nil
+	}
+}
+
+// initCancel discards a staged scaffold without touching the filesystem.
+func (s *chatSession) initCancel() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingInit == nil {
+		return command.Output{Text: "Nothing staged to cancel."}, nil
+	}
+	s.pendingInit, s.pendingInitFor = nil, nil
+	return command.Output{Text: "Discarded the staged /init scaffold. Nothing changed."}, nil
 }
 
 // cleanCancel discards a staged preview without touching the log.

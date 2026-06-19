@@ -18,6 +18,7 @@ disagree. Interactive-only commands state a reason.
 | `/cost` | both |  |
 | `/goal` | both |  |
 | `/help` | both |  |
+| `/init` | both |  |
 | `/model` | both |  |
 | `/resume` | both |  |
 | `/rewind` | both |  |
