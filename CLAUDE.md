@@ -7,6 +7,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 
 - Product truth lives in `docs/project/PRD.md`; read the Decision Log (D0-D9) before making product or architecture decisions.
 - Keep documentation current for both humans and agents. Consider whether `README.md`, `CLAUDE.md`, or focused docs under `docs/` need updates with each code change.
+- Keep architecture documentation current: when a change affects runtime seams, data flow, storage, provider/tool boundaries, or user-facing containers, update the linked C4 docs under `docs/architecture/` in the same change.
 - Use standard Go project layout: runnable commands under `cmd/`, shared internal packages under `internal/`. Keep `cmd/smith` as the process entry/subcommand composition root; reusable Smith application wiring belongs in `internal/smithapp`.
 - Keep repo tooling stdlib-only unless a ticket explicitly introduces dependencies.
 - Build the user-facing binary through `make build`; it emits a static `./smith` binary by default.
