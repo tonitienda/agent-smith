@@ -282,13 +282,21 @@ func makeTargets(wd string) map[string]bool {
 	}
 	targets := map[string]bool{}
 	for _, line := range strings.Split(string(data), "\n") {
-		// A target line starts at column 0 (recipes are tab-indented) and reads
-		// "name:" possibly with prerequisites after the colon.
-		if line == "" || line[0] == '\t' || line[0] == '#' || line[0] == '.' {
+		// A target line starts at column 0 (recipes are indented) and reads
+		// "name:" possibly with prerequisites after the colon. Skip indented
+		// lines, comments, and special targets (.PHONY etc.).
+		if line == "" || line[0] == '\t' || line[0] == ' ' || line[0] == '#' || line[0] == '.' {
 			continue
 		}
-		name, _, ok := strings.Cut(line, ":")
+		name, rest, ok := strings.Cut(line, ":")
 		if !ok {
+			continue
+		}
+		// A colon that is part of an assignment operator (name := or ::=) marks a
+		// variable, not a target: after the first colon the remainder begins with
+		// "=" (:=) or ":=" (::=). A double-colon rule ("target:: deps") instead
+		// has a space or prerequisite there, so it is kept.
+		if t := strings.TrimSpace(rest); strings.HasPrefix(t, "=") || strings.HasPrefix(t, ":=") {
 			continue
 		}
 		name = strings.TrimSpace(name)

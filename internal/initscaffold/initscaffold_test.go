@@ -62,6 +62,34 @@ func TestScanGoRepoNamesMakeTargets(t *testing.T) {
 	}
 }
 
+// The Makefile parser ignores variable assignments and indented colon lines,
+// so they are never mistaken for targets.
+func TestMakeTargetsIgnoresNonTargets(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Makefile", strings.Join([]string{
+		"VAR := value",
+		"OTHER ::= x",
+		"\t# note: recipe comment",
+		"  indented: not-a-target",
+		"build: VAR",
+		"\tgo build ./...",
+		"test:",
+		"\tgo test ./...",
+	}, "\n"))
+
+	got := makeTargets(dir)
+	for _, bad := range []string{"VAR", "OTHER", "indented"} {
+		if got[bad] {
+			t.Errorf("parsed non-target %q as a target: %v", bad, got)
+		}
+	}
+	for _, want := range []string{"build", "test"} {
+		if !got[want] {
+			t.Errorf("missed target %q: %v", want, got)
+		}
+	}
+}
+
 // AS-039 AC1: a Go repo without a Makefile falls back to the go toolchain.
 func TestScanGoRepoFallsBackToGoToolchain(t *testing.T) {
 	dir := t.TempDir()

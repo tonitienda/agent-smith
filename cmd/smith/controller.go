@@ -890,12 +890,14 @@ func (s *chatSession) cmdInit(_ context.Context, args []string) (command.Output,
 // confirmation. Nothing is written; the plan is keyed to the active session so a
 // /clear or /resume before --apply invalidates it.
 func (s *chatSession) initPreview() (command.Output, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Scan the filesystem outside the lock — s.wd is immutable — so a slow disk
+	// scan never blocks the status-line Meter/Meta refresh that also takes s.mu.
 	plan, err := initscaffold.Scan(s.wd)
 	if err != nil {
 		return command.Output{}, fmt.Errorf("scan project: %w", err)
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if plan.Empty() {
 		s.pendingInit, s.pendingInitFor = nil, nil
 		return command.Output{Text: plan.Render()}, nil
@@ -910,12 +912,18 @@ func (s *chatSession) initPreview() (command.Output, error) {
 // in a fresh process, or after a /clear invalidated the staged one — it re-scans
 // and applies, which is safe because the scan is deterministic and never clobbers.
 func (s *chatSession) initApply() (command.Output, error) {
+	// Take the staged plan under the lock, then release it: the scan and the
+	// file writes below are blocking disk I/O and must not hold s.mu, or they
+	// would stall the status-line Meter/Meta refresh that shares it.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	var plan initscaffold.Plan
-	if s.pendingInit != nil && s.pendingInitFor == s.sess {
+	hasPending := s.pendingInit != nil && s.pendingInitFor == s.sess
+	if hasPending {
 		plan = *s.pendingInit
-	} else {
+	}
+	s.mu.Unlock()
+
+	if !hasPending {
 		fresh, err := initscaffold.Scan(s.wd)
 		if err != nil {
 			return command.Output{}, fmt.Errorf("scan project: %w", err)
@@ -923,13 +931,13 @@ func (s *chatSession) initApply() (command.Output, error) {
 		plan = fresh
 	}
 	if plan.Empty() {
-		s.pendingInit, s.pendingInitFor = nil, nil
+		s.clearPendingInit()
 		return command.Output{Text: plan.Render()}, nil
 	}
 	if err := plan.Apply(); err != nil {
 		return command.Output{}, fmt.Errorf("write scaffold: %w", err)
 	}
-	s.pendingInit, s.pendingInitFor = nil, nil
+	s.clearPendingInit()
 	var b strings.Builder
 	b.WriteString("Wrote:\n")
 	for _, c := range plan.Changes {
@@ -937,6 +945,17 @@ func (s *chatSession) initApply() (command.Output, error) {
 	}
 	b.WriteString("The memory file is picked up automatically next session (or after /clear).")
 	return command.Output{Text: b.String()}, nil
+}
+
+// clearPendingInit drops any staged scaffold under the lock, but only when it
+// still belongs to the active session — a /clear or /resume during the unlocked
+// Apply may have staged a new one we must not clobber.
+func (s *chatSession) clearPendingInit() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingInitFor == s.sess {
+		s.pendingInit, s.pendingInitFor = nil, nil
+	}
 }
 
 // initCancel discards a staged scaffold without touching the filesystem.
