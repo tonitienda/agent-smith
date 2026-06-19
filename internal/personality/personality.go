@@ -175,8 +175,14 @@ func (p *Personality) StatusLine() string {
 	if !p.themed() {
 		return plainStatusLine
 	}
-	idx := int(time.Now().Unix()/statusRotateSeconds) % len(matrixStatusLines)
-	return matrixStatusLines[idx]
+	// Modulo on the int64 before narrowing avoids a 32-bit overflow, and the
+	// negative-bucket guard keeps a clock set before the Unix epoch from yielding
+	// a negative (out-of-bounds) index.
+	bucket := time.Now().Unix() / statusRotateSeconds
+	if bucket < 0 {
+		bucket = -bucket
+	}
+	return matrixStatusLines[int(bucket%int64(len(matrixStatusLines)))]
 }
 
 // Serious reports whether the kill switch is on (all flavor muted).

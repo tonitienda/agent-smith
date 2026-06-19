@@ -162,7 +162,11 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// /serious as the runtime kill switch. It is chrome-only and never touches turn
 	// behavior or output. Must be set before chatCommands so /serious shares it.
 	var persSettings personality.Settings
-	_, _ = cfg.Decode("personality", &persSettings)
+	if _, err := cfg.Decode("personality", &persSettings); err != nil {
+		// A malformed personality section degrades to the plain defaults rather than
+		// aborting the session, but is surfaced so a syntax/type error is diagnosable.
+		fmt.Fprintf(os.Stderr, "warning: ignoring personality config: %v\n", err)
+	}
 	ctl.setPersonality(personality.New(persSettings, true))
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
@@ -353,12 +357,18 @@ func chatCommands(ctl *chatSession) *command.Registry {
 // the CLI router and the parity doc — it falls back to a throwaway personality
 // so the descriptor still lists, exactly as the handler would behave.
 func seriousCommand(ctl *chatSession) command.Command {
-	var pers *personality.Personality
-	if ctl != nil {
-		pers = ctl.pers
-	}
-	if pers == nil {
-		pers = personality.New(personality.Settings{}, true)
+	// Resolve the personality at call time, not registration time, so the command
+	// always toggles the live session's instance (set after this command is
+	// registered) rather than a stale snapshot. ctl is nil only for the
+	// metadata-only enumeration (CLI router / parity doc), where Run never fires.
+	resolve := func() *personality.Personality {
+		if ctl == nil {
+			return personality.New(personality.Settings{}, true)
+		}
+		if ctl.pers == nil {
+			ctl.pers = personality.New(personality.Settings{}, true)
+		}
+		return ctl.pers
 	}
 	return command.Command{
 		Name:          "serious",
@@ -367,7 +377,7 @@ func seriousCommand(ctl *chatSession) command.Command {
 		Scriptability: command.InteractiveOnly,
 		Reason:        "mutes/restores interactive chrome flavor; non-interactive faces are already clean",
 		Run: func(context.Context, []string) (command.Output, error) {
-			if pers.ToggleSerious() {
+			if resolve().ToggleSerious() {
 				return command.Output{Text: "Serious mode on — personality theme muted."}, nil
 			}
 			return command.Output{Text: "Serious mode off — personality theme restored."}, nil
