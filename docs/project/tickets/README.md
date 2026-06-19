@@ -86,7 +86,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-050](AS-050-skills-report.md) | `/skills` report + cross-session rollup | living-skills | ready | 007, 022, 049 |
 | [AS-051](AS-051-headless-cli.md) | Headless CLI mode | faces | done | 018, 031 |
 | [AS-052](AS-052-acp-server.md) | ACP server | faces | **needs clarification** | 018, 051 |
-| [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | ready | 021, 022, 031 |
+| [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |
 | [AS-054](AS-054-async-runner.md) | Background/async runner | async | **needs clarification** | 007, 041, 051 |
 | [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | ready | 005, 007, 020 |
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | ready (spike) | 005 |
