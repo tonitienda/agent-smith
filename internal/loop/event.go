@@ -59,6 +59,14 @@ const (
 	// unpriced model the run then ends with StopBudget; otherwise the turn proceeds
 	// unmetered after this one-time notice.
 	UIBudgetUnpriced UIEventKind = "budget_unpriced"
+
+	// UIAutoCompact reports that auto-compaction (AS-085) ran before the turn
+	// because the projected context crossed the configured window-fraction
+	// threshold: the older span was summarized into one reversible /compact block
+	// so the turn does not fail with context-window-exceeded. Text carries the
+	// human-readable notice (D0: never silent). It is the auto counterpart of the
+	// user-invoked /compact, distinct on the log so /insights can tell them apart.
+	UIAutoCompact UIEventKind = "auto_compact"
 )
 
 // UIEvent is one face-agnostic event emitted to the Observer. Kind selects which
@@ -73,7 +81,8 @@ type UIEvent struct {
 	// an observer can group events by turn.
 	Iteration int
 
-	// Text is the delta for UITextDelta and UIReasoningDelta.
+	// Text is the delta for UITextDelta and UIReasoningDelta, and the notice for
+	// UIAutoCompact.
 	Text string
 
 	// Tool is set on UIToolStarted and UIToolFinished.

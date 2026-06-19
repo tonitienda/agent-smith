@@ -1,7 +1,7 @@
 ---
 id: AS-085
 title: Auto-compact on approaching the window limit (config-flagged, default off)
-status: ready-to-implement
+status: done
 github_issue: 144
 depends_on: [AS-038, AS-025, AS-031]
 area: commands
@@ -23,10 +23,17 @@ AS-038 delivered `/compact` as a user-invoked command. The remaining bullet from
 
 ## Acceptance criteria
 
-- [ ] With the flag off (default), behaviour is identical to today — nothing auto-compacts.
-- [ ] With the flag on, crossing the threshold triggers one compaction of the older span before the next turn, and the turn then proceeds.
-- [ ] The auto-compaction is reversible (`/compact --undo`) and visibly surfaced, never silent.
-- [ ] Its summarization cost is itemized in `/cost` like the manual path.
+- [x] With the flag off (default), behaviour is identical to today — nothing auto-compacts.
+- [x] With the flag on, crossing the threshold triggers one compaction of the older span before the next turn, and the turn then proceeds.
+- [x] The auto-compaction is reversible (`/compact --undo`) and visibly surfaced, never silent.
+- [x] Its summarization cost is itemized in `/cost` like the manual path.
+
+## Implementation notes
+
+- Config: `compact.auto` (bool, default off) + `compact.auto_threshold` (window fraction, default 0.85 when unset or outside (0,1)). Read once at startup in `cmd/smith/chat.go`; both `budget` and `compact` were added to `knownConfigSections` (`cmd/smith/cli.go`) so the sections don't warn as unknown.
+- The pre-turn check lives in `chatSession.maybeAutoCompact` (`cmd/smith/controller.go`), invoked from `Run` after the user-prompt-submit hook and before the engine turn. It builds the same `composition` the meter/`/context` use to compare projected tokens against the model window, then runs the unchanged AS-038 `compact.Preview` → `summarize` (cheap tier) → `compact.Build` path.
+- Reversibility: the compaction block keeps `compact.Producer` (`/compact`), so `/compact --undo` reverses an auto-compaction identically. Only the summarization **usage** event is attributed distinctly, via the new `compact.AutoUsageProducer` (`/compact (auto)`), so `/cost` itemizes it and `/insights` (AS-045) can separate auto from user-invoked spend.
+- Surfacing (D0): a new additive `loop.UIAutoCompact` UI event carries the notice; the TUI renders it as a transcript notice line. Best-effort — a summarizer error surfaces a notice and the turn proceeds with the full context rather than failing.
 
 ## Dependencies
 

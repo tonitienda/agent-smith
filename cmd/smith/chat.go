@@ -149,6 +149,13 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// enforced. Default off: warn once and proceed.
 	budgetHaltUnpriced, _, _ := cfg.Bool("budget.halt_unpriced")
 	ctl.setBudgetDefaults(budgetLimit, budgetWarn, budgetHaltUnpriced)
+	// Auto-compact (AS-085) is off by default — the product prefers /clean and
+	// /tidy; this is the blunt last-resort guard against a context-window-exceeded
+	// stop. compact.auto_threshold is the window fraction it triggers at (defaulted
+	// downstream when unset or out of range).
+	autoCompact, _, _ := cfg.Bool("compact.auto")
+	autoCompactThreshold, _, _ := cfg.Float64("compact.auto_threshold")
+	ctl.setAutoCompact(autoCompact, autoCompactThreshold)
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
 	// dir becomes invocable without a restart; the TUI runs it as the palette opens.

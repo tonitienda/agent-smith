@@ -562,6 +562,7 @@ func formatConfigValue(v any) string {
 var knownConfigSections = []string{
 	"model", "provider", "permissions", "pricing",
 	"subagents", "personality", "hooks", "mcp", "tools",
+	"budget", "compact",
 }
 
 // configShow loads the layered JSON config (built-in defaults < user < project)
