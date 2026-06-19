@@ -357,7 +357,12 @@ func (s *chatSession) maybeAutoCompact(ctx context.Context) {
 
 	summary, tokens, stopReason, err := summarize(ctx, prov, cheap, plan.Sources)
 	if err != nil {
-		s.emit(loop.UIEvent{Kind: loop.UIAutoCompact, Text: "auto-compact failed: " + err.Error() + " — continuing with the full context."})
+		// A cancelled turn (user interrupt) surfaces here as a summarize error;
+		// the turn itself is already being aborted, so a failure notice would only
+		// confuse. Surface only a genuine failure on a still-live context.
+		if ctx.Err() == nil {
+			s.emit(loop.UIEvent{Kind: loop.UIAutoCompact, Text: "auto-compact failed: " + err.Error() + " — continuing with the full context."})
+		}
 		return
 	}
 	block, ok := compact.Build(plan, summary)
@@ -365,19 +370,26 @@ func (s *chatSession) maybeAutoCompact(ctx context.Context) {
 		return
 	}
 
+	// Append under the lock, then release it before emitting: the observer is an
+	// external callback that may re-enter the controller and re-acquire s.mu, so
+	// holding the lock across it risks a deadlock.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.sess != sess {
+		s.mu.Unlock()
 		return // session swapped during the model call; do not append to the new log
 	}
 	if tokens != nil {
 		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.AutoUsageProducer, vendor, cheap, stopReason, tokens, nil)); err != nil {
+			s.mu.Unlock()
 			return
 		}
 	}
 	if _, err := s.sess.Log.Append(block); err != nil {
+		s.mu.Unlock()
 		return
 	}
+	s.mu.Unlock()
+
 	s.emit(loop.UIEvent{Kind: loop.UIAutoCompact, Text: fmt.Sprintf(
 		"auto-compacted %s into one summary (~%d tokens) as the context neared the window limit. Restore with /compact --undo.",
 		pluralBlocks(len(plan.SourceIDs)), plan.Tokens)})
