@@ -1,7 +1,7 @@
 ---
 id: AS-089
 title: Shrink cmd/smith into a thin composition root
-status: ready-to-implement
+status: done
 github_issue: 159
 depends_on: [AS-065, AS-066]
 area: architecture
@@ -11,7 +11,7 @@ source: code-improvements.md
 
 # AS-089 · Shrink cmd/smith into a thin composition root
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -32,14 +32,14 @@ but constructors should return structs.
 
 ## Acceptance criteria
 
-- [ ] Reusable session/provider/tool/command wiring moves out of `cmd/smith` into
+- [x] Reusable session/provider/tool/command wiring moves out of `cmd/smith` into
       a focused internal package.
-- [ ] `cmd/smith` remains responsible for process entry and flag/subcommand
+- [x] `cmd/smith` remains responsible for process entry and flag/subcommand
       dispatch only.
-- [ ] Existing TUI and headless behavior is unchanged.
-- [ ] Tests cover the new application wiring without requiring terminal UI
+- [x] Existing TUI and headless behavior is unchanged.
+- [x] Tests cover the new application wiring without requiring terminal UI
       startup.
-- [ ] Documentation or agent guidance is updated if the package layout changes
+- [x] Documentation or agent guidance is updated if the package layout changes
       how future features should be wired.
 
 ## Dependencies

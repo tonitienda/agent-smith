@@ -16,13 +16,11 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
-	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
-	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
-	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/schema"
@@ -197,7 +195,7 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("open session store: %w", err)
 	}
-	sess, err := latestSession(store)
+	sess, err := smithapp.LatestSession(store)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -205,50 +203,14 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := providersFn()
-	provName, model := "anthropic", chatModel()
+	providers := smithapp.ProvidersFn()
+	model := smithapp.ChatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
-		if r, ok := pricing.Lookup(m); ok && r.Vendor != "" {
-			if _, ok := providers[r.Vendor]; ok {
-				provName, model = r.Vendor, m
-			}
-		}
+		model = m
 	}
+	provName, model := smithapp.SelectProviderModel(pricing, providers, model)
 	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil, nil)
 	return ctl, func() { _ = sess.Log.Close() }, nil
-}
-
-// latestSession opens the project's most recently updated session for the
-// read-only inspection verbs. When none exist yet it returns an ephemeral,
-// in-memory session so `smith cost`/`context show`/`session list` render an empty
-// state *without* creating a `.smith` session on disk — a read must never mutate
-// the project.
-func latestSession(store *session.Store) (*session.Session, error) {
-	summaries, err := store.List()
-	if err != nil {
-		return nil, fmt.Errorf("list sessions: %w", err)
-	}
-	if len(summaries) == 0 {
-		return &session.Session{Log: eventlog.New()}, nil
-	}
-	sess, err := store.Open(summaries[0].ID) // List is newest-first
-	if err != nil {
-		return nil, fmt.Errorf("open session %q: %w", summaries[0].ID, err)
-	}
-	return sess, nil
-}
-
-// providersFn resolves the configured provider set. It is a package var so a test
-// can substitute a mock provider for the network-backed default, letting the
-// headless run path (AS-051) be exercised end-to-end in CI without real keys.
-var providersFn = defaultProviders
-
-// defaultProviders is the configured provider set (no network until a turn runs).
-func defaultProviders() map[string]provider.Provider {
-	return map[string]provider.Provider{
-		"anthropic": anthropic.New(""),
-		"openai":    openai.New(""),
-	}
 }
 
 // runCommand is the one-task headless entry (D-CLI-3): the prompt arrives as a
@@ -505,7 +467,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 }
 
 // headlessProvider resolves the provider and model for a headless run from the
-// configured default model (SMITH_MODEL, else defaultModel), mapping the model
+// configured default model (SMITH_MODEL, else smithapp.DefaultModel), mapping the model
 // to its vendor through the pricing table — the same resolution readonlyController
 // uses — so `smith run` with an OpenAI SMITH_MODEL talks to the OpenAI provider
 // rather than failing against a hardcoded Anthropic one.
@@ -514,13 +476,8 @@ func headlessProvider(override string) (provider.Provider, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("load pricing table: %w", err)
 	}
-	providers := providersFn()
-	provName, model := "anthropic", chatModel()
-	if r, ok := pricing.Lookup(model); ok && r.Vendor != "" {
-		if _, ok := providers[r.Vendor]; ok {
-			provName = r.Vendor
-		}
-	}
+	providers := smithapp.ProvidersFn()
+	provName, model := smithapp.SelectProviderModel(pricing, providers, smithapp.ChatModel())
 	prov, ok := providers[provName]
 	if !ok {
 		return nil, "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
@@ -686,7 +643,7 @@ func legacyFlatWarn(stderr io.Writer, path string) {
 // file. This is the single config loader (AS-071): `config get`/`set`/`show`,
 // pricing, and permissions all resolve through it.
 func loadLayeredConfig(override string) (*config.Config, error) {
-	defaults := config.MapLayer("default", "built-in", map[string]any{"model": defaultModel})
+	defaults := config.MapLayer("default", "built-in", map[string]any{"model": smithapp.DefaultModel})
 	env := envConfigLayer()
 	if override != "" {
 		project, err := config.FileLayer("project", override)

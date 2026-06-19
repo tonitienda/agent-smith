@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"golang.org/x/term"
 
@@ -13,21 +12,14 @@ import (
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/personality"
-	"github.com/tonitienda/agent-smith/internal/provider"
-	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
-	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
+	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/internal/version"
 )
-
-// defaultModel is the model a fresh session starts on; /model switches it
-// mid-session (AS-023) and routing will pick it per turn later (AS-042). Override
-// the starting model with SMITH_MODEL.
-const defaultModel = "claude-opus-4-8"
 
 // isTerminal reports whether f is attached to a terminal, used for TTY detection
 // (the bare-invocation TUI launch and output auto-detection, D-CLI-2/D-CLI-4).
@@ -53,7 +45,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	if err != nil {
 		return fmt.Errorf("open session store: %w", err)
 	}
-	sess, err := openOrCreate(store, resumeID)
+	sess, err := smithapp.OpenOrCreate(store, resumeID)
 	if err != nil {
 		return err
 	}
@@ -123,22 +115,16 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	mcpClients := connectMCPServers(context.Background(), cfg, reg, os.Stderr)
 	defer closeMCPClients(mcpClients)
 
-	providers := wrapProvidersWithDebugLog(map[string]provider.Provider{
-		"anthropic": anthropic.New(""),
-		"openai":    openai.New(""),
-	}, debugLog)
+	providers := wrapProvidersWithDebugLog(smithapp.ProvidersFn(), debugLog)
 	// A resumed session keeps the model it last used so its window/cost meter
 	// matches; otherwise start on the configured default (Anthropic). The model is
 	// adopted only when its provider is configured, so the provider and model never
 	// disagree (a model with no provider would fail at turn time).
-	provName, model := "anthropic", chatModel()
+	model := smithapp.ChatModel()
 	if m := lastModel(sess.Log.Events()); m != "" {
-		if r, ok := pricing.Lookup(m); ok && r.Vendor != "" {
-			if _, ok := providers[r.Vendor]; ok {
-				provName, model = r.Vendor, m
-			}
-		}
+		model = m
 	}
+	provName, model := smithapp.SelectProviderModel(pricing, providers, model)
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
 	// Apply the configured budget defaults (AS-041): a default ceiling for new
@@ -217,23 +203,6 @@ func seedMemory(wd string, sess *session.Session) error {
 		}
 	}
 	return nil
-}
-
-// openOrCreate resumes the session named by resumeID, or creates a fresh one when
-// resumeID is empty.
-func openOrCreate(store *session.Store, resumeID string) (*session.Session, error) {
-	if resumeID != "" {
-		sess, err := store.Open(resumeID)
-		if err != nil {
-			return nil, fmt.Errorf("resume session %q: %w", resumeID, err)
-		}
-		return sess, nil
-	}
-	sess, err := store.Create("")
-	if err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
-	}
-	return sess, nil
 }
 
 // chatCommands builds the slash-command registry for the chat face. It ships
@@ -461,14 +430,6 @@ func customSummary(c customcmd.Command) string {
 		tag += "; overrides user command"
 	}
 	return s + " (" + tag + ")"
-}
-
-// chatModel returns the model ID for interactive turns, honoring SMITH_MODEL.
-func chatModel() string {
-	if m := strings.TrimSpace(os.Getenv("SMITH_MODEL")); m != "" {
-		return m
-	}
-	return defaultModel
 }
 
 // shortID trims a session ID to a compact status-line label.
