@@ -9,6 +9,7 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 - Keep documentation current for both humans and agents. Consider whether `README.md`, `CLAUDE.md`, or focused docs under `docs/` need updates with each code change.
 - Use standard Go project layout: runnable commands under `cmd/`, shared internal packages under `internal/`.
 - Keep repo tooling stdlib-only unless a ticket explicitly introduces dependencies.
+- Follow the Classical testing strategy in `docs/testing-strategy.md`: prefer feature/integration tests over isolated function tests, use mocks only at required boundaries, keep default tests deterministic/offline, and consider fuzzing for adversarial parsers or persisted formats.
 - Build the user-facing binary through `make build`; it emits a static `./smith` binary by default.
 - All agents (Claude, Codex, GrokBuild) and humans must use `./scripts/agent-quality-gate.sh` before handoff/commit, via hooks or the closest agent-specific equivalent. The gate runs `make fmt`, `make test`, `make vet`, and `make lint`; `make lint` installs and runs the pinned repo-local `golangci-lint` instead of a global binary.
 

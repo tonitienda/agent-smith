@@ -97,7 +97,9 @@ scripts/agent-quality-gate.sh  shared deterministic pre-submit gate for humans a
 
 ## Development
 
-The primary binary is `smith`. Before handing off changes, humans and agents should run `./scripts/agent-quality-gate.sh` (documented in [Agent quality gates](docs/agent-quality-gates.md)) so formatting, unit tests, vet, and lint match CI:
+The primary binary is `smith`. Before handing off changes, humans and agents should run `./scripts/agent-quality-gate.sh` (documented in [Agent quality gates](docs/agent-quality-gates.md)) so formatting, unit tests, vet, and lint match CI.
+
+Testing follows the project [Testing strategy](docs/testing-strategy.md): feature and integration behavior first, real in-process collaborators by default, mocks only at required boundaries, stdlib-first Go tests, and targeted fuzzing/coverage checks for high-risk contracts. The core workflow is:
 
 ```sh
 make build      # builds a static ./smith binary from ./cmd/smith
