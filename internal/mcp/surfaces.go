@@ -32,7 +32,9 @@ func pageThrough(page func(params map[string]any) (next string, err error)) erro
 		}
 		cursor = next
 	}
-	return nil
+	// Hitting the cap means the server keeps handing back fresh cursors: surface it
+	// rather than silently returning a truncated catalog.
+	return fmt.Errorf("mcp: exceeded max pages (%d) while paginating", maxPages)
 }
 
 // ResourceInfo is a resource advertised by a server (resources/list). URI is the

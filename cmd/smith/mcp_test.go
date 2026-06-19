@@ -254,6 +254,10 @@ func TestMCPStatusAndReconnect(t *testing.T) {
 	if got := reconnectMCP(context.Background(), clients, "nope"); !strings.Contains(got, "nope") {
 		t.Fatalf("reconnect unknown = %q", got)
 	}
+	// A targeted reconnect of a healthy server says so, not "reconnected".
+	if got := reconnectMCP(context.Background(), clients, "echo-srv"); !strings.Contains(got, "already healthy") {
+		t.Fatalf("reconnect healthy target = %q", got)
+	}
 }
 
 // resultText extracts the text of a tool_result block for assertions.

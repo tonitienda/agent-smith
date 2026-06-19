@@ -229,12 +229,20 @@ func mcpStatusText(clients []*mcp.Client) string {
 // empty, and reports the outcome per server.
 func reconnectMCP(ctx context.Context, clients []*mcp.Client, target string) string {
 	var lines []string
+	found := false
 	for _, c := range clients {
 		if target != "" && c.Name() != target {
 			continue
 		}
-		if target == "" && c.Healthy() {
-			continue // re-dial only the broken ones on a blanket reconnect
+		found = true
+		// A healthy server needs no re-dial. On a blanket reconnect skip it silently;
+		// on a targeted one say so rather than falsely reporting "reconnected" (Reconnect
+		// is a no-op that returns nil for a healthy server).
+		if c.Healthy() {
+			if target != "" {
+				lines = append(lines, fmt.Sprintf("%s: already healthy", c.Name()))
+			}
+			continue
 		}
 		if err := c.Reconnect(ctx); err != nil {
 			lines = append(lines, fmt.Sprintf("%s: reconnect failed: %v", c.Name(), err))
@@ -243,7 +251,7 @@ func reconnectMCP(ctx context.Context, clients []*mcp.Client, target string) str
 		lines = append(lines, fmt.Sprintf("%s: reconnected, %d tool(s)", c.Name(), len(c.Tools())))
 	}
 	if len(lines) == 0 {
-		if target != "" {
+		if target != "" && !found {
 			return fmt.Sprintf("no MCP server named %q", target)
 		}
 		return "no unavailable MCP servers to reconnect"
