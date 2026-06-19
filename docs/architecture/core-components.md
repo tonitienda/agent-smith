@@ -9,9 +9,11 @@ C4Component
     title Agent Smith - smith binary components
 
     Container_Boundary(smith, "smith binary") {
-        Component(cli, "CLI router", "cmd/smith + internal/cli", "Builds noun-grouped subcommands and bare TUI launch.")
+        Component(cli, "CLI router shell", "internal/smithapp + internal/cli", "Builds the face-neutral smith app shell from injected streams, env, bare handler, and commands.")
+        Component(entry, "Process composition root", "cmd/smith", "Supplies os.Args, process streams, TTY detection, bare TUI callback, and subcommand tree.")
+        Component(runtime, "Reusable app runtime", "internal/smithapp", "Owns shared provider, model, session, and built-in tool construction for executable faces and tests.")
         Component(tui, "TUI face", "internal/tui", "Interactive terminal UI, command palette, meters, transcript, permission prompts.")
-        Component(controller, "Session controller", "cmd/smith", "Wires providers, tools, config, sessions, commands, and loop for one active chat session.")
+        Component(controller, "Session controller", "cmd/smith", "Owns face-specific session orchestration: config, capabilities, hooks, MCP, commands, loop lifecycle, and TUI/headless adapters.")
         Component(commands, "Command registry", "internal/command + feature packages", "Shared slash-command and CLI command descriptors/handlers.")
         Component(loop, "Agent loop", "internal/loop", "Projects context, streams provider turns, dispatches tools, retries, and enforces budgets.")
         Component(projection, "Projection engine", "internal/projection", "Computes live model-facing context from append-only events and control events.")
@@ -32,10 +34,16 @@ C4Component
     System_Ext(mcp, "MCP servers")
     System_Ext(hooks, "Hook commands")
 
-    Rel(cli, controller, "Starts interactive/headless sessions")
+    Rel(entry, cli, "Calls BuildCLI with process wiring")
+    Rel(cli, entry, "Dispatches bare handler and subcommands")
+    Rel(entry, controller, "Starts interactive/headless sessions")
+    Rel(controller, runtime, "Uses shared runtime helpers")
+    Rel(runtime, provider, "Constructs default provider set")
+    Rel(runtime, tools, "Builds common built-in registry")
+    Rel(runtime, session, "Opens latest/resumed or creates sessions")
     Rel(tui, controller, "Calls Runner/Meta/Meter seams and command handlers")
     Rel(controller, config, "Loads")
-    Rel(controller, session, "Creates/opens/resumes")
+    Rel(controller, session, "Persists active sessions")
     Rel(controller, commands, "Builds shared registry")
     Rel(controller, loop, "Builds and invokes")
     Rel(controller, tools, "Registers built-ins, MCP tools, skill tool")
@@ -91,7 +99,7 @@ flowchart LR
     OpenAI --> OpenAIAPI[(OpenAI / compatible API)]
 ```
 
-The loop depends only on normalized provider events and typed provider errors. Vendor-specific request shapes, cache behavior, usage accounting, and streaming deltas stay inside adapters.
+The `internal/smithapp.Runtime` creates the production provider map and selects the starting provider/model from the pricing table and `SMITH_MODEL`; after that handoff, the loop depends only on normalized provider events and typed provider errors. Vendor-specific request shapes, cache behavior, usage accounting, and streaming deltas stay inside adapters.
 
 ## Tool and capability components
 

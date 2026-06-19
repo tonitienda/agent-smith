@@ -66,16 +66,20 @@ sequenceDiagram
 sequenceDiagram
     actor User
     participant CommandFace as CLI or TUI command
+    participant SmithApp as internal/smithapp
     participant SessionStore as session store
     participant EventLog as event log
     participant ChatController as controller
     participant AgentLoop as Agent turn engine
 
     User->>CommandFace: Resume session by ID
-    CommandFace->>SessionStore: Open project scoped session ID
+    CommandFace->>SmithApp: OpenOrCreate with resume ID
+    SmithApp->>SessionStore: Open project scoped session ID
     SessionStore->>EventLog: Replay events.jsonl
     EventLog-->>SessionStore: In memory log with monotonic sequence state
-    SessionStore-->>ChatController: Session metadata and log
+    SessionStore-->>SmithApp: Session metadata and log
+    SmithApp-->>CommandFace: Resumed session
+    CommandFace->>ChatController: Initialize with resumed session
     ChatController->>AgentLoop: Rebuild engine over resumed session wiring
     AgentLoop-->>ChatController: Ready for next projected turn
     ChatController-->>User: Resume summary
@@ -86,15 +90,23 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor Script
+    participant ProcessRoot as cmd/smith process root
+    participant SmithApp as internal/smithapp
     participant CLIRouter as CLI router
     participant HeadlessRunner as headless runner
     participant ChatController as session wiring
     participant AgentLoop as Agent turn engine
     participant OutputRenderer as output renderer
 
-    Script->>CLIRouter: Start smith run with a prompt
+    Script->>ProcessRoot: Start smith run with a prompt
+    ProcessRoot->>SmithApp: BuildCLI with streams, env, bare handler, commands
+    SmithApp-->>ProcessRoot: Face-neutral CLI app
+    ProcessRoot->>CLIRouter: Dispatch argv
     CLIRouter->>HeadlessRunner: Parse prompt config and output mode
-    HeadlessRunner->>ChatController: Create or open session providers tools and hooks
+    HeadlessRunner->>SmithApp: Resolve runtime defaults (providers, model, tools, session)
+    SmithApp-->>HeadlessRunner: Runtime defaults
+    HeadlessRunner->>ChatController: Combine runtime defaults with config, permissions, hooks, MCP
+    ChatController-->>HeadlessRunner: Wired session and loop engine
     ChatController->>AgentLoop: Run prompt to stop condition
     AgentLoop-->>HeadlessRunner: Normalized UI events and final state
     HeadlessRunner->>OutputRenderer: Write result to stdout and diagnostics to stderr
