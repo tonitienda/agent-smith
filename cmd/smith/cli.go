@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -286,7 +287,11 @@ func runCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			return runHeadless(context.Background(), c, prompt, headlessOpts{budgetUSD: budgetUSD, auto: auto})
+			// Cancel the run gracefully on Ctrl+C so the loop reconciles any in-flight
+			// tool call rather than the OS killing the process mid-turn.
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer stop()
+			return runHeadless(ctx, c, prompt, headlessOpts{budgetUSD: budgetUSD, auto: auto})
 		},
 	}
 }
@@ -299,8 +304,7 @@ func parseBudgetFlag(v string) (float64, error) {
 	if v == "" {
 		return 0, nil
 	}
-	v = strings.TrimPrefix(v, "$")
-	amount, err := strconv.ParseFloat(v, 64)
+	amount, err := strconv.ParseFloat(strings.TrimPrefix(v, "$"), 64)
 	if err != nil || amount < 0 {
 		return 0, cli.Usagef("run: invalid --budget %q: want a non-negative dollar amount", v)
 	}

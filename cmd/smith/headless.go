@@ -59,6 +59,10 @@ func streamObserver(c *cli.Context) loop.Observer {
 	if c.Globals.Output != cli.OutputStreamJSON {
 		return nil
 	}
+	// Parallel tool execution (AS-019) invokes the observer from several goroutines
+	// at once, so serialize the stdout writes — otherwise two JSON lines could
+	// interleave into one corrupt line.
+	var mu sync.Mutex
 	return func(ev loop.UIEvent) {
 		se := streamEvent{
 			Type:       string(ev.Kind),
@@ -71,7 +75,9 @@ func streamObserver(c *cli.Context) loop.Observer {
 		if ev.Tool != nil {
 			se.Tool = ev.Tool.Name
 		}
+		mu.Lock()
 		_ = c.WriteJSON(se)
+		mu.Unlock()
 	}
 }
 
