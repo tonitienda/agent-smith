@@ -32,6 +32,9 @@ concrete validated structs.
 - [ ] Dotted path strings for those consumers are localized to their package.
 - [ ] Validation/defaulting/provenance warnings live with the consuming feature.
 - [ ] Tests cover defaults, overrides, bad types, and provenance.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

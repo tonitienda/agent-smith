@@ -32,6 +32,9 @@ Anthropic/OpenAI/MCP event normalization in their existing packages.
 - [ ] Stream tests include chunked input, malformed frames, cancellation, and
       close behavior.
 - [ ] No new external dependencies are introduced.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

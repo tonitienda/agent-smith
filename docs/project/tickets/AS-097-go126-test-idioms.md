@@ -33,6 +33,9 @@ they make tests clearer.
 - [ ] Repetitive custom comparison loops are simplified with stdlib helpers when
       readability improves.
 - [ ] The full quality gate passes after the cleanup.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

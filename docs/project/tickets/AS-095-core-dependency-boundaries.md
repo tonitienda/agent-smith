@@ -32,6 +32,9 @@ that prevent UI/third-party dependencies from leaking into them.
       unapproved third-party dependencies.
 - [ ] Existing allowed exceptions are documented explicitly.
 - [ ] No new runtime dependencies are introduced.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

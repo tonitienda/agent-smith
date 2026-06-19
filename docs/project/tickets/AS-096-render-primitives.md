@@ -31,6 +31,9 @@ own `Render` function.
 - [ ] Feature-specific rendering remains in feature packages.
 - [ ] Golden tests are updated or added to lock output stability.
 - [ ] The new package has no external dependencies.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 
