@@ -34,6 +34,9 @@ config value" near the package that consumes them.
       or replaced with concrete structs/functions.
 - [ ] Tests use smaller fakes or concrete helpers after the migration.
 - [ ] A short docs note records the interface convention for future agents.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

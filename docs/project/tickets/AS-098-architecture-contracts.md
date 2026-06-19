@@ -33,6 +33,9 @@ is caught early.
 - [ ] The note explains where to put new code for commands, faces, providers,
       tools, and application wiring.
 - [ ] AGENTS/CLAUDE guidance is updated if new rules affect future agent work.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

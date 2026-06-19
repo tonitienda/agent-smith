@@ -32,6 +32,9 @@ paths within a root.
 - [ ] Tests use `fstest.MapFS` or `t.TempDir` as appropriate instead of heavy
       mocks.
 - [ ] Path normalization and root containment behavior is covered by tests.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 

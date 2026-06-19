@@ -37,6 +37,9 @@ command specs.
       with flags or arguments.
 - [ ] TUI and CLI tests assert equivalent behavior for migrated commands.
 - [ ] New command authoring guidance is documented for humans and agents.
+- [ ] Test updates also restructure affected tests to follow the Classical
+      testing strategy for the touched area, so the refactor improves both
+      production code and test structure.
 
 ## Dependencies
 
