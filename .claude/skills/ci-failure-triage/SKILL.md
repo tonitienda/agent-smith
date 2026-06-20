@@ -21,8 +21,8 @@ instead of pushing speculative fixes.
 | CI job (`.github/workflows/ci.yml`) | Step | Local command |
 | --- | --- | --- |
 | `test` (ubuntu + macos) | Build smith | `make build` |
-| `test` | Run unit tests | `make test` |
-| `test` | Run go vet | `make vet` |
+| `test` (ubuntu + macos) | Run unit tests | `make test` |
+| `test` (ubuntu + macos) | Run go vet | `make vet` |
 | `lint` | Run golangci-lint | `make lint` |
 
 The whole sequence in CI order: `scripts/harness/ci-local.sh`. Architecture
