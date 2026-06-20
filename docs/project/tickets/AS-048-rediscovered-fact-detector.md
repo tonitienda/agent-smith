@@ -1,7 +1,7 @@
 ---
 id: AS-048
 title: Rediscovered-fact detector (living skills, first form)
-status: ready-to-implement
+status: done
 github_issue: 48
 depends_on: [AS-032, AS-044, AS-047]
 area: living-skills
@@ -11,7 +11,21 @@ source: PRD.md D7, §7.20
 
 # AS-048 · Rediscovered-fact detector
 
-**Status: ready to implement**
+**Status: done** — shipped in `internal/factdetector` (`subagent.SubAgent`
+built-in): a passive, zero-cost analyzer that at session end scans the block
+slice for the failed-then-successful command pattern and proposes the working
+command as a propose-only `Finding` (one-line diff + resolved save target). High
+precision: a candidate needs prior flailing **and** a significant shared token
+linking a failure to the success, so a command that merely worked is never
+flagged. Dismissals are tracked in a `Ledger` (in-memory `MemLedger`; durable
+backing is the AS-050 rollup seam) so a declined fact is not re-suggested, and the
+same ledger tracks the precision tally (accepted vs dismissed). Save-target
+resolution is injected as a `Resolve` func (skill scope → deepest memory file →
+project root fallback), keeping the package free of the `memory`/`skill` imports.
+Repeated-search→path convergence and config-key facts are the precision-tuned
+follow-on **AS-106**; live wiring (Runner into the loop, `/insights` offer UX with
+diff-preview apply) is the consumer step **AS-088**/**AS-045**, the same
+substrate-first split AS-044 used.
 
 ## Description
 
@@ -29,10 +43,10 @@ Shape: a system sub-agent (AS-044) running at session end on the cheap tier; can
 
 ## Acceptance criteria
 
-- [ ] On a scripted session that rediscovers a known fact (e.g., flailing to find the test command), the detector proposes exactly that fact with the trace as evidence.
-- [ ] Accepting writes a minimal diff to the chosen target via preview; declining records the dismissal (don't re-suggest the same fact).
-- [ ] Zero cost when disabled; within budget when enabled (AS-044 guarantees).
-- [ ] Precision bar (once set) is tracked: suggestions accepted vs dismissed.
+- [x] On a scripted session that rediscovers a known fact (e.g., flailing to find the test command), the detector proposes exactly that fact with the trace as evidence. (`TestDetectsRediscoveredCommand`)
+- [x] Accepting writes a minimal diff to the chosen target via preview; declining records the dismissal (don't re-suggest the same fact). (`Finding.Proposal` carries the one-line diff + target; `Ledger.Record(…, Dismissed)` suppresses re-offering — `TestDismissedFactNotResuggested`. The interactive apply-via-preview surface is the `/insights` consumer step AS-045/AS-088.)
+- [x] Zero cost when disabled; within budget when enabled (AS-044 guarantees). (`TestRunnerIntegration`: disabled → never driven; enabled → `SpentUSD == 0`, no model tier.)
+- [x] Precision bar (once set) is tracked: suggestions accepted vs dismissed. (`Stats.Precision`, `TestPrecisionTracking`.)
 
 ## Dependencies
 

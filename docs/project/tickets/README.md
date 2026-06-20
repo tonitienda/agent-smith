@@ -81,7 +81,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | ready | 020, 022, 044 |
 | [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | done | 034 |
-| [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | ready | 032, 044, 047 |
+| [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | done | 032, 044, 047 |
 | [AS-049](AS-049-skill-expectation-analyzer.md) | skill-expectation-analyzer (experimental) | living-skills | ready | 044, 047, 048 |
 | [AS-050](AS-050-skills-report.md) | `/skills` report + cross-session rollup | living-skills | ready | 007, 022, 049 |
 | [AS-051](AS-051-headless-cli.md) | Headless CLI mode | faces | done | 018, 031 |
@@ -132,6 +132,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | done | 100 |
 | [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | done | 090 |
 | [AS-105](AS-105-migrate-mode-flag-commands.md) | Migrate the remaining mode-flag commands onto the shared flag contract | commands | done | 104 |
+| [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | ready | 048 |
 
 ## Suggested build order
 

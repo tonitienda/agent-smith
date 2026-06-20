@@ -88,7 +88,13 @@ The enforced contracts (guard test) are the corners most prone to drift:
   and the skill-expectation analyzer (AS-049). It reads skill frontmatter
   (`skill.Skill.Frontmatter`) and the log blocks; it never imports `skill`
   (AS-034), the loop, or a face — the dependency points from the analyzers inward
-  to it, the same way `subagent` sits below the loop.
+  to it, the same way `subagent` sits below the loop. The **rediscovered-fact
+  detector** (AS-048) lives in `internal/factdetector` as a `subagent.SubAgent`
+  built-in: it consumes `subagent` + `schema` only and stays free of `memory`/
+  `skill` by injecting its save-target `Resolve` func and its dismissal `Ledger`
+  from the consumer (the loop wiring, AS-088). Like `subagent`/`skillcontract` it
+  ships substrate-first — registration and the `/insights` offer UX are consumer
+  steps, not this package's concern.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
