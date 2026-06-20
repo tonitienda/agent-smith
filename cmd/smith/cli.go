@@ -165,7 +165,7 @@ func registryCommand(name string, argSpec *command.ArgSpec, pickArgs func(*cli.C
 		// at no cost when the usage is wrong (AS-090).
 		probe := command.Command{Name: name, ArgSpec: argSpec}
 		if err := probe.CheckArity(c.Args); err != nil {
-			return cli.Usagef("%v", err)
+			return cli.Usagef("%s: %v", name, err)
 		}
 		ctl, closeFn, err := readonlyController(c.Globals.Config)
 		if err != nil {

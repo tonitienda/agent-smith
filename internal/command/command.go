@@ -170,18 +170,19 @@ type ArgSpec struct {
 }
 
 // CheckArity validates args against the command's ArgSpec. A nil ArgSpec accepts
-// any count (arity is unchecked). The error names the command so the same
-// message reaches whichever face surfaced the call.
+// any count (arity is unchecked). The error is face-neutral — just the arity
+// reason — so each face prefixes it in its own idiom (the TUI with "/<name>:",
+// the CLI through its usage path); the helper stays free of any face's syntax.
 func (c Command) CheckArity(args []string) error {
 	s := c.ArgSpec
 	if s == nil {
 		return nil
 	}
 	if len(args) < s.Min {
-		return fmt.Errorf("/%s: needs %s, got %d", c.Name, atLeast(s.Min), len(args))
+		return fmt.Errorf("needs %s, got %d", atLeast(s.Min), len(args))
 	}
 	if s.Max >= 0 && len(args) > s.Max {
-		return fmt.Errorf("/%s: takes %s, got %d", c.Name, atMost(s.Max), len(args))
+		return fmt.Errorf("takes %s, got %d", atMost(s.Max), len(args))
 	}
 	return nil
 }

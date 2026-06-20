@@ -207,7 +207,7 @@ func (m model) dispatchCommand() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if err := cmd.CheckArity(args); err != nil {
-		m.appendSegment(segment{kind: segError, text: err.Error(), done: true})
+		m.appendSegment(segment{kind: segError, text: fmt.Sprintf("/%s: %v", cmd.Name, err), done: true})
 		return m, nil
 	}
 	return m, runCommand(cmd, args)
