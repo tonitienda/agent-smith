@@ -304,6 +304,7 @@ func TestStdioCallTimeout(t *testing.T) {
 		}
 	}()
 	c := &Client{name: "slow", transport: newStdioTransport(reqW, respR, nil), tmo: 100 * time.Millisecond}
+	t.Cleanup(func() { _ = c.Close() })
 	if err := c.handshake(t.Context()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
@@ -341,6 +342,7 @@ func TestCallerCancelKeepsHealthy(t *testing.T) {
 		}
 	}()
 	c := &Client{name: "slow", transport: newStdioTransport(reqW, respR, nil), tmo: 10 * time.Second}
+	t.Cleanup(func() { _ = c.Close() })
 	if err := c.handshake(t.Context()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
