@@ -125,6 +125,11 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-096](AS-096-render-primitives.md) | Add tiny shared render primitives for textual reports | polish | done | — |
 | [AS-097](AS-097-go126-test-idioms.md) | Modernize tests with Go 1.26 stdlib idioms | quality | done | — |
 | [AS-098](AS-098-architecture-contracts.md) | Document and test package architecture contracts | architecture | done | 095 |
+| [AS-099](AS-099-harness-quality-system.md) | Harness quality system design and command contract | quality | ready | 095, 098 |
+| [AS-100](AS-100-harness-scripts.md) | Add quick, full, architecture, and CI-local harness scripts | quality | ready | 099 |
+| [AS-101](AS-101-agent-hook-integration.md) | Agent and local hook integration for the harness | quality | ready | 100 |
+| [AS-102](AS-102-quality-skills.md) | Repository skills for quality gates and CI triage | capability | ready | 099, 100 |
+| [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | ready | 100 |
 
 ## Suggested build order
 
@@ -138,6 +143,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 8. **P2**: 054/055/057/058 as the async + analytics story matures.
 9. **Coding Mode** (orchestration layer, after the capability + wedge waves): 072 (shell) → 073 (phase tracker) / 074 (process skills) / 075 (method override) → 076 (reflect artifacts). 072/073/076 need their open questions answered first (see below); 074/075 are ready once 034/032 land.
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is a flagged spike that must clear D9 before any stranger-facing live hosting; it likely closes in favour of 079.
+11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 
 ## Needs clarification — decisions to make
 

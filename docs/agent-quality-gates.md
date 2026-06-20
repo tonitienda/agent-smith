@@ -1,5 +1,7 @@
 # Agent quality gates
 
+See also the broader harness design in [`docs/projects/harness-quality-system.md`](projects/harness-quality-system.md). That design defines the planned quick/full/architecture/CI-local command layers, agent hook integrations, skills, and CI-local parity work that should keep local, agent, and CI validation aligned.
+
 All coding agents and humans should use the same repository-owned quality gate before handing off changes:
 
 ```sh
