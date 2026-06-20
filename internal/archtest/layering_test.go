@@ -50,6 +50,12 @@ func TestLayeringContracts(t *testing.T) {
 			reason:    "concrete providers are leaves: the loop, faces, and cmd/* wire them up, never the reverse",
 		},
 		{
+			name:      "streamio does not import module packages",
+			pkgDir:    "internal/streamio",
+			forbidden: []string{""},
+			reason:    "stream I/O primitives are a stdlib-only leaf shared by adapters and transports",
+		},
+		{
 			name:      "loop does not import face packages",
 			pkgDir:    "internal/loop",
 			forbidden: []string{"internal/tui"},
@@ -80,7 +86,10 @@ func TestLayeringContracts(t *testing.T) {
 			imports := packageImports(t, root, tc.pkgDir)
 			for _, imp := range imports {
 				for _, bad := range tc.forbidden {
-					full := modulePath + "/" + bad
+					full := modulePath
+					if bad != "" {
+						full += "/" + bad
+					}
 					if imp == full || strings.HasPrefix(imp, full+"/") {
 						t.Errorf("%s imports %q, violating an architecture contract: %s (AS-098). See docs/architecture/package-contracts.md.", tc.pkgDir, imp, tc.reason)
 					}

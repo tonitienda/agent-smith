@@ -20,6 +20,7 @@ those lower layers never depend back up.
 |---|---|---|---|
 | **Schema** | `schema` | (stdlib only) | anything in this module |
 | **Render primitives** | `internal/render` | (stdlib only) | anything in this module |
+| **Stream I/O primitives** | `internal/streamio` | (stdlib only) | anything in this module |
 | **Event log** | `internal/eventlog` | `schema` | projection, provider, loop, faces |
 | **Projection** | `internal/projection` | `schema`, `internal/eventlog` | provider, loop, faces |
 | **Provider contracts** | `internal/provider` | `schema` | concrete providers, loop, faces |
@@ -33,7 +34,8 @@ The enforced contracts (guard test) are the corners most prone to drift:
 
 - provider contracts must not import the concrete providers;
 - concrete providers must not import the loop, faces, or `cmd/*`;
-- the loop must not import face packages.
+- the loop must not import face packages;
+- leaf primitives (`internal/render`, `internal/streamio`) must not import any other package in this module.
 
 ## Where new code goes
 
@@ -52,6 +54,10 @@ The enforced contracts (guard test) are the corners most prone to drift:
   tools in; a tool never reaches back into them.
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
+- **Shared stream I/O mechanics** (SSE framing, bounded best-effort reads, or
+  drain-then-close helpers): the generic primitive goes in `internal/streamio`
+  (stdlib-only leaf). Provider-, MCP-, or feature-specific parsing and
+  correlation stays package-local and calls the primitive.
 - **A shared format helper** (token/count/dollar/timestamp/table formatting for
   textual reports): the generic primitive goes in `internal/render` (stdlib-only
   leaf); feature-specific `Render` logic stays in each feature package and calls

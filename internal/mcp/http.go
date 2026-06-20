@@ -1,15 +1,17 @@
 package mcp
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/tonitienda/agent-smith/internal/streamio"
 )
 
 // httpTransport speaks JSON-RPC over MCP's Streamable HTTP transport: every
@@ -54,14 +56,14 @@ func (t *httpTransport) call(ctx context.Context, method string, params any) (js
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = streamio.DrainClose(resp.Body, 4096) }()
 	if sid := resp.Header.Get(sessionHeader); sid != "" {
 		t.mu.Lock()
 		t.sessionID = sid
 		t.mu.Unlock()
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body, _ := streamio.ReadAllLimit(resp.Body, 4096)
 		return nil, fmt.Errorf("mcp: http %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 
@@ -84,8 +86,7 @@ func (t *httpTransport) notify(ctx context.Context, method string, params any) e
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	_ = streamio.DrainClose(resp.Body, 4096)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("mcp: http %s", resp.Status)
 	}
@@ -145,41 +146,22 @@ func readRPCResponse(resp *http.Response, id int) (rpcResponse, error) {
 // whose ID matches id. Events are blank-line delimited; only `data:` lines carry
 // payload, and a single event's data lines are concatenated.
 func readSSEResponse(body io.Reader, id int) (rpcResponse, error) {
-	sc := bufio.NewScanner(body)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-	var data strings.Builder
-	flush := func() (rpcResponse, bool, error) {
-		if data.Len() == 0 {
-			return rpcResponse{}, false, nil
-		}
-		payload := data.String()
-		data.Reset()
-		var rpc rpcResponse
-		if err := json.Unmarshal([]byte(payload), &rpc); err != nil {
-			return rpcResponse{}, false, nil // not a JSON-RPC frame; skip it
-		}
-		if rpc.ID != id {
-			return rpcResponse{}, false, nil
-		}
-		return rpc, true, nil
-	}
-	for sc.Scan() {
-		line := sc.Text()
-		if line == "" { // event boundary
-			if rpc, ok, err := flush(); ok || err != nil {
-				return rpc, err
+	r := streamio.NewSSEReader(body)
+	for {
+		payload, err := r.ReadEvent()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
 			}
-			continue
+			return rpcResponse{}, fmt.Errorf("mcp: read sse: %w", err)
 		}
-		if v, ok := strings.CutPrefix(line, "data:"); ok {
-			data.WriteString(strings.TrimPrefix(v, " "))
+		var rpc rpcResponse
+		if err := json.Unmarshal(payload, &rpc); err != nil {
+			continue // not a JSON-RPC frame; skip it
 		}
-	}
-	if err := sc.Err(); err != nil {
-		return rpcResponse{}, fmt.Errorf("mcp: read sse: %w", err)
-	}
-	if rpc, ok, err := flush(); ok || err != nil { // stream ended without a trailing blank line
-		return rpc, err
+		if rpc.ID == id {
+			return rpc, nil
+		}
 	}
 	return rpcResponse{}, fmt.Errorf("mcp: no response for request %d on sse stream", id)
 }
