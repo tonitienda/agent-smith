@@ -30,6 +30,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -134,6 +135,12 @@ type Engine struct {
 	// whether the run stops rather than spending blind.
 	reserve      BudgetReservation
 	haltUnpriced bool
+
+	// Sub-agent lifecycle (AS-088). When set, the loop drives this Runner across
+	// the turn lifecycle: a session scope for the whole Run and a span scope per
+	// turn, with each appended block Observed passively. nil leaves the wiring off,
+	// so a session with no sub-agents pays nothing (the WithBudget precedent).
+	subagents SubAgents
 }
 
 // Option configures an Engine.
@@ -246,6 +253,32 @@ func WithBudgetReservation(reserve BudgetReservation, haltUnpriced bool) Option 
 	}
 }
 
+// SubAgents is the sub-agent lifecycle the loop drives (AS-088/AS-044): Begin
+// opens a scope (Init), Observe fans one appended block out passively, and End
+// tears the scope down with its context slice. Satisfied by *subagent.Runner;
+// declared here at the consumer so the loop depends on the three methods it calls
+// rather than the whole Runner (AS-091).
+type SubAgents interface {
+	Begin(scope subagent.Scope)
+	Observe(block schema.Block)
+	End(scope subagent.Scope, slice []schema.Block)
+}
+
+// WithSubAgents installs the sub-agent Runner the loop drives across the turn
+// lifecycle (AS-088), following the WithBudget precedent: the framework ships
+// face-agnostic (AS-044) and the loop opts it in. The loop Begins a session scope
+// at session start and a span scope per turn, Observes each block as it lands on
+// the log (passive and inline), and Ends each scope as a post-turn step kept off
+// the turn's interactive streaming. A nil runner is ignored, leaving the wiring
+// disabled so a session with no sub-agents pays nothing.
+func WithSubAgents(runner SubAgents) Option {
+	return func(e *Engine) {
+		if runner != nil {
+			e.subagents = runner
+		}
+	}
+}
+
 // WithSamplingParams sets the sampling knobs sent on every turn's request.
 func WithSamplingParams(p provider.SamplingParams) Option {
 	return func(e *Engine) { e.params = p }
@@ -348,6 +381,37 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			limit = v
 		}
 	}
+
+	// Sub-agent lifecycle (AS-088). With no Runner installed every call below is
+	// skipped, so a session without sub-agents pays nothing. The session scope is
+	// open for the whole Run; each turn is a span scope. Blocks are Observed by
+	// walking the log delta — the log is the session's single record (AS-018), so
+	// this catches every block in order regardless of which layer appended it,
+	// including the tool results the runtime writes. observed is the count already
+	// fanned out; observeNew advances it.
+	sa := e.subagents
+	observed := 0
+	observeNew := func() {
+		if sa == nil {
+			return
+		}
+		ev := e.log.Events()
+		for ; observed < len(ev); observed++ {
+			sa.Observe(ev[observed])
+		}
+	}
+	if sa != nil {
+		session := subagent.Scope{Kind: subagent.SessionScope}
+		sa.Begin(session)
+		defer func() {
+			// Teardown runs as a post-turn step (off the interactive streaming) and
+			// after the loop returns, honoring the framework's single-threaded
+			// sub-agent contract — methods are never called concurrently.
+			observeNew() // catch trailing blocks (reconcile markers, final usage)
+			sa.End(session, e.log.Events())
+		}()
+	}
+
 	for iter := 0; ; iter++ {
 		if err := ctx.Err(); err != nil {
 			res.StopReason = StopCanceled
@@ -410,6 +474,25 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			}
 		}
 
+		// Open this turn's span scope. Its slice is the blocks appended from here to
+		// span teardown (the user message on the first turn, then the assistant
+		// turn and any tool results). endSpan tears it down as a post-turn step,
+		// fanning out any blocks appended this turn first.
+		spanStart := observed
+		var span subagent.Scope
+		if sa != nil {
+			span = subagent.Scope{Kind: subagent.SpanScope, Span: fmt.Sprintf("turn-%d", iter)}
+			sa.Begin(span)
+		}
+		endSpan := func() {
+			if sa == nil {
+				return
+			}
+			observeNew()
+			ev := e.log.Events()
+			sa.End(span, append([]schema.Block(nil), ev[spanStart:]...))
+		}
+
 		req := e.requestFrom(live)
 		turn, err := e.streamTurn(ctx, iter, req)
 		res.Iterations = iter + 1
@@ -419,6 +502,7 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			// The turn was abandoned (cancelled or a surfaced provider error):
 			// reconcile any tool_call appended this turn so none is orphaned.
 			e.reconcile(turn.clientCalls)
+			endSpan()
 			if ctx.Err() != nil {
 				res.StopReason = StopCanceled
 			}
@@ -426,14 +510,17 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 		}
 
 		if !needsToolDispatch(turn) {
+			endSpan()
 			return res, nil
 		}
 		if err := e.dispatch(ctx, iter, turn.clientCalls); err != nil {
+			endSpan()
 			if ctx.Err() != nil {
 				res.StopReason = StopCanceled
 			}
 			return res, err
 		}
+		endSpan()
 	}
 }
 
