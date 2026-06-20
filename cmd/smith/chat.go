@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
@@ -240,7 +241,12 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Args:          "<handle>… | --apply | --undo | --cancel",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Run:           ctl.cmdClean,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "confirm the staged removal")
+			fs.Bool("undo", false, "restore the most recent removal")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Run: ctl.cmdClean,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "rewind",

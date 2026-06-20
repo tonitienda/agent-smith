@@ -239,6 +239,29 @@ func TestCommandSpecificFlag(t *testing.T) {
 	}
 }
 
+// TestCommandFlagAfterPositional covers AS-104 in the CLI face: a declared
+// command flag is honored even when written after a positional (the shared
+// permutation), and an undeclared flag is a usage error — the same behavior the
+// slash face gives (internal/tui asserts the equivalent cases).
+func TestCommandFlagAfterPositional(t *testing.T) {
+	var apply bool
+	app, _, _, _ := newTestApp(false, false)
+	app.Commands = append(app.Commands, &Command{
+		Name:  "clean",
+		Flags: func(fs *flag.FlagSet) { fs.BoolVar(&apply, "apply", false, "confirm") },
+		Run:   func(*Context) error { return nil },
+	})
+	if code := app.Run([]string{"clean", "blk1", "--apply"}); code != ExitOK {
+		t.Fatalf("clean exit = %d, want ExitOK", code)
+	}
+	if !apply {
+		t.Error("--apply after a positional was not parsed")
+	}
+	if code := app.Run([]string{"clean", "--nope"}); code != ExitUsage {
+		t.Errorf("undeclared flag exit = %d, want ExitUsage", code)
+	}
+}
+
 func TestCommandHelpShowsCommandSpecificFlags(t *testing.T) {
 	app, out, _, _ := newTestApp(false, false)
 	app.Commands = append(app.Commands, &Command{

@@ -668,18 +668,14 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 //   - /clean --apply     confirm the staged preview, appending the exclusion
 //   - /clean --undo      restore the most recent removal
 //   - /clean --cancel    discard the staged preview
-func (s *chatSession) cmdClean(_ context.Context, args []string) (command.Output, error) {
-	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "--apply":
-			return s.cleanApply()
-		case "--undo":
-			return s.cleanUndo()
-		case "--cancel":
-			return s.cleanCancel()
-		default:
-			return command.Output{}, fmt.Errorf("unknown /clean flag %q (use --apply, --undo, or --cancel)", args[0])
-		}
+func (s *chatSession) cmdClean(ctx context.Context, args []string) (command.Output, error) {
+	switch f := command.FlagsFrom(ctx); {
+	case f.Bool("apply"):
+		return s.cleanApply()
+	case f.Bool("undo"):
+		return s.cleanUndo()
+	case f.Bool("cancel"):
+		return s.cleanCancel()
 	}
 	if len(args) == 0 {
 		// No args: show the usage text for a scriptable face, and offer the

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -68,7 +69,7 @@ func (m model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.closePicker()
 		// Re-dispatch the command with the chosen value; for /resume this is the
 		// exact `/resume <id>` path, so loading and rehydration are unchanged.
-		return m, runCommand(cmd, []string{chosen.Value})
+		return m, runCommand(context.Background(), cmd, []string{chosen.Value})
 	}
 	return m, nil
 }
