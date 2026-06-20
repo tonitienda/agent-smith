@@ -49,6 +49,23 @@ This table is guarded: `internal/harnessparity` is a test-only package whose `Te
 
 When a harness command fails, report it in the format the rest of the repository's testing summaries use: the command run, its exit status, a concise failure summary, and the next suggested command. If an environment cannot execute a command, report it as an environment warning with the command output — do not silently skip it. This keeps agent final responses compatible with the testing-summary convention humans and CI already read.
 
+## Repository skills
+
+Concise, versioned skills encode the decision flow above so agents pick, run, and
+interpret the harness consistently. They point back to this doc and the scripts
+rather than copying instructions. They live as `SKILL.md` files (the same
+`---`-fenced format Smith loads):
+
+| Skill | Use when |
+| --- | --- |
+| `quality-gate-runner` | Finishing code changes: choose quick/full/arch, run them, classify failures, report environment warnings. |
+| `ci-failure-triage` | A CI job is red: map it to the local command that reproduces it and build the shortest fix plan. |
+| `ticket-implementer` | Starting a ticket: read the ticket, dependencies, PRD Decision Log, and architecture docs before editing. |
+
+- **Claude** auto-discovers them under [`.claude/skills/`](../.claude/skills); no setup needed.
+- **Codex / GrokBuild and other agents** should read the matching `.claude/skills/<name>/SKILL.md` for the same decision flow.
+- **Future Smith skill loading** uses the identical `SKILL.md` format (`internal/skill`), so these can be mirrored into a project (`.agent-smith/skills/`) or user skills directory when Smith dogfoods them.
+
 ## Hook integration
 
 Every hook surface delegates to the same `scripts/harness/*.sh` commands instead of embedding its own check list, so Claude, Codex, local Git, and future Smith hooks stay in sync with CI. Hooks are non-magical: the harness scripts print each command before running it, preserve the underlying exit code, and never hide failures from the transcript. Each surface documents a bypass for emergency local workflows.
