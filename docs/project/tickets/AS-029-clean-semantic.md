@@ -1,7 +1,7 @@
 ---
 id: AS-029
 title: /clean "<topic>" — natural-language semantic matching
-status: needs-clarification
+status: ready-to-implement
 github_issue: 29
 depends_on: [AS-028, AS-027]
 area: context-wedge
@@ -11,7 +11,7 @@ source: PRD.md §7.12, §10 Q4, D6
 
 # AS-029 · /clean natural-language matching
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -19,19 +19,20 @@ The headline demo (§7.12, D6 ships it in V1): `/clean "the content related to t
 
 The matching engine is **explicitly an open question in the PRD (§10 Q4)** and must be decided before implementation.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Engine choice (§10 Q4)** — embeddings/semantic search over segments, a cheap-model classifier ("does this block relate to X? y/n over candidates"), or a hybrid (embedding recall → cheap-model precision pass)? Each differs in cost, latency, offline behavior, and binary size (local embedding model vs API calls).
-2. **Cost/latency budget** — `/clean` is interactive; how long may matching take, and is a paid model call per `/clean` acceptable for a cost-focused product?
-3. **Precision/recall posture** — favor over-selection (user deselects in preview) or under-selection (user adds)? The preview makes mistakes recoverable, but defaults shape trust.
-4. **Relationship to AS-027** — if topic labels exist, is matching just label lookup, or does it run fresh per query? (One decision should cover both — flagged in AS-027 too.)
+- **Engine choice:** V1 uses a deterministic, explainable hybrid without embeddings: normalize the natural-language query, match it against AS-027 tags/file paths/tool spans/goal text, and rank candidates with lexical scoring. A cheap-model precision pass may be added later behind config, but is out of scope for this ticket.
+- **Cost/latency budget:** zero provider-token cost; interactive matching should complete in-process over the current projection.
+- **Precision posture:** prefer conservative under-selection. The preview lets users add/remove handles before apply, and explanations must show why each segment matched.
+- **Relationship to AS-027:** AS-027 supplies the label index and candidate tags; AS-029 runs fresh per query over the current projection and does not persist semantic search state.
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
-- [ ] A natural-language phrase selects a coherent, explainable set of segments shown in the AS-028 preview (nothing auto-removes).
+- [ ] A natural-language phrase selects a coherent, explainable set of segments shown in the AS-028 preview; nothing auto-removes.
 - [ ] PRD §6 guardrail holds: nothing is lost; undo is exact (inherited from AS-028).
-- [ ] Matching meets the agreed latency/cost budget.
+- [ ] Matching uses no provider/model calls and meets the interactive latency budget on the current projection.
 - [ ] Demo scenario passes: fix bug A, move to task B, `/clean "the bug we fixed"` reclaims A's segments and the session continues correctly.
+- [ ] The preview explains matches with tags/files/tools so users can trust or correct the selection.
 
 ## Dependencies
 

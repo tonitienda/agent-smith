@@ -1,7 +1,7 @@
 ---
 id: AS-048
 title: Rediscovered-fact detector (living skills, first form)
-status: needs-clarification
+status: ready-to-implement
 github_issue: 48
 depends_on: [AS-032, AS-044, AS-047]
 area: living-skills
@@ -11,7 +11,7 @@ source: PRD.md D7, §7.20
 
 # AS-048 · Rediscovered-fact detector
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -19,14 +19,15 @@ D7 locks this as the **first form of living skills**: a scalpel, not a courtroom
 
 Shape: a system sub-agent (AS-044) running at session end on the cheap tier; candidate signals are mechanical (failed command → variant → success; repeated searches converging on one path), with confirmation producing a one-line diff to AGENT.md or the relevant skill, applied via diff preview.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Detection mechanism** — pure trace heuristics (exit-code sequences, command edit-distance, search-then-read patterns), a cheap-model pass over candidate spans, or heuristics-propose / model-confirm? D7 demands high precision — where's the bar (e.g., <1 in 10 suggestions rejected)?
-2. **What counts as a durable fact** — commands/paths/config only (D7's list), or also conventions ("tests live in /spec")? A crisp inclusion list keeps the scalpel sharp.
-3. **Save-target resolution** — when does a fact belong to a *skill* vs *AGENT.md* vs a *directory-level* memory file? Rule needed for the ambiguous case (no skill was active when the fact was discovered).
-4. **Offer UX** — at session end via `/insights`, or a low-key inline prompt the moment the fact is confirmed? (Inline is more visceral; session-end is less interruptive — pick one for v1.)
+- **Detection mechanism:** heuristics propose candidates from trace patterns; an optional cheap-model confirmer can be added later, but V1 must achieve useful results without provider calls.
+- **Precision bar:** optimize for high precision over recall. Track accepted vs dismissed suggestions and treat repeated low acceptance as a detector-quality bug; do not chase an exact percentage gate until there is enough session volume.
+- **Durable fact definition:** commands, paths, config keys/values, and explicit repo conventions discovered through failed-then-successful work. General advice, subjective preferences, and one-off debugging observations are out of scope.
+- **Save-target resolution:** prefer the active skill's memory/contract when the trace is inside a skill scope; otherwise choose the deepest applicable memory file for the files involved, falling back to the project root memory file. Always show the target in the diff preview.
+- **Offer UX:** V1 offers candidates at session end through `/insights`; no inline interruption. Declines are recorded so the same evidence is not re-suggested.
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
 - [ ] On a scripted session that rediscovers a known fact (e.g., flailing to find the test command), the detector proposes exactly that fact with the trace as evidence.
 - [ ] Accepting writes a minimal diff to the chosen target via preview; declining records the dismissal (don't re-suggest the same fact).

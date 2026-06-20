@@ -1,7 +1,7 @@
 ---
 id: AS-076
 title: Coding Mode reflect-phase artifacts (success metric, instrumentation, check-back ticket)
-status: needs-clarification
+status: ready-to-implement
 github_issue: 126
 depends_on: [AS-045, AS-048, AS-072]
 area: coding-mode
@@ -11,7 +11,7 @@ source: coding-mode.prd.md (D-CODE-7)
 
 # AS-076 · Coding Mode reflect-phase artifacts
 
-**Status: needs-clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -39,15 +39,10 @@ It never reads runtime data.
 - [ ] Durable facts surfaced during the feature are offered for saving via the
       AS-048 detector; the session retro is available via `/insights` (AS-045).
 
-## Open questions
+## Clarified implementation decisions
 
-- **Prerequisite not yet clarified:** depends on AS-048 (rediscovered-fact
-  detector), which is itself `needs-clarification` (detection mechanism, precision
-  bar, durable-fact definition). This ticket can't be finalised until AS-048 is.
-- **Reflect-artifact depth (PRD Q3-adjacent):** how far does the reflect phase go
-  in producing artifacts — a scratch success-metric note, or actual synced
-  `AS-NNN` check-back tickets via `cmd/ticket-sync`? The latter couples Coding
-  Mode to this repo's ticket workflow.
+- **AS-048 prerequisite:** use the clarified AS-048 durable-fact detector contract: commands, paths, config values, and repo conventions are offered through `/insights` with diff preview.
+- **Reflect-artifact depth:** V1 creates local artifacts only: a success-metric note in the session, an instrumentation diff/proposal, and a check-back ticket draft in Smith's own ticket format when running inside this repo. It must not call `cmd/ticket-sync` or mutate remote issue state. In other repos, produce a markdown check-back note/diff appropriate to the detected project.
 
 ## Dependencies
 

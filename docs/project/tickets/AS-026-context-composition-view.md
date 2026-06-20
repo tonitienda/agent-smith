@@ -15,7 +15,7 @@ source: PRD.md §7.11, D6
 
 ## Description
 
-The flagship differentiator (§7.11): a full-screen panel showing what is actually in the window. **V1 scope is the mechanically derivable dimensions** — segment type, file, recency, size. The *topic* dimension depends on the labeling engine (AS-027, needs clarification) and is added when that lands; the panel ships without it.
+The flagship differentiator (§7.11): a full-screen panel showing what is actually in the window. **V1 scope is the mechanically derivable dimensions** — segment type, file, recency, size. The *topic* dimension depends on the labeling engine (AS-027) and is added when that lands; the panel ships without it.
 
 - Full-screen `/context` panel: every projected segment with type, origin (file path / tool / role), token count, $ cost, age, and live/excluded status.
 - Groupings: by type (user / assistant / tool result / file read / reasoning / system+memory), by file, by recency bucket.

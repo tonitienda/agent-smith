@@ -1,7 +1,7 @@
 ---
 id: AS-042
 title: Model routing/tiering + /route command
-status: needs-clarification
+status: ready-to-implement
 github_issue: 42
 depends_on: [AS-008, AS-031, AS-044]
 area: cost
@@ -11,7 +11,7 @@ source: PRD.md §7.15, §5, Appendix A, §10 (adjacent)
 
 # AS-042 · Model routing/tiering + /route
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -19,14 +19,14 @@ source: PRD.md §7.15, §5, Appendix A, §10 (adjacent)
 
 What's clearly buildable: a **tier abstraction** (`cheap | standard | strong` mapped to concrete provider/models in config) consumed by everything that already declares a tier — `/compact` summarization (AS-038), system sub-agents (AS-044, Appendix C.3 `model: cheap`), subagent fan-out defaults (AS-046). `/route` inspects the policy and per-session overrides.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Does routing ever apply to the main interactive loop in v1**, or only to explicitly-tiered work (sub-agents, compaction, analyzers)? Auto-detecting "mechanical subtasks" inside the main loop is a much harder, riskier feature than tier mapping — the §6 guardrail (task success must not regress) is directly at stake.
-2. **Auto-escalate on failure** — what is "failure"? Tool-error loops, user correction, explicit model admission? How many retries before escalating, and does the escalated attempt reuse the cheap attempt's output?
-3. **Cross-provider routing** — may the cheap tier live on a different provider than the strong tier mid-session (the polyglot schema permits it; does policy)?
-4. **Policy schema** — per-task-type rules, per-tool rules, or just tier defaults + per-feature tier declarations?
+- **Scope:** V1 routing applies only to explicitly tier-declared work: compaction, semantic/tidy analyzers, system sub-agents, and user sub-agent defaults. It does not auto-downgrade the main interactive loop.
+- **Escalation:** V1 escalation is explicit and feature-owned: a tier-declared task may retry on the next stronger tier only when it returns a structured low-confidence/failed result. No invisible retries for normal chat turns.
+- **Cross-provider policy:** allowed when config maps tiers to different providers; every provider/model switch is logged and visible in `/route` and `/cost`.
+- **Policy schema:** tier defaults plus per-feature overrides keyed by feature/sub-agent name. Per-tool and intent-classifier policies are deferred.
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
 - [ ] Tiers are configurable; every tier-declaring feature resolves through the router.
 - [ ] `/route` shows the active policy and which tier served each recent call.

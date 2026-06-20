@@ -15,7 +15,7 @@ source: PRD.md §7.12, D3, D6
 
 ## Description
 
-The second flagship wedge (§7.12), v1 half: **manual** semantic editing — select segments in the composition view and drop them. The natural-language matcher is AS-029 (needs clarification); everything it will need (preview, exclusion events, archive, undo) is built here.
+The second flagship wedge (§7.12), v1 half: **manual** semantic editing — select segments in the composition view and drop them. The natural-language matcher is AS-029; everything it will need (preview, exclusion events, archive, undo) is built here.
 
 - From `/context` (AS-026): select segments → preview pane shows exactly what's removed and tokens/$ reclaimed → confirm → an `exclusion` event (with provenance: user-manual, timestamp, block IDs) is appended. **History is never mutated** (D3).
 - Excluded segments move to an off-window **archive view** (browsable from `/context`), not oblivion.
