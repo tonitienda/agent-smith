@@ -115,7 +115,8 @@ type MemLedger struct {
 // NewMemLedger returns an empty in-memory Ledger.
 func NewMemLedger() *MemLedger { return &MemLedger{dismissed: map[string]bool{}} }
 
-// Dismissed reports whether fingerprint was previously declined.
+// Dismissed reports whether fingerprint was previously declined. Reading a nil
+// map is safe (yields false), so the zero-value MemLedger needs no init here.
 func (l *MemLedger) Dismissed(fingerprint string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -123,9 +124,13 @@ func (l *MemLedger) Dismissed(fingerprint string) bool {
 }
 
 // Record files an outcome, updating the dismissal set and the precision tally.
+// The map is lazily initialized so a zero-value MemLedger does not panic.
 func (l *MemLedger) Record(fingerprint string, o Outcome) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.dismissed == nil {
+		l.dismissed = map[string]bool{}
+	}
 	switch o {
 	case Accepted:
 		l.stats.Accepted++
@@ -278,7 +283,10 @@ func detectCommands(slice []schema.Block) []candidate {
 		// A success: did it resolve recent flailing on the same thing? Detection
 		// requires at least one failure sharing a significant token (precision),
 		// but once that link is established the whole flail run is the trace
-		// (richer, user-checkable evidence).
+		// (richer, user-checkable evidence). Only a *related* success clears the
+		// run: an unrelated success (an informational `ls`/`pwd`/`git status`
+		// mid-flail) is ignored so it cannot orphan the failures from the command
+		// that actually resolves them.
 		if related(e, failed) {
 			out = append(out, candidate{
 				Kind:        CommandFact,
@@ -287,8 +295,8 @@ func detectCommands(slice []schema.Block) []candidate {
 				Skill:       e.skill,
 				Failed:      commands(failed),
 			})
+			failed = nil
 		}
-		failed = nil // a success always ends the flail run
 	}
 	return out
 }
@@ -400,6 +408,10 @@ func normalize(cmd string) string {
 func tokens(cmd string) map[string]bool {
 	out := map[string]bool{}
 	for _, w := range strings.Fields(strings.ToLower(cmd)) {
+		// Trim a leading path prefix so a local script (`./test.sh`,
+		// `/usr/bin/python`) tokenizes on its name rather than being dropped for
+		// starting with a non-letter.
+		w = strings.TrimLeft(w, "./\\")
 		if len(w) < 2 {
 			continue
 		}

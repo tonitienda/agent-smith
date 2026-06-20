@@ -111,6 +111,50 @@ func TestUnrelatedSuccessNotLinked(t *testing.T) {
 	}
 }
 
+// An unrelated success mid-flail (an informational `git status`) must not clear
+// the failure history: the later related success still links to the failures.
+func TestUnrelatedSuccessDoesNotOrphanFlail(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "npm test", ""),
+		shellResult("c1", true),
+		shellCall("c2", "git status", ""), // unrelated success in the middle
+		shellResult("c2", false),
+		shellCall("c3", "go test ./...", ""),
+		shellResult("c3", false),
+	}
+	d := New(nil, NewMemLedger())
+	got := d.Teardown(subagent.Scope{}, blocks).Findings
+	if len(got) != 1 {
+		t.Fatalf("want 1 finding (flail survives unrelated success), got %d: %+v", len(got), got)
+	}
+	if !strings.Contains(got[0].Detail, "npm test") {
+		t.Fatalf("evidence lost the original failure: %q", got[0].Detail)
+	}
+}
+
+// A zero-value MemLedger is safe to use directly (no nil-map panic on Record).
+func TestZeroValueLedgerSafe(t *testing.T) {
+	var led MemLedger
+	led.Record("command:x", Dismissed)
+	if !led.Dismissed("command:x") {
+		t.Fatal("zero-value ledger did not record dismissal")
+	}
+}
+
+// A flailed local script is tokenized on its name, so it can be detected.
+func TestLocalScriptTokenized(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "./test.sh --all", ""),
+		shellResult("c1", true),
+		shellCall("c2", "bash test.sh", ""),
+		shellResult("c2", false),
+	}
+	d := New(nil, NewMemLedger())
+	if got := d.Teardown(subagent.Scope{}, blocks).Findings; len(got) != 1 {
+		t.Fatalf("want 1 finding for local-script flail, got %d: %+v", len(got), got)
+	}
+}
+
 // AC: declining records the dismissal and the same fact is not re-suggested.
 func TestDismissedFactNotResuggested(t *testing.T) {
 	led := NewMemLedger()
