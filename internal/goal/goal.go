@@ -23,6 +23,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/projection"
+	"github.com/tonitienda/agent-smith/internal/render"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -136,7 +137,7 @@ func Render(events []schema.Block) string {
 		if s.Active {
 			marker = "→"
 		}
-		fmt.Fprintf(&b, "  %s %s  %s\n", marker, s.SetAt.Format("2006-01-02 15:04"), s.Objective)
+		fmt.Fprintf(&b, "  %s %s  %s\n", marker, render.Timestamp(s.SetAt), s.Objective)
 	}
 	return b.String()
 }

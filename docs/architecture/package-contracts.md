@@ -19,6 +19,7 @@ those lower layers never depend back up.
 | Layer | Packages | Depends on | Must not depend on |
 |---|---|---|---|
 | **Schema** | `schema` | (stdlib only) | anything in this module |
+| **Render primitives** | `internal/render` | (stdlib only) | anything in this module |
 | **Event log** | `internal/eventlog` | `schema` | projection, provider, loop, faces |
 | **Projection** | `internal/projection` | `schema`, `internal/eventlog` | provider, loop, faces |
 | **Provider contracts** | `internal/provider` | `schema` | concrete providers, loop, faces |
@@ -51,3 +52,7 @@ The enforced contracts (guard test) are the corners most prone to drift:
   tools in; a tool never reaches back into them.
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
+- **A shared format helper** (token/count/dollar/timestamp/table formatting for
+  textual reports): the generic primitive goes in `internal/render` (stdlib-only
+  leaf); feature-specific `Render` logic stays in each feature package and calls
+  the primitive.
