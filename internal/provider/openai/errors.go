@@ -3,13 +3,13 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/streamio"
 )
 
 // maxErrorBody caps how much of an error response body the adapter reads, so a
@@ -32,8 +32,8 @@ type errorEnvelope struct {
 // message, and parses Retry-After for rate-limit/overloaded responses. The
 // response body is drained and closed.
 func readErrorResponse(resp *http.Response) *provider.Error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
-	_ = resp.Body.Close()
+	body, _ := streamio.ReadAllLimit(resp.Body, maxErrorBody)
+	_ = streamio.DrainClose(resp.Body, maxErrorBody)
 
 	var env errorEnvelope
 	_ = json.Unmarshal(body, &env)

@@ -29,7 +29,10 @@ func TestLayeringContracts(t *testing.T) {
 		// forbidden lists module-relative directory prefixes the package must
 		// not import, directly or as a subpackage.
 		forbidden []string
-		reason    string
+		// forbidModule imports means the package must not import any package from
+		// this module. Use it for stdlib-only leaf packages.
+		forbidModule bool
+		reason       string
 	}{
 		{
 			name:      "provider contracts do not import concrete providers",
@@ -48,6 +51,18 @@ func TestLayeringContracts(t *testing.T) {
 			pkgDir:    "internal/provider/openai",
 			forbidden: []string{"internal/loop", "internal/tui", "cmd"},
 			reason:    "concrete providers are leaves: the loop, faces, and cmd/* wire them up, never the reverse",
+		},
+		{
+			name:         "render primitives do not import module packages",
+			pkgDir:       "internal/render",
+			forbidModule: true,
+			reason:       "render primitives are a stdlib-only leaf shared by feature renderers",
+		},
+		{
+			name:         "streamio does not import module packages",
+			pkgDir:       "internal/streamio",
+			forbidModule: true,
+			reason:       "stream I/O primitives are a stdlib-only leaf shared by adapters and transports",
 		},
 		{
 			name:      "loop does not import face packages",
@@ -79,6 +94,9 @@ func TestLayeringContracts(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			imports := packageImports(t, root, tc.pkgDir)
 			for _, imp := range imports {
+				if tc.forbidModule && isModuleImport(imp) {
+					t.Errorf("%s imports %q, violating an architecture contract: %s (AS-098). See docs/architecture/package-contracts.md.", tc.pkgDir, imp, tc.reason)
+				}
 				for _, bad := range tc.forbidden {
 					full := modulePath + "/" + bad
 					if imp == full || strings.HasPrefix(imp, full+"/") {
@@ -88,6 +106,10 @@ func TestLayeringContracts(t *testing.T) {
 			}
 		})
 	}
+}
+
+func isModuleImport(imp string) bool {
+	return imp == modulePath || strings.HasPrefix(imp, modulePath+"/")
 }
 
 // packageImports returns every import path used by the non-test Go sources
