@@ -46,13 +46,17 @@ func TestConfigFromHigherLayerOverrides(t *testing.T) {
 	}
 }
 
-func TestConfigFromOutOfRangeThresholdFallsBack(t *testing.T) {
+func TestConfigFromOutOfRangeThresholdFallsBackWithWarning(t *testing.T) {
+	// An explicit but out-of-range threshold defaults *and* warns (D2).
 	for _, bad := range []float64{0, 1, -0.2, 1.4} {
-		cfg, _ := compact.ConfigFrom(config.New(config.MapLayer("project", "config.json", map[string]any{
+		cfg, warns := compact.ConfigFrom(config.New(config.MapLayer("project", "config.json", map[string]any{
 			"compact": map[string]any{"auto": true, "auto_threshold": bad},
 		})))
 		if cfg.AutoThreshold != compact.DefaultAutoThreshold {
 			t.Errorf("threshold %g: got %g, want default %g", bad, cfg.AutoThreshold, compact.DefaultAutoThreshold)
+		}
+		if len(warns) != 1 {
+			t.Errorf("threshold %g: want 1 warning, got %v", bad, warns)
 		}
 	}
 }

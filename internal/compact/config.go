@@ -39,15 +39,21 @@ type Config struct {
 func ConfigFrom(c configReader) (Config, []string) {
 	cfg := Config{AutoThreshold: DefaultAutoThreshold}
 	var raw struct {
-		Auto          bool    `json:"auto"`
-		AutoThreshold float64 `json:"auto_threshold"`
+		Auto bool `json:"auto"`
+		// Pointer so an unset threshold (silently defaults) is told apart from an
+		// explicit out-of-range one (worth a warning, per D2's tolerate-but-warn).
+		AutoThreshold *float64 `json:"auto_threshold"`
 	}
 	if _, err := c.Decode("compact", &raw); err != nil {
 		return cfg, []string{fmt.Sprintf("ignoring compact config: %v", err)}
 	}
 	cfg.Auto = raw.Auto
-	if raw.AutoThreshold > 0 && raw.AutoThreshold < 1 {
-		cfg.AutoThreshold = raw.AutoThreshold
+	if raw.AutoThreshold == nil {
+		return cfg, nil
 	}
-	return cfg, nil
+	if v := *raw.AutoThreshold; v > 0 && v < 1 {
+		cfg.AutoThreshold = v
+		return cfg, nil
+	}
+	return cfg, []string{fmt.Sprintf("compact.auto_threshold %g is out of range (0,1); using the default %g", *raw.AutoThreshold, DefaultAutoThreshold)}
 }
