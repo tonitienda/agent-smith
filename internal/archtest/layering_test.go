@@ -55,6 +55,24 @@ func TestLayeringContracts(t *testing.T) {
 			forbidden: []string{"internal/tui"},
 			reason:    "the agent loop is face-agnostic; faces drive the loop, not the reverse",
 		},
+		{
+			name:      "event log does not import projection, provider, loop, or faces",
+			pkgDir:    "internal/eventlog",
+			forbidden: []string{"internal/projection", "internal/provider", "internal/loop", "internal/tui"},
+			reason:    "the event log is a lower-level storage layer; higher layers read it, not the reverse",
+		},
+		{
+			name:      "projection does not import provider, loop, or faces",
+			pkgDir:    "internal/projection",
+			forbidden: []string{"internal/provider", "internal/loop", "internal/tui"},
+			reason:    "projections are built over the event log and must not depend on orchestration or faces",
+		},
+		{
+			name:      "tools do not import loop or faces",
+			pkgDir:    "internal/tool",
+			forbidden: []string{"internal/loop", "internal/tui"},
+			reason:    "tools are leaves the loop wires in; they must not reach back into the loop or faces",
+		},
 	}
 
 	for _, tc := range cases {
@@ -84,7 +102,7 @@ func packageImports(t *testing.T, root, relDir string) []string {
 	}
 
 	fset := token.NewFileSet()
-	var imports []string
+	seen := make(map[string]bool)
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -95,8 +113,15 @@ func packageImports(t *testing.T, root, relDir string) []string {
 			t.Fatalf("parse %s: %v", name, err)
 		}
 		for _, imp := range file.Imports {
-			imports = append(imports, strings.Trim(imp.Path.Value, `"`))
+			seen[strings.Trim(imp.Path.Value, `"`)] = true
 		}
+	}
+
+	// Deduplicate so a single violation imported by several files in the package
+	// is reported once, not once per file.
+	imports := make([]string, 0, len(seen))
+	for imp := range seen {
+		imports = append(imports, imp)
 	}
 	return imports
 }
