@@ -78,7 +78,7 @@ Use multiple hook surfaces, but keep their behavior identical by delegating into
 - **Smith lifecycle hooks:** once Smith hooks are used for project automation, configure `pre_tool_use` and `user_prompt_submit` examples that remind or run the harness for write-heavy sessions.
 - **CI hooks:** CI remains authoritative, but should call the same Make targets and publish the same artifacts/log format.
 
-Hooks must be non-magical: they should print the command they are running, support an documented bypass only for emergency local workflows, and never hide failures from the agent transcript.
+Hooks must be non-magical: they should print the command they are running, support a documented bypass only for emergency local workflows, and never hide failures from the agent transcript.
 
 ### 5. CI/local parity layer
 
