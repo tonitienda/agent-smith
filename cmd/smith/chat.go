@@ -7,7 +7,9 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/command"
+	"github.com/tonitienda/agent-smith/internal/compact"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/memory"
@@ -114,20 +116,21 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
 	// Apply the configured budget defaults (AS-041): a default ceiling for new
 	// sessions and the warning fraction, both overridable per session by /budget.
-	budgetLimit, _, _ := cfg.Float64("budget.limit_usd")
-	budgetWarn, _, _ := cfg.Float64("budget.warn_fraction")
-	// halt_unpriced (AS-086) decides whether a budgeted session stops, rather than
-	// spending blind, when the active model has no pricing entry and so cannot be
-	// enforced. Default off: warn once and proceed.
-	budgetHaltUnpriced, _, _ := cfg.Bool("budget.halt_unpriced")
-	ctl.setBudgetDefaults(budgetLimit, budgetWarn, budgetHaltUnpriced)
+	// The typed view (AS-093) owns the `budget.*` paths and validates them.
+	budgetCfg, budgetWarns := budget.ConfigFrom(cfg)
+	for _, w := range budgetWarns {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	ctl.setBudgetDefaults(budgetCfg.DefaultLimitUSD, budgetCfg.WarnFraction, budgetCfg.HaltUnpriced)
 	// Auto-compact (AS-085) is off by default — the product prefers /clean and
 	// /tidy; this is the blunt last-resort guard against a context-window-exceeded
-	// stop. compact.auto_threshold is the window fraction it triggers at (defaulted
-	// downstream when unset or out of range).
-	autoCompact, _, _ := cfg.Bool("compact.auto")
-	autoCompactThreshold, _, _ := cfg.Float64("compact.auto_threshold")
-	ctl.setAutoCompact(autoCompact, autoCompactThreshold)
+	// stop. The typed view (AS-093) owns the `compact.*` paths and defaults the
+	// trigger threshold.
+	compactCfg, compactWarns := compact.ConfigFrom(cfg)
+	for _, w := range compactWarns {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	ctl.setAutoCompact(compactCfg.Auto, compactCfg.AutoThreshold)
 	// Build the Matrix personality layer (AS-053) from config for this interactive
 	// face: themed status line + role names, on by default in the TUI, with
 	// /serious as the runtime kill switch. It is chrome-only and never touches turn

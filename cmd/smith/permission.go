@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/permission"
@@ -28,9 +27,9 @@ func buildPolicy(root string, app *tui.App, override string) (*permission.Policy
 	if err != nil {
 		return nil, err
 	}
-	var unified permission.Config
-	if _, err := cfg.Decode("permissions", &unified); err != nil {
-		return nil, fmt.Errorf("load permissions config: %w", err)
+	unified, err := permission.ConfigFrom(cfg)
+	if err != nil {
+		return nil, err
 	}
 	legacy, err := permission.LoadLayered(permission.UserConfigPath(), permission.ProjectConfigPath(root))
 	if err != nil {

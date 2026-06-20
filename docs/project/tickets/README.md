@@ -119,7 +119,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | ready | 066 |
 | [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | ready | — |
 | [AS-092](AS-092-shared-streamio.md) | Extract shared stream I/O mechanics for providers and MCP | architecture | ready | 010, 036, 083 |
-| [AS-093](AS-093-typed-config-views.md) | Add typed consumer config views over layered config | foundation | ready | 031, 071 |
+| [AS-093](AS-093-typed-config-views.md) | Add typed consumer config views over layered config | foundation | done | 031, 071 |
 | [AS-094](AS-094-filesystem-stdlib-audit.md) | Standardize filesystem traversal on fs.FS and WalkDir | architecture | done | — |
 | [AS-095](AS-095-core-dependency-boundaries.md) | Enforce stdlib-first dependency boundaries for core packages | quality | done | — |
 | [AS-096](AS-096-render-primitives.md) | Add tiny shared render primitives for textual reports | polish | done | — |

@@ -24,7 +24,7 @@ import (
 // Close them (and reap any subprocesses) at session end; a nil/empty result needs
 // no special-casing.
 func connectMCPServers(ctx context.Context, cfg *config.Config, reg *tool.Registry, stderr io.Writer) []*mcp.Client {
-	specs, warns, err := mcp.Parse(cfg)
+	specs, warns, err := mcp.ConfigFrom(cfg)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "warning: mcp: %v\n", err)
 		return nil

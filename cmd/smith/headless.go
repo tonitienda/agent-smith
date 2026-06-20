@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
@@ -140,9 +139,9 @@ func buildHeadlessPolicy(root, override string) (*permission.Policy, error) {
 	if err != nil {
 		return nil, err
 	}
-	var unified permission.Config
-	if _, err := cfg.Decode("permissions", &unified); err != nil {
-		return nil, fmt.Errorf("load permissions config: %w", err)
+	unified, err := permission.ConfigFrom(cfg)
+	if err != nil {
+		return nil, err
 	}
 	legacy, err := permission.LoadLayered(permission.UserConfigPath(), permission.ProjectConfigPath(root))
 	if err != nil {

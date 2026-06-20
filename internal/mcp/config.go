@@ -4,9 +4,15 @@ import (
 	"fmt"
 	"sort"
 	"time"
-
-	"github.com/tonitienda/agent-smith/internal/config"
 )
+
+// configReader is the slice of the layered config the MCP view reads;
+// *config.Config satisfies it via Decode. Kept as a tiny consumer-side interface
+// so this package owns the `mcp.servers` path and its parsing without importing
+// internal/config (AS-093: typed config views over the layered substrate).
+type configReader interface {
+	Decode(path string, v any) (bool, error)
+}
 
 // rawServer is the JSON shape of one `mcp.servers.<name>` entry: command/args/env
 // for a stdio server, or url/headers for an HTTP/SSE server, plus an optional
@@ -20,14 +26,14 @@ type rawServer struct {
 	Timeout string            `json:"timeout"`
 }
 
-// Parse reads the `mcp.servers` config section into ServerConfig specs, sorted by
-// name for a deterministic connect order. A transport-ambiguous entry (neither
-// command nor url, or both set) is skipped with a warning; an entry with a
-// malformed timeout is kept (the default timeout applies) with a warning, since
+// ConfigFrom reads the `mcp.servers` config section into ServerConfig specs,
+// sorted by name for a deterministic connect order. A transport-ambiguous entry
+// (neither command nor url, or both set) is skipped with a warning; an entry with
+// a malformed timeout is kept (the default timeout applies) with a warning, since
 // the server is otherwise usable. Nothing fails the session — one broken server
 // must not block the others (the §7.4 isolation ethos, and config's
 // tolerate-but-warn rule, D2). Returns no specs when the section is absent.
-func Parse(cfg *config.Config) (specs []ServerConfig, warnings []string, err error) {
+func ConfigFrom(cfg configReader) (specs []ServerConfig, warnings []string, err error) {
 	var servers map[string]rawServer
 	ok, err := cfg.Decode("mcp.servers", &servers)
 	if err != nil {

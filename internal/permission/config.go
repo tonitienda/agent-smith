@@ -95,6 +95,28 @@ func containsRule(rules []Rule, r Rule) bool {
 	return false
 }
 
+// configReader is the slice of the layered config the permission view reads;
+// *config.Config satisfies it via Decode. Kept as a tiny consumer-side interface
+// so this package owns the `permissions` path and its parsing without importing
+// internal/config (AS-093: typed config views over the layered substrate).
+type configReader interface {
+	Decode(path string, v any) (bool, error)
+}
+
+// ConfigFrom reads the `permissions` section out of the layered config into a
+// validated Config (AS-071). A missing section yields the zero Config — every
+// tool defaults to ModeAsk, the conservative posture of PRD D9. A malformed
+// section is a hard error rather than a silent downgrade: permissions are a
+// safety boundary, so failing closed at startup beats quietly resolving to
+// "ask" on a typo. The dotted path lives here, not in the composition root.
+func ConfigFrom(c configReader) (Config, error) {
+	var cfg Config
+	if _, err := c.Decode("permissions", &cfg); err != nil {
+		return Config{}, fmt.Errorf("permission: load config: %w", err)
+	}
+	return cfg, nil
+}
+
 // Load reads a permission Config from a JSON file. A missing file is not an
 // error: it returns the zero Config, so an absent user or project file simply
 // contributes nothing to the merge.
