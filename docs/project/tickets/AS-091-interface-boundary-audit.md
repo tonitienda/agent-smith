@@ -1,7 +1,7 @@
 ---
 id: AS-091
 title: Audit interfaces and move small seams to consumer packages
-status: ready-to-implement
+status: done
 github_issue: 161
 depends_on: []
 area: architecture
@@ -41,3 +41,23 @@ config value" near the package that consumes them.
 ## Dependencies
 
 - None
+
+## Resolution
+
+Audited every interface in the observer/permission/budget/config/command/hook/
+loop packages (and neighbours). Classification recorded as the **Interface
+convention** section in
+[docs/architecture/package-contracts.md](../../architecture/package-contracts.md):
+product boundaries (`provider.Provider`, `provider.Stream`, `tool.Tool`,
+`permission.Asker`, `loop.Observer`, `subagent.SubAgent`, `subagent.Store`) stay;
+the `configReader`/`configDecoder` views over `*config.Config` are already
+correctly placed consumer seams (AS-093).
+
+Three non-product seams shrunk, all in `internal/loop`: the `Engine` previously
+accepted the whole `*eventlog.Log`, `*tool.Runtime`, and `*tool.Registry` but used
+only `Append`/`Events`, `ExecuteBatch`, and `ProviderDefs` respectively. Replaced
+with consumer-side `eventLog`, `toolExecutor`, and `toolDefs` interfaces declared
+in the loop; constructor and field types now name just those methods (callers pass
+the same concrete types, so no call sites changed). The loop's tests keep their
+real collaborators per the Classical strategy — the narrowed seams simply make a
+one-/two-method fake possible where a future test wants one.
