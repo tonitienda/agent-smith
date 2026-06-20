@@ -1,7 +1,7 @@
 ---
 id: AS-103
 title: Guard CI and local harness parity
-status: ready-to-implement
+status: done
 github_issue: 186
 depends_on: [AS-100]
 area: quality
