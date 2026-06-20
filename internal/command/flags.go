@@ -18,7 +18,15 @@ type Flags struct{ fs *flag.FlagSet }
 // Bool reports a boolean flag's parsed value; false when unset or undeclared.
 func (f *Flags) Bool(name string) bool {
 	fl := f.lookup(name)
-	return fl != nil && fl.Value.String() == "true"
+	if fl == nil {
+		return false
+	}
+	if g, ok := fl.Value.(flag.Getter); ok {
+		if b, ok := g.Get().(bool); ok {
+			return b
+		}
+	}
+	return fl.Value.String() == "true"
 }
 
 // String returns a flag's parsed value; "" when unset or undeclared.
@@ -47,6 +55,9 @@ func WithFlags(ctx context.Context, f *Flags) context.Context {
 // FlagsFrom returns the flags carried on ctx, or an empty (all-unset) set when a
 // face parsed none — so a handler need not nil-check before reading a flag.
 func FlagsFrom(ctx context.Context) *Flags {
+	if ctx == nil {
+		return &Flags{}
+	}
 	if f, ok := ctx.Value(flagsKey{}).(*Flags); ok {
 		return f
 	}
@@ -60,6 +71,9 @@ func FlagsFrom(ctx context.Context) *Flags {
 // returned unchanged with the original ctx. ParseFlags only sees already
 // tokenized args, so slash lexing (Parse) stays isolated from flag parsing.
 func (c Command) ParseFlags(ctx context.Context, args []string) (context.Context, []string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if c.Flags == nil {
 		return ctx, args, nil
 	}
