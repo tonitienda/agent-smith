@@ -49,15 +49,34 @@ func TestCIMatchesParityTable(t *testing.T) {
 func makeTargetsInCIRunSteps(t *testing.T, path string) map[string]struct{} {
 	t.Helper()
 	targets := map[string]struct{}{}
+	const runPrefix = "run:"
+	inBlock := false // inside a multi-line `run: |` / `run: >` block
+	blockIndent := 0 // indentation of the `run:` key that opened the block
 	for _, line := range readLines(t, path) {
 		trimmed := strings.TrimSpace(line)
-		const runPrefix = "run:"
+		if trimmed == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if inBlock {
+			// The block ends when indentation returns to the run key or less.
+			if indent <= blockIndent {
+				inBlock = false
+			} else {
+				addMakeTargets(targets, trimmed)
+				continue
+			}
+		}
 		if !strings.HasPrefix(trimmed, runPrefix) {
 			continue
 		}
 		cmd := strings.TrimSpace(strings.TrimPrefix(trimmed, runPrefix))
-		for _, m := range makeCmd.FindAllStringSubmatch(cmd, -1) {
-			targets[m[1]] = struct{}{}
+		switch cmd {
+		case "|", "|-", "|+", ">", ">-", ">+":
+			inBlock = true
+			blockIndent = indent
+		default:
+			addMakeTargets(targets, cmd)
 		}
 	}
 	if len(targets) == 0 {
@@ -73,6 +92,7 @@ func makeTargetsInParityTable(t *testing.T, path string) map[string]struct{} {
 	lines := readLines(t, path)
 	targets := map[string]struct{}{}
 	inSection := false
+	localCol := -1 // column index of "Local command", discovered from the header
 	for _, line := range lines {
 		if strings.Contains(line, "CI/local parity") {
 			inSection = true
@@ -89,19 +109,21 @@ func makeTargetsInParityTable(t *testing.T, path string) map[string]struct{} {
 			continue
 		}
 		cols := strings.Split(line, "|")
-		// Rows are: | CI job | Step | Local command |, so 5 fields after Split
-		// (leading and trailing empties). The local command is the last content
-		// column. Skip the header (contains "Local command") and the separator.
-		if len(cols) < 4 {
+		if localCol == -1 {
+			// First table row is the header; locate the column by name so
+			// reordering or adding columns can't silently shift the parse.
+			for i, col := range cols {
+				if strings.Contains(col, "Local command") {
+					localCol = i
+					break
+				}
+			}
 			continue
 		}
-		local := cols[len(cols)-2]
-		if strings.Contains(local, "Local command") || strings.Contains(local, "---") {
-			continue
+		if localCol >= len(cols) || strings.Contains(cols[localCol], "---") {
+			continue // ragged row or the header/body separator
 		}
-		for _, m := range makeCmd.FindAllStringSubmatch(local, -1) {
-			targets[m[1]] = struct{}{}
-		}
+		addMakeTargets(targets, cols[localCol])
 	}
 	if !inSection {
 		t.Fatalf("CI/local parity section not found in %s", path)
@@ -110,6 +132,13 @@ func makeTargetsInParityTable(t *testing.T, path string) map[string]struct{} {
 		t.Fatalf("no `make` targets found in the CI/local parity table of %s", path)
 	}
 	return targets
+}
+
+// addMakeTargets records every `make <target>` found in s into the set.
+func addMakeTargets(targets map[string]struct{}, s string) {
+	for _, m := range makeCmd.FindAllStringSubmatch(s, -1) {
+		targets[m[1]] = struct{}{}
+	}
 }
 
 func readLines(t *testing.T, path string) []string {
