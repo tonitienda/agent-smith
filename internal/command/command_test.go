@@ -271,3 +271,33 @@ func TestRegistryConcurrentAccess(t *testing.T) {
 	}
 	<-done
 }
+
+func TestCheckArity(t *testing.T) {
+	cases := []struct {
+		name    string
+		spec    *ArgSpec
+		args    []string
+		wantErr string
+	}{
+		{"nil spec is unchecked", nil, []string{"a", "b", "c"}, ""},
+		{"exactly zero accepts none", &ArgSpec{Min: 0, Max: 0}, nil, ""},
+		{"exactly zero rejects extra", &ArgSpec{Min: 0, Max: 0}, []string{"x"}, "takes no arguments, got 1"},
+		{"optional accepts none", &ArgSpec{Min: 0, Max: 1}, nil, ""},
+		{"optional accepts one", &ArgSpec{Min: 0, Max: 1}, []string{"id"}, ""},
+		{"optional rejects two", &ArgSpec{Min: 0, Max: 1}, []string{"a", "b"}, "takes at most 1 argument, got 2"},
+		{"required rejects none", &ArgSpec{Min: 1, Max: 1}, nil, "needs at least 1 argument, got 0"},
+		{"unbounded max accepts many", &ArgSpec{Min: 1, Max: -1}, []string{"a", "b", "c"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Command{Name: "demo", Run: noop, ArgSpec: tc.spec}
+			err := c.CheckArity(tc.args)
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("CheckArity() = %v, want nil", err)
+			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+				t.Fatalf("CheckArity() = %v, want containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}

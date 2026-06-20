@@ -218,6 +218,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Summary:       "Show token & cost accounting for the session",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Examples:      []string{"smith cost", "smith cost --output json"},
 		Run: func(context.Context, []string) (command.Output, error) {
 			summary := cost.Summarize(ctl.events(), ctl.pricing)
@@ -297,6 +298,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "resume",
 		Summary:       "List recent sessions, or load one by ID",
 		Args:          "[id]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
 		Mode:          command.Inline,
 		Scriptability: command.Both,
 		Examples:      []string{"smith session list", "smith session resume <id>"},

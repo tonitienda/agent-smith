@@ -42,7 +42,18 @@ The enforced contracts (guard test) are the corners most prone to drift:
 - **A new command** (slash or subcommand): the command's semantics live in
   `internal/command` / `internal/cli`; wiring it into a process belongs in the
   composition root (`cmd/smith`, `internal/smithapp`). Faces only render and
-  dispatch.
+  dispatch. Declare the command once as a `command.Command` descriptor in the
+  shared registry — name, summary, examples, scriptability, and its argument
+  contract — so the slash command and its `smith <verb>` subcommand can't drift
+  (AS-066, AS-090). State arity on the descriptor's `ArgSpec` (`Min`/`Max`, a
+  negative `Max` meaning unbounded; a nil `ArgSpec` leaves arity unchecked) and
+  let `CheckArity` reject out-of-range argument counts: both faces call it before
+  the handler runs, so a usage error reads the same whichever face surfaced it.
+  Keep face-specific lexing where it belongs — the TUI lexes a slash line
+  (`command.Parse`), the CLI permutes flags ahead of positionals (`flag.FlagSet`)
+  — then hand the resulting positionals to the one descriptor. (Threading parsed
+  *flags*, not just positional arity, through the shared handler is tracked as
+  follow-on work, AS-104.)
 - **A new face** (alternate UI): a new `internal/<face>` package that depends on
   the loop and core packages. It must not import another face or `cmd/*`, and the
   loop must not learn about it.

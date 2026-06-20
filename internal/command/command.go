@@ -158,6 +158,51 @@ type SelectPreview struct {
 // tokens (quotes already stripped), never including the command name.
 type Handler func(ctx context.Context, args []string) (Output, error)
 
+// ArgSpec is a command's declarative positional-argument arity contract (AS-090).
+// Faces parse their own surface — the TUI lexes a slash line (Parse), the CLI
+// permutes flags ahead of positionals — then hand the resulting positional args
+// to CheckArity, so both reject the same out-of-range argument counts before the
+// shared Handler runs. Min is the smallest valid count; Max the largest, with a
+// negative Max meaning unbounded.
+type ArgSpec struct {
+	Min int
+	Max int
+}
+
+// CheckArity validates args against the command's ArgSpec. A nil ArgSpec accepts
+// any count (arity is unchecked). The error is face-neutral — just the arity
+// reason — so each face prefixes it in its own idiom (the TUI with "/<name>:",
+// the CLI through its usage path); the helper stays free of any face's syntax.
+func (c Command) CheckArity(args []string) error {
+	s := c.ArgSpec
+	if s == nil {
+		return nil
+	}
+	if len(args) < s.Min {
+		return fmt.Errorf("needs %s, got %d", atLeast(s.Min), len(args))
+	}
+	if s.Max >= 0 && len(args) > s.Max {
+		return fmt.Errorf("takes %s, got %d", atMost(s.Max), len(args))
+	}
+	return nil
+}
+
+// atLeast and atMost render an arity bound for CheckArity's diagnostics.
+func atLeast(n int) string { return fmt.Sprintf("at least %s", plural(n, "argument")) }
+func atMost(n int) string {
+	if n == 0 {
+		return "no arguments"
+	}
+	return fmt.Sprintf("at most %s", plural(n, "argument"))
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		return "1 " + noun
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
 // Command is one registered slash command.
 type Command struct {
 	// Name is the invocation token without the leading slash (e.g. "clean").
@@ -165,8 +210,14 @@ type Command struct {
 	// Summary is the one-line description shown in the palette and `/help`.
 	Summary string
 	// Args is a human-readable argument spec for help, e.g. `"<topic>"` or
-	// `[name]`. It is documentation only; parsing does not enforce it.
+	// `[name]`. It is documentation only; ArgSpec enforces arity.
 	Args string
+	// ArgSpec, when non-nil, is the positional-argument arity contract every
+	// face checks before Run (AS-090): a slash command and its subcommand can't
+	// disagree about how many arguments are valid, because both read it from this
+	// one descriptor. A nil ArgSpec leaves arity unchecked (the backward-compatible
+	// default, D2), so a command opts into validation by setting it.
+	ArgSpec *ArgSpec
 	// Mode is how the output renders (Inline or FullScreen).
 	Mode Mode
 	// Scriptability declares which faces the command serves (UX.md §17.5). The
