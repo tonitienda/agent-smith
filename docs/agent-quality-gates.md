@@ -47,10 +47,36 @@ Each CI job maps to a local command (`scripts/harness/ci-local.sh` runs them in 
 
 When a harness command fails, report it in the format the rest of the repository's testing summaries use: the command run, its exit status, a concise failure summary, and the next suggested command. If an environment cannot execute a command, report it as an environment warning with the command output — do not silently skip it. This keeps agent final responses compatible with the testing-summary convention humans and CI already read.
 
-## Agent integration
+## Hook integration
 
-- **Claude**: configure a stop/pre-submit hook, or the nearest available project hook, to run `./scripts/agent-quality-gate.sh` before final response or commit.
-- **Codex**: use the repository instruction files and the final pre-commit step to run `./scripts/agent-quality-gate.sh`; this is the Codex equivalent of a project hook in this repo.
-- **GrokBuild**: configure the project check/hook command to run `./scripts/agent-quality-gate.sh` before submitting changes.
+Every hook surface delegates to the same `scripts/harness/*.sh` commands instead of embedding its own check list, so Claude, Codex, local Git, and future Smith hooks stay in sync with CI. Hooks are non-magical: the harness scripts print each command before running it, preserve the underlying exit code, and never hide failures from the transcript. Each surface documents a bypass for emergency local workflows.
+
+### Local Git hooks
+
+Install repo-owned Git hooks for this clone (idempotent; re-run any time):
+
+```sh
+scripts/harness/install-git-hooks.sh                 # pre-commit -> quick gate
+scripts/harness/install-git-hooks.sh --with-pre-push # also full gate on push
+scripts/harness/install-git-hooks.sh --uninstall     # restore default hooks
+```
+
+The installer points `core.hooksPath` at the tracked [`.githooks/`](../.githooks) directory. `pre-commit` runs [`scripts/harness/quick.sh`](../scripts/harness/quick.sh); `pre-push` is opt-in (gated on `git config harness.prePush`) and runs [`scripts/harness/full.sh`](../scripts/harness/full.sh). Bypass a single commit or push with `--no-verify`.
+
+### Claude hooks
+
+Claude runs project hooks directly. Merge the sample in [`docs/examples/claude-harness-hooks.json`](examples/claude-harness-hooks.json) into your `.claude/settings.json`: a `PostToolUse` hook runs `scripts/harness/quick.sh` after edits for fast feedback, and a `Stop` hook runs `scripts/harness/full.sh` before Claude ends a turn so nothing is handed off un-gated.
+
+### Codex workflow
+
+Codex does not use Claude-style hooks; its equivalent is the repository instruction files plus, optionally, the local Git hooks above:
+
+1. Follow the repo instructions to run the smallest matching harness entry point while working (`quick`/`arch`).
+2. Run the local Git hooks by installing them with `scripts/harness/install-git-hooks.sh`, so `git commit` runs the quick gate automatically.
+3. Run the **mandatory final full gate** — `scripts/harness/full.sh` (or `./scripts/agent-quality-gate.sh`) — before the final commit/handoff, every time. GrokBuild and other agents do the same from their nearest check/hook feature.
+
+### Future Smith lifecycle hooks
+
+When Smith grows its own lifecycle hooks (e.g. `pre_tool_use`, `user_prompt_submit`), they must call the same `scripts/harness/*.sh` scripts rather than re-implementing the command list. The harness scripts are the single source of truth; Smith hooks only decide *when* to invoke them.
 
 If an environment cannot execute one of the commands, report it as an environment warning and include the command output. Do not silently skip the gate.
