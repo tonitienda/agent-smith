@@ -1,7 +1,7 @@
 ---
 id: AS-030
 title: Cost/speed benchmark suite (the D5 internal guardrail)
-status: ready-to-implement
+status: done
 github_issue: 30
 depends_on: [AS-018, AS-020]
 area: quality
@@ -31,11 +31,17 @@ D5 makes "cheaper/faster than a *naive* harness on the same model" an **internal
 
 ## Acceptance criteria
 
-- [ ] One command runs the suite against a chosen provider/model and emits JSON plus Markdown reports.
-- [ ] Reports include all §6 primary + secondary metrics that exist at V1.
-- [ ] Baseline harness is versioned and frozen alongside the suite.
-- [ ] A deliberate context-bloat regression is detectable in the report.
-- [ ] Default tests for the benchmark framework are deterministic/offline.
+- [x] One command runs the suite against a chosen provider/model and emits JSON plus Markdown reports. (`go run ./cmd/bench [-provider <name> -model <id>] -out <dir>`; `scripts/harness/benchmark.sh` for the offline run.)
+- [x] Reports include all §6 primary + secondary metrics that exist at V1. (Per task: success, cost, tokens, time-to-first-token, median turn latency, end-of-session live-context %.)
+- [x] Baseline harness is versioned and frozen alongside the suite. (`benchmark.NaiveHarness` — the same loop/provider/tools with no Smith context management, driven through the public `loop.WithProjector` seam.)
+- [x] A deliberate context-bloat regression is detectable in the report. (`benchmark.Compare` flags cost/context growth past `RegressionThreshold`; the `context-bloat` fixture shows the naive baseline resending excluded context — `TestNaiveCostsMoreOnBloat`, `TestCompareDetectsContextBloatRegression`.)
+- [x] Default tests for the benchmark framework are deterministic/offline. (A scripted provider drives the suite with no network; cost is a pure function of the fixtures.)
+
+## Implementation notes
+
+- `internal/benchmark` — `Runner` drives fixture `Task`s through `Harness`es (`SmithHarness`, frozen `NaiveHarness`) and prices the result with the embedded `cost.Table`. `Suite()` is the frozen offline fixture set (file-diff-judged tasks plus the `context-bloat` fixture). `Report` renders JSON + Markdown; `Compare` flags directional regressions.
+- `cmd/bench` is the thin command; `scripts/harness/benchmark.sh` is the on-demand wrapper (documented as **not** a CI gate in [agent-quality-gates.md](../../agent-quality-gates.md)).
+- Loop seam: added `loop.WithProjector` (additive option) so the naive baseline runs the *same* loop with a different context policy instead of forking the orchestrator.
 
 ## Dependencies
 

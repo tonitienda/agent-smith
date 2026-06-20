@@ -1,6 +1,7 @@
 # Binaries
 /smith
 /ticket-sync
+/bench
 *.test
 
 # OS

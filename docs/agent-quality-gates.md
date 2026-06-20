@@ -30,6 +30,10 @@ The harness defines four named entry points, each a thin script under `scripts/h
 
 `full` is a superset of `quick` and `arch`; running `full` satisfies them. Use `quick`/`arch` only to shorten the inner loop, never as a substitute for `full` before handoff.
 
+#### On-demand: benchmark (not a gate)
+
+`scripts/harness/benchmark.sh` runs the D5 cost/speed guardrail suite (AS-030) and writes `report.json` + `report.md` under `.cache/bench/`. It is deliberately **not** one of the four gates and **not** a CI check: by default it runs the offline scripted fixture suite (deterministic, no network), comparing the Smith context-management path against a frozen naive baseline harness. Its deterministic framework tests run inside `make test` like everything else; the report itself is for on-demand inspection before a release or a context/routing change. For a real-provider run, invoke `go run ./cmd/bench -provider <name> -model <id>`; for regression flagging against a saved report, `go run ./cmd/bench -compare report.json`. Stochastic real-run results are reported, never failed on.
+
 ### CI/local parity
 
 Each CI job maps to a local command (`scripts/harness/ci-local.sh` runs them in this order). If CI gains or changes a check, update this table and the harness scripts in the same change.

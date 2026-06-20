@@ -106,6 +106,14 @@ type Engine struct {
 	cache       provider.CacheHints
 	projectOpts projection.Options
 
+	// project assembles the model-facing context for a turn from the current log.
+	// It defaults to Smith's projection (exclusions honored, reasoning-replay
+	// filtered for projectOpts.TargetModel); WithProjector overrides it so a
+	// caller can drive the same loop with a different context policy — e.g. the
+	// D5 benchmark's naive baseline harness (AS-030), which sends the raw window
+	// with no context management for an apples-to-apples comparison.
+	project Projector
+
 	maxIterations int
 	maxAttempts   int
 	backoffBase   time.Duration
@@ -130,6 +138,25 @@ type Engine struct {
 
 // Option configures an Engine.
 type Option func(*Engine)
+
+// Projector assembles the model-facing context for the next turn from the
+// current log events. It returns the live blocks the provider request carries,
+// in order. The default (Smith's projection) honors exclusion/derived events
+// and reasoning-replay scope; a custom projector lets the same loop run a
+// different context policy (AS-030's naive baseline).
+type Projector func(events []schema.Block) []schema.Block
+
+// WithProjector overrides how the loop assembles each turn's context. A nil
+// projector is ignored (the default projection stands). Used by the benchmark
+// suite (AS-030) to drive a naive, no-context-management baseline through the
+// same loop as the Smith path.
+func WithProjector(p Projector) Option {
+	return func(e *Engine) {
+		if p != nil {
+			e.project = p
+		}
+	}
+}
 
 // WithObserver sets the sink for face-agnostic UIEvents. A nil observer is
 // ignored (the default no-op stands).
@@ -262,6 +289,15 @@ func New(p provider.Provider, log EventLog, rt ToolExecutor, reg ToolDefs, model
 	for _, opt := range opts {
 		opt(e)
 	}
+	if e.project == nil {
+		// Default: Smith's projection over the log (exclusions honored, reasoning
+		// replay filtered for the target model). Resolved after options so a custom
+		// projectOpts.TargetModel is respected.
+		opts := e.projectOpts
+		e.project = func(events []schema.Block) []schema.Block {
+			return projection.Project(events, opts).Live()
+		}
+	}
 	return e, nil
 }
 
@@ -321,11 +357,12 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			res.StopReason = StopMaxIterations
 			return res, nil
 		}
-		// Context is projected once per iteration and reused for both the pre-turn
+		// Context is assembled once per iteration and reused for both the pre-turn
 		// budget reservation (AS-086, which prices the window about to be sent) and
 		// the request itself, so the estimate is measured against exactly what the
-		// model receives.
-		proj := projection.Project(e.log.Events(), e.projectOpts)
+		// model receives. The projector is Smith's projection by default and the
+		// naive baseline under the benchmark (AS-030).
+		live := e.project(e.log.Events())
 
 		// Budget enforcement (AS-041) runs at the turn boundary: the prior turn's
 		// usage is already recorded on the log, and any in-flight tool call has
@@ -349,7 +386,7 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 					}
 				}
 				if e.reserve != nil {
-					if worst, ok := e.reserve(proj.Live()); ok {
+					if worst, ok := e.reserve(live); ok {
 						// Halt before issuing a turn whose worst-case cost would carry the
 						// total to or past the ceiling, so spend cannot overshoot.
 						if guard.Check(spent+worst) == budget.Halt {
@@ -373,7 +410,7 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			}
 		}
 
-		req := e.requestFrom(proj)
+		req := e.requestFrom(live)
 		turn, err := e.streamTurn(ctx, iter, req)
 		res.Iterations = iter + 1
 		res.StopReason = turn.stopReason
@@ -400,16 +437,16 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 	}
 }
 
-// requestFrom builds the provider request for the next turn from an already-made
-// projection of the log: its live blocks as model-facing context, the registered
-// tools, and the engine's per-turn sampling and cache settings. drive projects
-// once per iteration (so the budget reservation and the request see the same
-// window) and hands the result here; context is always re-projected per turn —
+// requestFrom builds the provider request for the next turn from the already-
+// assembled live context: the model-facing blocks, the registered tools, and the
+// engine's per-turn sampling and cache settings. drive assembles context once per
+// iteration (so the budget reservation and the request see the same window) and
+// hands the result here; context is always re-assembled per turn from the log —
 // never cached state (PRD D3).
-func (e *Engine) requestFrom(proj *projection.Projection) provider.Request {
+func (e *Engine) requestFrom(live []schema.Block) provider.Request {
 	return provider.Request{
 		Model:   e.model,
-		Context: proj.Live(),
+		Context: live,
 		Tools:   e.registry.ProviderDefs(),
 		Params:  e.params,
 		Cache:   e.cache,

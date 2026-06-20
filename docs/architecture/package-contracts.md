@@ -66,6 +66,14 @@ The enforced contracts (guard test) are the corners most prone to drift:
   tools in; a tool never reaches back into them.
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
+- **A new orchestration/dev tool** (e.g. the benchmark suite, AS-030): a
+  consumer package like `internal/benchmark` may depend on the loop, providers,
+  cost, projection, and tools — it sits at the same layer as a face/composition
+  root, so nothing in the inward core may import it. It drives the real loop
+  through the public `loop.WithProjector` seam (the naive baseline swaps the
+  context policy without forking the loop). Its CLI entry is a thin `cmd/bench`
+  composition root. It is not a quality gate (see
+  [agent-quality-gates.md](../agent-quality-gates.md)).
 - **Shared stream I/O mechanics** (SSE framing, bounded best-effort reads, or
   drain-then-close helpers): the generic primitive goes in `internal/streamio`
   (stdlib-only leaf). Provider-, MCP-, or feature-specific parsing and
