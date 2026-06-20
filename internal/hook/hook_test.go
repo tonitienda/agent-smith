@@ -3,9 +3,13 @@ package hook
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tonitienda/agent-smith/internal/config"
 )
 
 // run fires a single-hook Set built from spec against payload and returns the
@@ -203,22 +207,30 @@ func TestCompileWarnings(t *testing.T) {
 	}
 }
 
-// fakeDecoder stands in for *config.Config so Load can be tested without the
-// config package.
-type fakeDecoder struct {
-	raw string
-	ok  bool
-}
-
-func (f fakeDecoder) Decode(_ string, v any) (bool, error) {
-	if !f.ok {
-		return false, nil
+// loadConfig builds a real *config.Config from a JSON document written to a temp
+// file — the production read path (a layered config over a project file) — so
+// Load is exercised against the genuine Decode collaborator rather than a
+// hand-written double. body is the full config object (e.g. `{"hooks":[...]}`);
+// an empty body yields a config with no `hooks` key.
+func loadConfig(t *testing.T, body string) *config.Config {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if body == "" {
+		body = "{}"
 	}
-	return true, json.Unmarshal([]byte(f.raw), v)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	layer, err := config.FileLayer("project", path)
+	if err != nil {
+		t.Fatalf("FileLayer: %v", err)
+	}
+	return config.New(layer)
 }
 
 func TestLoadFromConfig(t *testing.T) {
-	set, warns, err := Load(fakeDecoder{ok: true, raw: `[{"event":"session-start","command":"true"}]`})
+	cfg := loadConfig(t, `{"hooks":[{"event":"session-start","command":"true"}]}`)
+	set, warns, err := Load(cfg)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -231,7 +243,7 @@ func TestLoadFromConfig(t *testing.T) {
 }
 
 func TestLoadMissingHooksKey(t *testing.T) {
-	set, warns, err := Load(fakeDecoder{ok: false})
+	set, warns, err := Load(loadConfig(t, ""))
 	if err != nil || len(warns) != 0 {
 		t.Fatalf("missing key should be clean: err=%v warns=%v", err, warns)
 	}

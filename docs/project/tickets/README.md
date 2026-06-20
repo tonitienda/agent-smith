@@ -117,7 +117,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | ready | 044 |
 | [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | done | 065, 066 |
 | [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | done | 066 |
-| [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | ready | — |
+| [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | done | — |
 | [AS-092](AS-092-shared-streamio.md) | Extract shared stream I/O mechanics for providers and MCP | architecture | done | 010, 036, 083 |
 | [AS-093](AS-093-typed-config-views.md) | Add typed consumer config views over layered config | foundation | done | 031, 071 |
 | [AS-094](AS-094-filesystem-stdlib-audit.md) | Standardize filesystem traversal on fs.FS and WalkDir | architecture | done | — |

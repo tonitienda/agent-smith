@@ -173,18 +173,18 @@ func (r *Registry) Configure(cfg map[string]Config) []Warning {
 	return warnings
 }
 
-// configDecoder is the slice of config the loader reads from; config's *Config
-// satisfies it via Decode. Kept as an interface so this package does not import
-// config (config consumers depend on config, not the reverse) — the same pattern
-// as the hook loader.
-type configDecoder interface {
+// configReader is the slice of config the loader reads from; config's *Config
+// satisfies it via Decode. Kept as a tiny consumer-side interface so this package
+// does not import config (config consumers depend on config, not the reverse) —
+// the same AS-093 reader pattern as budget/compact/mcp/permission ConfigFrom.
+type configReader interface {
 	Decode(path string, v any) (bool, error)
 }
 
 // Load reads the `subagents` map out of cfg and applies it as the overlay,
 // returning any warnings. A missing key is not an error: sub-agents then run on
 // their manifest defaults.
-func (r *Registry) Load(cfg configDecoder) ([]Warning, error) {
+func (r *Registry) Load(cfg configReader) ([]Warning, error) {
 	var m map[string]Config
 	ok, err := cfg.Decode("subagents", &m)
 	if err != nil {

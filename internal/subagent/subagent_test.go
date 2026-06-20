@@ -1,8 +1,11 @@
 package subagent
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -259,18 +262,25 @@ func TestRegisterDuplicate(t *testing.T) {
 	}
 }
 
-// fakeDecoder satisfies configDecoder for Load without importing config.
-type fakeDecoder struct {
-	sub map[string]Config
-	ok  bool
-}
-
-func (f fakeDecoder) Decode(path string, v any) (bool, error) {
-	if !f.ok || path != "subagents" {
-		return false, nil
+// loadConfig builds a real *config.Config from a JSON document written to a temp
+// file — the production read path — so Load is exercised against the genuine
+// Decode collaborator rather than a hand-written double. body is the full config
+// object (e.g. `{"subagents":{...}}`); an empty body yields a config with no
+// `subagents` key.
+func loadConfig(t *testing.T, body string) *config.Config {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if body == "" {
+		body = "{}"
 	}
-	*(v.(*map[string]Config)) = f.sub
-	return true, nil
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	layer, err := config.FileLayer("project", path)
+	if err != nil {
+		t.Fatalf("FileLayer: %v", err)
+	}
+	return config.New(layer)
 }
 
 func TestLoadFromConfig(t *testing.T) {
@@ -279,7 +289,8 @@ func TestLoadFromConfig(t *testing.T) {
 	if err := reg.Register(func() SubAgent { return a }); err != nil {
 		t.Fatal(err)
 	}
-	warns, err := reg.Load(fakeDecoder{ok: true, sub: map[string]Config{"labeler": {Enabled: boolp(true), BudgetUSD: 0.5}}})
+	cfg := loadConfig(t, `{"subagents":{"labeler":{"enabled":true,"budgetUSD":0.5}}}`)
+	warns, err := reg.Load(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +303,7 @@ func TestLoadFromConfig(t *testing.T) {
 	}
 
 	// A missing key is not an error and changes nothing.
-	if _, err := reg.Load(fakeDecoder{ok: false}); err != nil {
+	if _, err := reg.Load(loadConfig(t, "")); err != nil {
 		t.Fatalf("missing key should be no-op, got %v", err)
 	}
 }
