@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
+
+	"github.com/tonitienda/agent-smith/internal/render"
 )
 
 // Render formats a Composition as the plain-text /context panel: the window
@@ -29,7 +30,7 @@ func Render(c Composition) string {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context composition — %s across %s\n",
-		tokensLabel(c.TotalTokens), countLabel(len(c.Segments), "segment"))
+		render.Tokens(c.TotalTokens), render.Count(len(c.Segments), "segment"))
 	fmt.Fprintf(&b, "Window: %s · total %s\n", windowLabel(c.TotalTokens, c.Window), c.cost(c.TotalCostUSD, c.Priced))
 
 	renderTopConsumers(&b, c)
@@ -47,11 +48,11 @@ func Render(c Composition) string {
 
 func renderTopConsumers(b *strings.Builder, c Composition) {
 	b.WriteString("\nTop consumers\n")
-	tw, row := newTab(b)
+	tw, row := render.Tab(b, 0)
 	for i, s := range c.TopConsumers {
 		share := percent(s.Tokens, c.TotalTokens)
 		row("  %d.\t%s\t%s\t%s\t%s\t%s ago\t\n",
-			i+1, s.Group, tokensLabel(s.Tokens), share, c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
+			i+1, s.Group, render.Tokens(s.Tokens), share, c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
 		// Origin under the Group column: a long path/tool name there won't stretch
 		// the narrow numeric columns (tokens/share/cost) out of alignment.
 		row("  \t%s\t\t\t\t\t\n", s.Origin)
@@ -61,10 +62,10 @@ func renderTopConsumers(b *strings.Builder, c Composition) {
 
 func renderByGroup(b *strings.Builder, c Composition) {
 	b.WriteString("\nBy type\n")
-	tw, row := newTab(b)
+	tw, row := render.Tab(b, 0)
 	for _, g := range c.ByGroup {
 		row("  %s\t%s\t%s\t%s\t\n",
-			g.Group, tokensLabel(g.Tokens), percent(g.Tokens, c.TotalTokens), countLabel(g.Count, "segment"))
+			g.Group, render.Tokens(g.Tokens), percent(g.Tokens, c.TotalTokens), render.Count(g.Count, "segment"))
 	}
 	_ = tw.Flush()
 }
@@ -74,10 +75,10 @@ func renderDuplicates(b *strings.Builder, c Composition) {
 		return
 	}
 	b.WriteString("\nDuplicate reads (same file read more than once)\n")
-	tw, row := newTab(b)
+	tw, row := render.Tab(b, 0)
 	for _, d := range c.Duplicates {
 		row("  %s\t×%d\t%s combined\t%s\t\n",
-			d.Path, d.Count, tokensLabel(d.Tokens), c.cost(d.CostUSD, d.Priced))
+			d.Path, d.Count, render.Tokens(d.Tokens), c.cost(d.CostUSD, d.Priced))
 	}
 	_ = tw.Flush()
 }
@@ -87,9 +88,9 @@ func renderStale(b *strings.Builder, c Composition) {
 		return
 	}
 	b.WriteString("\nStale candidates (large and untouched a while)\n")
-	tw, row := newTab(b)
+	tw, row := render.Tab(b, 0)
 	for _, s := range c.Stale {
-		row("  %s\t%s\t%s ago\t\n", s.Origin, tokensLabel(s.Tokens), ageLabel(s.Age))
+		row("  %s\t%s\t%s ago\t\n", s.Origin, render.Tokens(s.Tokens), ageLabel(s.Age))
 	}
 	_ = tw.Flush()
 }
@@ -103,15 +104,15 @@ func renderExcluded(b *strings.Builder, c Composition) {
 		return
 	}
 	fmt.Fprintf(b, "\nExcluded from the window (%s, not counted in the total)\n",
-		countLabel(len(c.Excluded), "segment"))
-	tw, row := newTab(b)
+		render.Count(len(c.Excluded), "segment"))
+	tw, row := render.Tab(b, 0)
 	row("  Handle\tType\tOrigin\tTokens\tReason\t\n")
 	for _, s := range c.Excluded {
 		reason := s.Reason
 		if reason == "" {
 			reason = "excluded"
 		}
-		row("  %s\t%s\t%s\t%s\t%s\t\n", Handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), reason)
+		row("  %s\t%s\t%s\t%s\t%s\t\n", Handle(s.ID), s.Group, s.Origin, render.Tokens(s.Tokens), reason)
 	}
 	_ = tw.Flush()
 	b.WriteString("  Restore the most recent /clean removal: /clean --undo\n")
@@ -119,12 +120,12 @@ func renderExcluded(b *strings.Builder, c Composition) {
 
 func renderAll(b *strings.Builder, c Composition) {
 	fmt.Fprintf(b, "\nAll segments (%s)\n", sortLabel(c.Sort))
-	tw, row := newTab(b)
+	tw, row := render.Tab(b, 0)
 	// Handle is the block ID prefix /clean (AS-028) selects by.
 	row("  #\tHandle\tType\tOrigin\tTokens\tShare\tCost\tAge\t\n")
 	for i, s := range c.Segments {
 		row("  %d\t%s\t%s\t%s\t%s\t%s\t%s\t%s ago\t\n",
-			i+1, Handle(s.ID), s.Group, s.Origin, tokensLabel(s.Tokens), percent(s.Tokens, c.TotalTokens),
+			i+1, Handle(s.ID), s.Group, s.Origin, render.Tokens(s.Tokens), percent(s.Tokens, c.TotalTokens),
 			c.cost(s.CostUSD, s.Priced), ageLabel(s.Age))
 	}
 	_ = tw.Flush()
@@ -148,41 +149,19 @@ func (c Composition) cost(v float64, priced bool) string {
 	if !priced {
 		return unknownMark
 	}
-	return c.Currency + strconv.FormatFloat(v, 'f', 4, 64)
+	return render.Money(c.Currency, v)
 }
 
 const unknownMark = "—"
-
-// newTab returns a column writer over b and a row helper that discards the
-// write result — writing to a strings.Builder through tabwriter never errors, so
-// checking each Fprintf would only add noise (mirrors internal/cost/render.go).
-func newTab(b *strings.Builder) (*tabwriter.Writer, func(string, ...any)) {
-	tw := tabwriter.NewWriter(b, 0, 0, 2, ' ', 0)
-	return tw, func(format string, a ...any) { _, _ = fmt.Fprintf(tw, format, a...) }
-}
-
-// tokensLabel formats a token count compactly: 1234 -> "1.2k", 12000 -> "12k".
-func tokensLabel(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64)) + "M tok"
-	case n >= 1_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64)) + "k tok"
-	default:
-		return strconv.Itoa(n) + " tok"
-	}
-}
-
-func trimDotZero(s string) string { return strings.TrimSuffix(s, ".0") }
 
 // windowLabel shows the window occupancy as used/window with a percentage when
 // the model's window size is known, else just the used token count.
 func windowLabel(used, window int) string {
 	if window <= 0 {
-		return tokensLabel(used)
+		return render.Tokens(used)
 	}
 	pct := int(float64(used)/float64(window)*100 + 0.5)
-	return fmt.Sprintf("%s / %s (%d%%)", tokensLabel(used), tokensLabel(window), pct)
+	return fmt.Sprintf("%s / %s (%d%%)", render.Tokens(used), render.Tokens(window), pct)
 }
 
 // percent formats part/whole as a rounded percentage, e.g. "42%".
@@ -205,13 +184,6 @@ func ageLabel(d time.Duration) string {
 	default:
 		return strconv.Itoa(int(d.Hours()/24)) + "d"
 	}
-}
-
-func countLabel(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
-	}
-	return strconv.Itoa(n) + " " + noun + "s"
 }
 
 func sortLabel(s Sort) string {

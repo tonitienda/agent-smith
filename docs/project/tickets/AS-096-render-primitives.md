@@ -1,7 +1,7 @@
 ---
 id: AS-096
 title: Add tiny shared render primitives for textual reports
-status: ready-to-implement
+status: done
 github_issue: 166
 depends_on: []
 area: polish

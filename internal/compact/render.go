@@ -2,11 +2,10 @@ package compact
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/tonitienda/agent-smith/internal/composition"
+	"github.com/tonitienda/agent-smith/internal/render"
 )
 
 // RenderPreview formats a plan as the plain-text preview the user confirms
@@ -21,13 +20,12 @@ func RenderPreview(p Plan) string {
 	}
 
 	fmt.Fprintf(&b, "Preview: compacting %s into one summary would reclaim %s%s\n",
-		countLabel(len(p.SourceIDs), "block"), tokensLabel(p.Tokens), costSuffix(p))
+		render.Count(len(p.SourceIDs), "block"), render.Tokens(p.Tokens), costSuffix(p))
 
-	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	row := func(format string, a ...any) { _, _ = fmt.Fprintf(tw, format, a...) }
+	tw, row := render.Tab(&b, 0)
 	row("  Handle\tType\tTokens\t\n")
 	for i, id := range p.SourceIDs {
-		row("  %s\t%s\t%s\t\n", composition.Handle(id), p.Sources[i].Kind, tokensLabel(p.SourceTokens[i]))
+		row("  %s\t%s\t%s\t\n", composition.Handle(id), p.Sources[i].Kind, render.Tokens(p.SourceTokens[i]))
 	}
 	_ = tw.Flush()
 
@@ -41,26 +39,5 @@ func costSuffix(p Plan) string {
 	if !p.Priced {
 		return ""
 	}
-	return " (" + p.Currency + strconv.FormatFloat(p.CostUSD, 'f', 4, 64) + ")"
-}
-
-// tokensLabel mirrors composition's compact token formatting.
-func tokensLabel(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64)) + "M tok"
-	case n >= 1_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64)) + "k tok"
-	default:
-		return strconv.Itoa(n) + " tok"
-	}
-}
-
-func trimDotZero(s string) string { return strings.TrimSuffix(s, ".0") }
-
-func countLabel(n int, noun string) string {
-	if n == 1 {
-		return "1 " + noun
-	}
-	return strconv.Itoa(n) + " " + noun + "s"
+	return " (" + render.Money(p.Currency, p.CostUSD) + ")"
 }

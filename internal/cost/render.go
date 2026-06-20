@@ -2,9 +2,10 @@ package cost
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/tonitienda/agent-smith/internal/render"
 )
 
 // Render formats a Summary as the plain-text report the /cost command shows: a
@@ -23,19 +24,18 @@ func Render(s Summary) string {
 
 	// tw writes through to the strings.Builder, which never errors, so the write
 	// results are discarded (and Flush likewise).
-	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', tabwriter.AlignRight)
-	row := func(format string, a ...any) { _, _ = fmt.Fprintf(tw, format, a...) }
+	tw, row := render.Tab(&b, tabwriter.AlignRight)
 	row("  #\tModel\tInput\tOutput\tCache rd\tCache wr\tCost\t\n")
 	for _, t := range s.Turns {
 		row("  %d\t%s\t%s\t%s\t%s\t%s\t%s\t\n",
 			t.Index, modelLabel(t.Model),
-			commas(t.Tokens.Input), commas(t.Tokens.Output),
-			commas(t.Tokens.CacheRead), commas(t.Tokens.CacheWrite),
+			render.Commas(t.Tokens.Input), render.Commas(t.Tokens.Output),
+			render.Commas(t.Tokens.CacheRead), render.Commas(t.Tokens.CacheWrite),
 			money(t.TotalUSD, t.Priced, sym))
 	}
 	row("  Σ\t\t%s\t%s\t%s\t%s\t%s\t\n",
-		commas(s.Total.Input), commas(s.Total.Output),
-		commas(s.Total.CacheRead), commas(s.Total.CacheWrite),
+		render.Commas(s.Total.Input), render.Commas(s.Total.Output),
+		render.Commas(s.Total.CacheRead), render.Commas(s.Total.CacheWrite),
 		money(s.TotalUSD, true, sym))
 	_ = tw.Flush()
 
@@ -47,7 +47,7 @@ func Render(s Summary) string {
 		savings += " (lower bound — unpriced turns excluded)"
 	}
 	fmt.Fprintf(&b, "\nCache savings: %s tokens read from cache · %s\n",
-		commas(s.CacheReadTokens), savings)
+		render.Commas(s.CacheReadTokens), savings)
 
 	if !s.AllPriced {
 		fmt.Fprintf(&b, "\nNote: some turns ran on a model with no pricing entry (shown as %s);\n"+
@@ -88,25 +88,5 @@ func money(v float64, priced bool, sym string) string {
 	if !priced {
 		return unknownMark
 	}
-	return sym + strconv.FormatFloat(v, 'f', 4, 64)
-}
-
-// commas formats n with thousands separators, e.g. 12000 -> "12,000".
-func commas(n int) string {
-	s := strconv.Itoa(n)
-	neg := strings.HasPrefix(s, "-")
-	if neg {
-		s = s[1:]
-	}
-	var out strings.Builder
-	for i, c := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			out.WriteByte(',')
-		}
-		out.WriteRune(c)
-	}
-	if neg {
-		return "-" + out.String()
-	}
-	return out.String()
+	return render.Money(sym, v)
 }

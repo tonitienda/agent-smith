@@ -30,6 +30,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/projection"
+	"github.com/tonitienda/agent-smith/internal/render"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -338,7 +339,7 @@ func RenderPreview(p Plan) string {
 	fmt.Fprintf(&b, "Rewind to %s\n\n", p.Target.describe())
 	fmt.Fprintf(&b, "  %s · ~%d tokens", segmentsLabel(p.Blocks), p.Tokens)
 	if p.Priced {
-		fmt.Fprintf(&b, " (%s%s)", p.Currency, strconv.FormatFloat(p.CostUSD, 'f', 4, 64))
+		fmt.Fprintf(&b, " (%s)", render.Money(p.Currency, p.CostUSD))
 	}
 	b.WriteString(" leave the window.\n")
 	if p.Returns > 0 {
