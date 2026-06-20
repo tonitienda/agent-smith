@@ -2,7 +2,7 @@
 id: AS-102
 title: Repository skills for quality gates and CI triage
 status: ready-to-implement
-github_issue: null
+github_issue: 185
 depends_on: [AS-099, AS-100]
 area: capability
 priority: P2

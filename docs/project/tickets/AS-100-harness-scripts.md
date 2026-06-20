@@ -2,7 +2,7 @@
 id: AS-100
 title: Add quick, full, architecture, and CI-local harness scripts
 status: ready-to-implement
-github_issue: null
+github_issue: 183
 depends_on: [AS-099]
 area: quality
 priority: P1

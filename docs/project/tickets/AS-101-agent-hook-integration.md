@@ -2,7 +2,7 @@
 id: AS-101
 title: Agent and local hook integration for the harness
 status: ready-to-implement
-github_issue: null
+github_issue: 184
 depends_on: [AS-100]
 area: quality
 priority: P1

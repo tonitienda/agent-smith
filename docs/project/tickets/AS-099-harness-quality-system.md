@@ -2,7 +2,7 @@
 id: AS-099
 title: Harness quality system design and command contract
 status: ready-to-implement
-github_issue: null
+github_issue: 182
 depends_on: [AS-095, AS-098]
 area: quality
 priority: P1
