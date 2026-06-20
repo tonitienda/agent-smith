@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/budget"
-	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -68,14 +67,38 @@ const (
 	DefaultBackoffMax = 30 * time.Second
 )
 
+// EventLog is the append-and-read seam the loop needs from the session's event
+// log: it appends each new block as a turn streams and reads the live log back to
+// project model-facing context. Satisfied by *eventlog.Log; declared here, at the
+// consumer, so the loop depends on the two methods it uses rather than the whole
+// log type (AS-091).
+type EventLog interface {
+	Append(b schema.Block) (schema.Block, error)
+	Events() []schema.Block
+}
+
+// ToolExecutor runs a batch of the model's client tool calls. Satisfied by
+// *tool.Runtime; the loop only ever dispatches a batch, so it depends on that one
+// method rather than the whole runtime (AS-091).
+type ToolExecutor interface {
+	ExecuteBatch(ctx context.Context, calls []schema.Block, hooks tool.BatchHooks) ([]schema.Block, error)
+}
+
+// ToolDefs supplies the registered tools' provider-facing definitions for each
+// request. Satisfied by *tool.Registry; the loop only reads the definitions, so
+// it depends on that one method rather than the whole registry (AS-091).
+type ToolDefs interface {
+	ProviderDefs() []provider.ToolDef
+}
+
 // Engine drives turns for one session against one provider. It is constructed
 // once and reused across turns; it holds no mutable state of its own, so the
 // log and the projection are the session's single source of truth.
 type Engine struct {
 	provider provider.Provider
-	log      *eventlog.Log
-	runtime  *tool.Runtime
-	registry *tool.Registry
+	log      EventLog
+	runtime  ToolExecutor
+	registry ToolDefs
 	model    string
 
 	observer    Observer
@@ -210,7 +233,7 @@ func WithCacheHints(c provider.CacheHints) Option {
 // issuing every turn against model. It returns an error if any required
 // dependency is missing, so misconfiguration fails at construction rather than
 // mid-turn.
-func New(p provider.Provider, log *eventlog.Log, rt *tool.Runtime, reg *tool.Registry, model string, opts ...Option) (*Engine, error) {
+func New(p provider.Provider, log EventLog, rt ToolExecutor, reg ToolDefs, model string, opts ...Option) (*Engine, error) {
 	switch {
 	case p == nil:
 		return nil, errors.New("loop: provider is required")

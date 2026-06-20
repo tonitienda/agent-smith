@@ -74,6 +74,37 @@ The enforced contracts (guard test) are the corners most prone to drift:
   textual reports): the generic primitive goes in `internal/render` (stdlib-only
   leaf); feature-specific `Render` logic stays in each feature package and calls
   the primitive.
+## Interface convention (AS-091)
+
+Go interfaces here follow **accept interfaces, return concrete structs**:
+constructors return concrete types (`*loop.Engine`, `*tool.Runtime`,
+`*eventlog.Log`), and a package that *consumes* a capability declares the small
+interface it needs **at the consumer**, not at the producer. Classify every
+interface as one of three kinds:
+
+- **Product boundary** — a deliberate, central seam that is part of the product's
+  shape and has (or will have) several implementations. Keep these where they
+  are: `provider.Provider`, `provider.Stream`, `tool.Tool`, `permission.Asker`,
+  `loop.Observer`, `subagent.SubAgent`, `subagent.Store`. They are justified by
+  vendor normalization, pluggable tools/faces/analyzers, or documented future
+  backends — not by a single caller's convenience.
+- **Consumer seam** — a tiny interface defined next to the code that uses it,
+  naming just the method(s) that code needs, satisfied by a concrete type from
+  another package. Prefer this over importing a whole subsystem. Examples: the
+  `configReader`/`configDecoder` views over `*config.Config` (see below), and the
+  loop's `EventLog` (`Append`/`Events`), `ToolExecutor` (`ExecuteBatch`), and
+  `ToolDefs` (`ProviderDefs`) — each names the one or two methods the loop uses
+  instead of taking the whole `*eventlog.Log`, `*tool.Runtime`, or
+  `*tool.Registry`.
+- **Unnecessary abstraction** — a single-implementation interface that exists
+  only as indirection. Replace it with the concrete struct or a plain function.
+
+The test pay-off is the point: a consumer seam is a one- or two-method fake, so
+tests fake only what they exercise. This does not override the Classical testing
+strategy — prefer the real collaborator when it is cheap and deterministic
+(the loop's tests still drive a real `*eventlog.Log` and `*tool.Registry`); reach
+for a tiny fake only where the real one is awkward at the boundary.
+
 - **Reading config for a feature** (AS-093): `internal/config` stays the generic
   layered substrate (dotted-path getters + `Decode`). A feature that consumes
   config owns a small typed view — a `ConfigFrom` constructor that takes a tiny
