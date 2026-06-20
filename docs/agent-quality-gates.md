@@ -43,6 +43,8 @@ Each CI job maps to a local command (`scripts/harness/ci-local.sh` runs them in 
 
 `make fmt` has no separate CI job; formatting drift surfaces as a `make lint`/diff failure, so the full gate runs it first. The architecture contracts (`internal/archtest`) and schema guard (`cmd/schema-guard`) run inside `make test`, so CI's `test` job covers them; the `arch` entry point is a faster subset for after package moves.
 
+This table is guarded: `internal/harnessparity` is a test-only package whose `TestCIMatchesParityTable` compares the set of `make` targets run by `.github/workflows/ci.yml` against the set named in the **Local command** column above and fails on any drift. It runs inside `make test`, so CI's `test` job (and any local `make test`) enforces parity with no extra workflow job or network access. When you add, rename, or remove a CI `make` quality step, update the parity table in the same change and the guard will go green again.
+
 ### Failure reporting
 
 When a harness command fails, report it in the format the rest of the repository's testing summaries use: the command run, its exit status, a concise failure summary, and the next suggested command. If an environment cannot execute a command, report it as an environment warning with the command output — do not silently skip it. This keeps agent final responses compatible with the testing-summary convention humans and CI already read.
