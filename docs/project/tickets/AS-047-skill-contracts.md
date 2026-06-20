@@ -1,7 +1,7 @@
 ---
 id: AS-047
 title: Skill expectation contracts (frontmatter schema, parsing, span boundaries)
-status: ready-to-implement
+status: done
 github_issue: 47
 depends_on: [AS-034]
 area: living-skills
@@ -24,10 +24,10 @@ The declarative half of living skills: parse and track the Appendix C.1 contract
 
 ## Acceptance criteria
 
-- [ ] A C.1-conformant skill parses fully; a skill with no contract fields loads without complaint.
-- [ ] Declared completion signal fires teardown at the right moment (test: `make ship` exit 0 example).
-- [ ] Idle-turns fallback fires after N turns without skill tool use.
-- [ ] Span actuals (tool calls / turns / $) match a hand-computed trace in tests.
+- [x] A C.1-conformant skill parses fully; a skill with no contract fields loads without complaint. (`skillcontract.ParseContract`, `skill.Skill.Frontmatter`)
+- [x] Declared completion signal fires teardown at the right moment (test: `make ship` exit 0 example). (`Tracker`, `TeardownSignal`)
+- [x] Idle-turns fallback fires after N turns without skill tool use. (`TeardownIdle`)
+- [x] Span actuals (tool calls / turns / $) match a hand-computed trace in tests. (`Tracker.Closed`, overlap attribution rule documented on `Tracker`)
 
 ## Dependencies
 

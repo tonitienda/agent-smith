@@ -82,6 +82,13 @@ The enforced contracts (guard test) are the corners most prone to drift:
   textual reports): the generic primitive goes in `internal/render` (stdlib-only
   leaf); feature-specific `Render` logic stays in each feature package and calls
   the primitive.
+- **Living-skills analysis** (the declarative half of skills): contract parsing
+  and span tracking live in `internal/skillcontract` (AS-047), a stdlib +
+  `schema` + `eventlog` leaf consumed by the rediscovered-fact detector (AS-048)
+  and the skill-expectation analyzer (AS-049). It reads skill frontmatter
+  (`skill.Skill.Frontmatter`) and the log blocks; it never imports `skill`
+  (AS-034), the loop, or a face — the dependency points from the analyzers inward
+  to it, the same way `subagent` sits below the loop.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
