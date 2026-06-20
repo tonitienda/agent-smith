@@ -148,6 +148,48 @@ func TestSubAgentWiringNilIsNoOp(t *testing.T) {
 	}
 }
 
+// TestSubAgentWiringIgnoresResumedHistory guards the resume case: when the log
+// already carries history, the wiring observes and scopes only the blocks this
+// Run appends — historical blocks are never re-observed or pulled into a scope.
+func TestSubAgentWiringIgnoresResumedHistory(t *testing.T) {
+	p := &provider.Mock{ScriptFn: func(_ context.Context, _ provider.Request) ([]provider.Event, error) {
+		return provider.TextTurn("done", ""), nil
+	}}
+
+	rec := &spyRec{}
+	reg := subagent.NewRegistry()
+	if err := reg.Register(spyFactory(subagent.Manifest{
+		Name: "spy", Kind: subagent.KindAnalyzer, EnabledByDefault: true,
+		Schedule: subagent.AtSessionEnd, Scope: subagent.SessionScope,
+	}, rec)); err != nil {
+		t.Fatalf("register spy: %v", err)
+	}
+	runner := subagent.NewRunner(reg, nil, "sess-1")
+
+	h := newHarness(t, p, nil, loop.WithSubAgents(runner))
+	// Seed two historical blocks, as a resumed session would carry.
+	for _, txt := range []string{"old user", "old reply"} {
+		if _, err := h.log.Append(schema.Block{
+			ID: schema.NewID(), Kind: schema.KindText, Role: schema.RoleUser,
+			Text: &schema.TextBody{Text: txt, Subtype: schema.TextSubtypeNormal},
+		}); err != nil {
+			t.Fatalf("seed history: %v", err)
+		}
+	}
+	historyLen := len(h.log.Events())
+
+	if _, err := h.engine.Run(context.Background(), "new message"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	// Only this Run's blocks were observed — never the two seeded history blocks.
+	wantObserved := logKinds(h.log.Events()[historyLen:])
+	assertObserved(t, "resume", rec.observed, wantObserved)
+	if got := rec.sliceLens; len(got) != 1 || got[0] != len(wantObserved) {
+		t.Errorf("session teardown slice lens = %v, want [%d] (this Run only)", got, len(wantObserved))
+	}
+}
+
 func logKinds(blocks []schema.Block) []schema.Kind {
 	out := make([]schema.Kind, len(blocks))
 	for i, b := range blocks {

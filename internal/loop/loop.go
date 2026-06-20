@@ -360,14 +360,20 @@ func (e *Engine) Run(ctx context.Context, userText string) (Result, error) {
 		Role: schema.RoleUser,
 		Text: &schema.TextBody{Text: userText, Subtype: schema.TextSubtypeNormal},
 	}
+	// The log boundary before this Run's first block: the sub-agent wiring observes
+	// and scopes only blocks appended from here on, so a resumed session's
+	// historical blocks are never re-observed or pulled into this Run's scopes.
+	priorN := len(e.log.Events())
 	if _, err := e.log.Append(user); err != nil {
 		return Result{}, fmt.Errorf("loop: append user message: %w", err)
 	}
-	return e.drive(ctx)
+	return e.drive(ctx, priorN)
 }
 
-// drive runs the turn loop over the current log until a stop condition.
-func (e *Engine) drive(ctx context.Context) (Result, error) {
+// drive runs the turn loop over the current log until a stop condition. priorN is
+// the log length before this Run began, so the sub-agent wiring (AS-088) starts
+// observing at this Run's first block rather than re-observing resumed history.
+func (e *Engine) drive(ctx context.Context, priorN int) (Result, error) {
 	res := Result{}
 	warned := false
 	unpricedWarned := false
@@ -387,10 +393,11 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 	// open for the whole Run; each turn is a span scope. Blocks are Observed by
 	// walking the log delta — the log is the session's single record (AS-018), so
 	// this catches every block in order regardless of which layer appended it,
-	// including the tool results the runtime writes. observed is the count already
-	// fanned out; observeNew advances it.
+	// including the tool results the runtime writes. observed starts at priorN —
+	// this Run's first block — so a resumed session's history is never re-observed;
+	// observeNew advances it.
 	sa := e.subagents
-	observed := 0
+	observed := priorN
 	observeNew := func() {
 		if sa == nil {
 			return
@@ -408,7 +415,8 @@ func (e *Engine) drive(ctx context.Context) (Result, error) {
 			// after the loop returns, honoring the framework's single-threaded
 			// sub-agent contract — methods are never called concurrently.
 			observeNew() // catch trailing blocks (reconcile markers, final usage)
-			sa.End(session, e.log.Events())
+			ev := e.log.Events()
+			sa.End(session, append([]schema.Block(nil), ev[priorN:]...))
 		}()
 	}
 
