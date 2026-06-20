@@ -252,6 +252,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "rewind",
 		Summary:       "Rewind the conversation to an earlier turn or mark",
 		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {
@@ -267,6 +268,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "compact",
 		Summary:       "Summarize older context into one reversible block",
 		Args:          "[--apply | --undo | --cancel]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {
@@ -325,6 +327,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "init",
 		Summary:       "Scaffold project config and an AGENT.md memory file",
 		Args:          "[--apply | --cancel]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {
