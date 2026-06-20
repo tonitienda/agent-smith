@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -142,7 +141,7 @@ func TestChatStreamTextTurn(t *testing.T) {
 	}, "\n")
 
 	p := sseServer(t, SurfaceChatCompletions, body, nil)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "gpt-4o"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "gpt-4o"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -180,7 +179,7 @@ func TestChatStreamToolCallTurn(t *testing.T) {
 	}, "\n")
 
 	p := sseServer(t, SurfaceChatCompletions, body, nil)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "gpt-4o"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "gpt-4o"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -219,7 +218,7 @@ func TestChatStreamGrokReasoning(t *testing.T) {
 	}, "\n")
 
 	p := sseServer(t, SurfaceChatCompletions, body, nil)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "grok-4.3"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "grok-4.3"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -250,7 +249,7 @@ func TestChatStreamCompatibleEndpointNoUsage(t *testing.T) {
 	}, "\n")
 
 	p := sseServer(t, SurfaceChatCompletions, body, nil)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "llama"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "llama"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
@@ -275,7 +274,7 @@ func TestChatRequestUsesChatEndpoint(t *testing.T) {
 		``,
 	}, "\n")
 	p := sseServer(t, SurfaceChatCompletions, body, &raw)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "m"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "m"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}

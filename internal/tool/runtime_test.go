@@ -88,7 +88,7 @@ func TestExecuteMergesOutputAttribution(t *testing.T) {
 		},
 	}
 	rt, log := newTestRuntime(t, skillish)
-	if _, err := rt.Execute(context.Background(), callBlock("skill", `{}`)); err != nil {
+	if _, err := rt.Execute(t.Context(), callBlock("skill", `{}`)); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	result := resultFor(t, log)
@@ -104,7 +104,7 @@ func TestExecuteHappyPathLogsPair(t *testing.T) {
 	rt, log := newTestRuntime(t, echoTool("echo", nil))
 
 	call := callBlock("echo", `{"msg":"hello"}`)
-	result, err := rt.Execute(context.Background(), call)
+	result, err := rt.Execute(t.Context(), call)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestExecuteHappyPathLogsPair(t *testing.T) {
 func TestExecuteUnknownToolIsModelReadableError(t *testing.T) {
 	rt, log := newTestRuntime(t) // empty registry
 
-	result, err := rt.Execute(context.Background(), callBlock("ghost", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("ghost", `{}`))
 	if err != nil {
 		t.Fatalf("Execute returned a Go error for an unknown tool: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestExecuteInvalidArgumentsDoesNotCrashOrRun(t *testing.T) {
 	rt, _ := newTestRuntime(t, echoTool("echo", &ran))
 
 	// "msg" is required and must be a string; supply neither.
-	result, err := rt.Execute(context.Background(), callBlock("echo", `{"msg":5}`))
+	result, err := rt.Execute(t.Context(), callBlock("echo", `{"msg":5}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestExecuteInvalidArgumentsDoesNotCrashOrRun(t *testing.T) {
 func TestExecuteNonToolCallBlockIsGoError(t *testing.T) {
 	rt, _ := newTestRuntime(t, echoTool("echo", nil))
 	text := schema.Block{ID: schema.NewID(), Kind: schema.KindText, Role: schema.RoleUser, Text: &schema.TextBody{Text: "hi"}}
-	if _, err := rt.Execute(context.Background(), text); err == nil {
+	if _, err := rt.Execute(t.Context(), text); err == nil {
 		t.Fatalf("Execute(text block): want Go error, got nil")
 	}
 }
@@ -202,7 +202,7 @@ func TestPermissionHookInvokedOnEveryExecution(t *testing.T) {
 	rt := NewRuntime(reg, eventlog.New(), WithPermission(perm))
 
 	// Allowed: gate consulted, tool runs.
-	if _, err := rt.Execute(context.Background(), callBlock("echo", `{"msg":"x"}`)); err != nil {
+	if _, err := rt.Execute(t.Context(), callBlock("echo", `{"msg":"x"}`)); err != nil {
 		t.Fatalf("Execute (allowed): %v", err)
 	}
 	if !ran {
@@ -215,7 +215,7 @@ func TestPermissionHookInvokedOnEveryExecution(t *testing.T) {
 	// Denied: gate consulted, tool does NOT run, error result returned.
 	ran = false
 	deny = true
-	result, err := rt.Execute(context.Background(), callBlock("echo", `{"msg":"y"}`))
+	result, err := rt.Execute(t.Context(), callBlock("echo", `{"msg":"y"}`))
 	if err != nil {
 		t.Fatalf("Execute (denied): %v", err)
 	}
@@ -240,7 +240,7 @@ func TestExecutePermissionNotCheckedForInvalidArgs(t *testing.T) {
 		checked = true
 		return Allowed()
 	}))
-	if _, err := rt.Execute(context.Background(), callBlock("echo", `{}`)); err != nil {
+	if _, err := rt.Execute(t.Context(), callBlock("echo", `{}`)); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if checked {
@@ -257,7 +257,7 @@ func TestExecutePerToolTimeoutIsModelReadable(t *testing.T) {
 		},
 	}
 	rt, _ := newTestRuntime(t, slow)
-	result, err := rt.Execute(context.Background(), callBlock("slow", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("slow", `{}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestExecuteToolDomainErrorRecorded(t *testing.T) {
 		},
 	}
 	rt, _ := newTestRuntime(t, failing)
-	result, err := rt.Execute(context.Background(), callBlock("fail", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("fail", `{}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestExecuteRunErrorRecorded(t *testing.T) {
 		},
 	}
 	rt, _ := newTestRuntime(t, failing)
-	result, err := rt.Execute(context.Background(), callBlock("boom", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("boom", `{}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestExecuteTruncatesOversizedOutput(t *testing.T) {
 		t.Fatalf("Register: %v", err)
 	}
 	rt := NewRuntime(reg, eventlog.New(), WithMaxResultBytes(10))
-	result, err := rt.Execute(context.Background(), callBlock("huge", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("huge", `{}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestExecuteTruncationKeepsValidUTF8(t *testing.T) {
 	}
 	// Budget of 10 bytes falls in the middle of the 4th rune (bytes 9..11).
 	rt := NewRuntime(reg, eventlog.New(), WithMaxResultBytes(10))
-	result, err := rt.Execute(context.Background(), callBlock("uni", `{}`))
+	result, err := rt.Execute(t.Context(), callBlock("uni", `{}`))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -398,7 +398,7 @@ func TestExecuteIdempotentWithPreloggedCall(t *testing.T) {
 	if _, err := log.Append(call); err != nil {
 		t.Fatalf("pre-append call: %v", err)
 	}
-	if _, err := rt.Execute(context.Background(), call); err != nil {
+	if _, err := rt.Execute(t.Context(), call); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	// Exactly one tool_call (not re-appended) and one tool_result.
@@ -430,7 +430,7 @@ func fileReadTool(name, content string) Tool {
 func TestExecuteEmitsFileReadBlock(t *testing.T) {
 	rt, log := newTestRuntime(t, fileReadTool("read", "hello"))
 	call := callBlock("read", `{}`)
-	if _, err := rt.Execute(context.Background(), call); err != nil {
+	if _, err := rt.Execute(t.Context(), call); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
@@ -461,7 +461,7 @@ func TestExecuteEmitsFileReadBlock(t *testing.T) {
 func TestExecuteTruncatesFileReadContent(t *testing.T) {
 	rt, log := newTestRuntime(t, fileReadTool("read", strings.Repeat("x", 1000)))
 	rt.maxBytes = 100
-	if _, err := rt.Execute(context.Background(), callBlock("read", `{}`)); err != nil {
+	if _, err := rt.Execute(t.Context(), callBlock("read", `{}`)); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	for _, b := range log.Events() {

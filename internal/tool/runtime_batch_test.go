@@ -87,7 +87,7 @@ func TestExecuteBatchRunsConcurrently(t *testing.T) {
 	}
 
 	start := time.Now()
-	res, err := rt.ExecuteBatch(context.Background(), calls, BatchHooks{})
+	res, err := rt.ExecuteBatch(t.Context(), calls, BatchHooks{})
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatalf("ExecuteBatch: %v", err)
@@ -131,7 +131,7 @@ func TestExecuteBatchRecordsInCallOrder(t *testing.T) {
 		},
 	}
 
-	res, err := rt.ExecuteBatch(context.Background(), calls, hooks)
+	res, err := rt.ExecuteBatch(t.Context(), calls, hooks)
 	if err != nil {
 		t.Fatalf("ExecuteBatch: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestExecuteBatchFailingToolDoesNotCancelSiblings(t *testing.T) {
 		callID("c", "echo", `{"msg":"C"}`),
 	}
 
-	res, err := rt.ExecuteBatch(context.Background(), calls, BatchHooks{})
+	res, err := rt.ExecuteBatch(t.Context(), calls, BatchHooks{})
 	if err != nil {
 		t.Fatalf("ExecuteBatch returned a Go error for a tool failure: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestExecuteBatchDenialDoesNotCancelSiblings(t *testing.T) {
 		callID("b", "secret", `{"msg":"B"}`),
 		callID("c", "echo", `{"msg":"C"}`),
 	}
-	res, err := rt.ExecuteBatch(context.Background(), calls, BatchHooks{})
+	res, err := rt.ExecuteBatch(t.Context(), calls, BatchHooks{})
 	if err != nil {
 		t.Fatalf("ExecuteBatch: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestExecuteBatchSerializesPermission(t *testing.T) {
 		callID("p2", "echo", `{"msg":"2"}`),
 		callID("p3", "echo", `{"msg":"3"}`),
 	}
-	if _, err := rt.ExecuteBatch(context.Background(), calls, BatchHooks{}); err != nil {
+	if _, err := rt.ExecuteBatch(t.Context(), calls, BatchHooks{}); err != nil {
 		t.Fatalf("ExecuteBatch: %v", err)
 	}
 
@@ -299,7 +299,7 @@ func TestExecuteBatchBoundedParallelism(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		calls = append(calls, callID("g"+strconv.Itoa(i), "gate", `{}`))
 	}
-	if _, err := rt.ExecuteBatch(context.Background(), calls, BatchHooks{}); err != nil {
+	if _, err := rt.ExecuteBatch(t.Context(), calls, BatchHooks{}); err != nil {
 		t.Fatalf("ExecuteBatch: %v", err)
 	}
 

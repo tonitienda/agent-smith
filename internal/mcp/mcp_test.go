@@ -116,7 +116,7 @@ func pipeClient(t *testing.T) *Client {
 	go serveMock(reqR, respW)
 
 	c := &Client{name: "mock", transport: newStdioTransport(reqW, respR, nil), tmo: 2 * time.Second}
-	if err := c.handshake(context.Background()); err != nil {
+	if err := c.handshake(t.Context()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
 	c.healthy = true
@@ -132,7 +132,7 @@ func TestStdioHandshakeAndCall(t *testing.T) {
 		t.Fatalf("tools = %+v, want echo/boom/crash", tools)
 	}
 
-	res, err := c.Call(context.Background(), "echo", json.RawMessage(`{"x":1}`))
+	res, err := c.Call(t.Context(), "echo", json.RawMessage(`{"x":1}`))
 	if err != nil {
 		t.Fatalf("call echo: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestStdioHandshakeAndCall(t *testing.T) {
 		t.Fatalf("echo result = %+v", res)
 	}
 
-	res, err = c.Call(context.Background(), "boom", nil)
+	res, err = c.Call(t.Context(), "boom", nil)
 	if err != nil {
 		t.Fatalf("call boom: %v", err)
 	}
@@ -169,14 +169,14 @@ func TestToolListPaginationAndCapabilities(t *testing.T) {
 
 func TestResources(t *testing.T) {
 	c := pipeClient(t)
-	res, err := c.ListResources(context.Background())
+	res, err := c.ListResources(t.Context())
 	if err != nil {
 		t.Fatalf("list resources: %v", err)
 	}
 	if len(res) != 2 || res[0].URI != "mem://a" || res[1].URI != "mem://b" {
 		t.Fatalf("paginated resources = %+v, want mem://a, mem://b", res)
 	}
-	content, err := c.ReadResource(context.Background(), "mem://a")
+	content, err := c.ReadResource(t.Context(), "mem://a")
 	if err != nil {
 		t.Fatalf("read resource: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestResources(t *testing.T) {
 
 func TestPrompts(t *testing.T) {
 	c := pipeClient(t)
-	prompts, err := c.ListPrompts(context.Background())
+	prompts, err := c.ListPrompts(t.Context())
 	if err != nil {
 		t.Fatalf("list prompts: %v", err)
 	}
@@ -197,7 +197,7 @@ func TestPrompts(t *testing.T) {
 	if len(prompts[0].Arguments) != 1 || prompts[0].Arguments[0].Name != "who" || !prompts[0].Arguments[0].Required {
 		t.Fatalf("prompt arguments = %+v", prompts[0].Arguments)
 	}
-	text, err := c.GetPrompt(context.Background(), "greet", map[string]string{"who": "world"})
+	text, err := c.GetPrompt(t.Context(), "greet", map[string]string{"who": "world"})
 	if err != nil {
 		t.Fatalf("get prompt: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestReconnectAfterCrash(t *testing.T) {
 	if err != nil {
 		t.Skipf("no executable path: %v", err)
 	}
-	c, err := Dial(context.Background(), ServerConfig{
+	c, err := Dial(t.Context(), ServerConfig{
 		Name:    "proc",
 		Command: exe,
 		Env:     map[string]string{"GO_MCP_MOCK": "1"},
@@ -222,7 +222,7 @@ func TestReconnectAfterCrash(t *testing.T) {
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := c.Call(context.Background(), "crash", nil); err == nil {
+	if _, err := c.Call(t.Context(), "crash", nil); err == nil {
 		t.Fatal("crash call should fail")
 	}
 	if c.Healthy() {
@@ -230,7 +230,7 @@ func TestReconnectAfterCrash(t *testing.T) {
 	}
 	// Reconnect re-dials a fresh subprocess; the same tools recover and calls work
 	// again without a session restart.
-	if err := c.Reconnect(context.Background()); err != nil {
+	if err := c.Reconnect(t.Context()); err != nil {
 		t.Fatalf("reconnect: %v", err)
 	}
 	if !c.Healthy() {
@@ -239,7 +239,7 @@ func TestReconnectAfterCrash(t *testing.T) {
 	if got := len(c.Tools()); got != 3 {
 		t.Fatalf("post-reconnect tools = %d, want 3", got)
 	}
-	res, err := c.Call(context.Background(), "echo", json.RawMessage(`{"ok":1}`))
+	res, err := c.Call(t.Context(), "echo", json.RawMessage(`{"ok":1}`))
 	if err != nil {
 		t.Fatalf("post-reconnect echo: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestStdioProcessConnectAndCrash(t *testing.T) {
 	if err != nil {
 		t.Skipf("no executable path: %v", err)
 	}
-	c, err := Dial(context.Background(), ServerConfig{
+	c, err := Dial(t.Context(), ServerConfig{
 		Name:    "proc",
 		Command: exe,
 		Env:     map[string]string{"GO_MCP_MOCK": "1"},
@@ -270,13 +270,13 @@ func TestStdioProcessConnectAndCrash(t *testing.T) {
 
 	// crash kills the server mid-call: the call fails and the circuit breaks, but
 	// the session stays healthy (no panic), and the next call reports unavailable.
-	if _, err := c.Call(context.Background(), "crash", nil); err == nil {
+	if _, err := c.Call(t.Context(), "crash", nil); err == nil {
 		t.Fatal("crash call should fail")
 	}
 	if c.Healthy() {
 		t.Fatal("server should be unhealthy after a crash")
 	}
-	if _, err := c.Call(context.Background(), "echo", nil); err != ErrUnavailable {
+	if _, err := c.Call(t.Context(), "echo", nil); err != ErrUnavailable {
 		t.Fatalf("post-crash call err = %v, want ErrUnavailable", err)
 	}
 }
@@ -304,12 +304,13 @@ func TestStdioCallTimeout(t *testing.T) {
 		}
 	}()
 	c := &Client{name: "slow", transport: newStdioTransport(reqW, respR, nil), tmo: 100 * time.Millisecond}
-	if err := c.handshake(context.Background()); err != nil {
+	t.Cleanup(func() { _ = c.Close() })
+	if err := c.handshake(t.Context()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
 	c.healthy = true
 
-	if _, err := c.Call(context.Background(), "echo", nil); err == nil {
+	if _, err := c.Call(t.Context(), "echo", nil); err == nil {
 		t.Fatal("slow call should time out")
 	}
 	if c.Healthy() {
@@ -341,7 +342,8 @@ func TestCallerCancelKeepsHealthy(t *testing.T) {
 		}
 	}()
 	c := &Client{name: "slow", transport: newStdioTransport(reqW, respR, nil), tmo: 10 * time.Second}
-	if err := c.handshake(context.Background()); err != nil {
+	t.Cleanup(func() { _ = c.Close() })
+	if err := c.handshake(t.Context()); err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
 	c.healthy = true
@@ -407,7 +409,7 @@ func TestHTTPTransport(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c, err := Dial(context.Background(), ServerConfig{Name: "remote", URL: srv.URL})
+	c, err := Dial(t.Context(), ServerConfig{Name: "remote", URL: srv.URL})
 	if err != nil {
 		t.Fatalf("dial http: %v", err)
 	}
@@ -416,7 +418,7 @@ func TestHTTPTransport(t *testing.T) {
 	if tools := c.Tools(); len(tools) != 1 || tools[0].Name != "ping" {
 		t.Fatalf("tools = %+v", c.Tools())
 	}
-	res, err := c.Call(context.Background(), "ping", nil)
+	res, err := c.Call(t.Context(), "ping", nil)
 	if err != nil {
 		t.Fatalf("call ping: %v", err)
 	}

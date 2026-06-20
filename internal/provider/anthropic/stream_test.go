@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"io"
 	"strings"
 	"testing"
@@ -68,7 +67,7 @@ func TestStreamCleanEOFWithoutMessageStop(t *testing.T) {
 		``,
 	}, "\n")
 	p := sseServer(t, body, nil)
-	s, err := p.Stream(context.Background(), provider.Request{Model: "m"})
+	s, err := p.Stream(t.Context(), provider.Request{Model: "m"})
 	if err != nil {
 		t.Fatalf("Stream: %v", err)
 	}
