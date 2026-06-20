@@ -65,7 +65,9 @@ func (s *timingStream) Next() bool {
 
 func (s *timingStream) Close() error {
 	end := time.Now()
-	ttft := end.Sub(s.start)
+	// A stream that produced no event has no first token: report TTFT as 0
+	// rather than the full duration, which would be a false latency reading.
+	var ttft time.Duration
 	if s.seen {
 		ttft = s.first.Sub(s.start)
 	}

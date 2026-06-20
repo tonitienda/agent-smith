@@ -162,6 +162,11 @@ func (r Runner) Run(ctx context.Context) (Report, error) {
 	}
 	for _, h := range r.Harnesses {
 		for _, t := range r.Tasks {
+			// Abort early on cancellation rather than running every remaining pair
+			// against a dead context and filling the report with cancel errors.
+			if err := ctx.Err(); err != nil {
+				return rep, err
+			}
 			m, err := r.runOne(ctx, h, t)
 			res := RunResult{Task: t.ID, Harness: h.Name(), Metrics: m}
 			if err != nil {
