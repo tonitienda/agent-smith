@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/streamio"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -16,7 +17,8 @@ import (
 // enqueues into pending and Next pops one at a time — nothing is buffered to the
 // end of the turn, so deltas surface incrementally.
 type responsesStream struct {
-	r sseReader
+	body io.ReadCloser
+	r    *streamio.SSEReader
 
 	pending []provider.Event
 	cur     provider.Event
@@ -30,7 +32,7 @@ type responsesStream struct {
 }
 
 func newResponsesStream(body io.ReadCloser) *responsesStream {
-	return &responsesStream{r: newSSEReader(body)}
+	return &responsesStream{body: body, r: streamio.NewSSEReader(body)}
 }
 
 func (s *responsesStream) Next() bool {
@@ -41,7 +43,7 @@ func (s *responsesStream) Next() bool {
 		if s.err != nil || s.done {
 			return false
 		}
-		data, err := s.r.readEvent()
+		data, err := s.r.ReadEvent()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.done = true
@@ -69,7 +71,7 @@ func (s *responsesStream) Close() error {
 		return nil
 	}
 	s.closed = true
-	return s.r.body.Close()
+	return s.body.Close()
 }
 
 // responsesFrame is the union of the Responses stream event shapes the adapter

@@ -20,6 +20,7 @@ those lower layers never depend back up.
 |---|---|---|---|
 | **Schema** | `schema` | (stdlib only) | anything in this module |
 | **Render primitives** | `internal/render` | (stdlib only) | anything in this module |
+| **Stream I/O mechanics** | `internal/streamio` | (stdlib only) | anything in this module |
 | **Event log** | `internal/eventlog` | `schema` | projection, provider, loop, faces |
 | **Projection** | `internal/projection` | `schema`, `internal/eventlog` | provider, loop, faces |
 | **Provider contracts** | `internal/provider` | `schema` | concrete providers, loop, faces |
@@ -50,6 +51,11 @@ The enforced contracts (guard test) are the corners most prone to drift:
 - **A new tool**: under `internal/tool` (or `internal/tool/builtin` for the
   shipped set), depending only on `schema` and stdlib. The loop and faces wire
   tools in; a tool never reaches back into them.
+- **Shared stream I/O** (SSE/line framing, bounded reads, drain-close for
+  HTTP/process streams): protocol-agnostic mechanics go in `internal/streamio`
+  (stdlib-only leaf), shared by the provider adapters and the MCP client. Domain
+  parsing — event normalization, JSON-RPC correlation — stays package-local; do
+  not grow `streamio` into a provider/MCP mega-abstraction.
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
 - **A shared format helper** (token/count/dollar/timestamp/table formatting for

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/streamio"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -255,7 +256,8 @@ func buildChatTools(defs []provider.ToolDef) ([]chatTool, error) {
 // ahead of the turn stop, the turn-stop event is deferred until the [DONE]
 // sentinel or a clean EOF.
 type chatStream struct {
-	r sseReader
+	body io.ReadCloser
+	r    *streamio.SSEReader
 
 	pending []provider.Event
 	cur     provider.Event
@@ -279,7 +281,8 @@ type chatStream struct {
 
 func newChatStream(body io.ReadCloser) *chatStream {
 	return &chatStream{
-		r:            newSSEReader(body),
+		body:         body,
+		r:            streamio.NewSSEReader(body),
 		textIdx:      -1,
 		reasoningIdx: -1,
 		toolBlock:    map[int]int{},
@@ -294,7 +297,7 @@ func (s *chatStream) Next() bool {
 		if s.err != nil || s.done {
 			return false
 		}
-		data, err := s.r.readEvent()
+		data, err := s.r.ReadEvent()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// Flush a deferred turn stop on a clean end (an endpoint that
@@ -330,7 +333,7 @@ func (s *chatStream) Close() error {
 		return nil
 	}
 	s.closed = true
-	return s.r.body.Close()
+	return s.body.Close()
 }
 
 // chatChunk is the Chat Completions streaming chunk shape.

@@ -1,13 +1,12 @@
 package anthropic
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
-	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/streamio"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -20,7 +19,7 @@ import (
 // incrementally.
 type sseStream struct {
 	body io.ReadCloser
-	br   *bufio.Reader
+	r    *streamio.SSEReader
 
 	pending []provider.Event // normalized events not yet returned by Next
 	cur     provider.Event
@@ -31,7 +30,7 @@ type sseStream struct {
 }
 
 func newSSEStream(body io.ReadCloser) *sseStream {
-	return &sseStream{body: body, br: bufio.NewReader(body)}
+	return &sseStream{body: body, r: streamio.NewSSEReader(body)}
 }
 
 func (s *sseStream) Next() bool {
@@ -42,7 +41,7 @@ func (s *sseStream) Next() bool {
 		if s.err != nil || s.done {
 			return false
 		}
-		data, err := s.readSSEEvent()
+		data, err := s.r.ReadEvent()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.done = true
@@ -73,44 +72,6 @@ func (s *sseStream) Close() error {
 	}
 	s.closed = true
 	return s.body.Close()
-}
-
-// readSSEEvent reads one Server-Sent Event, returning its concatenated data
-// payload. SSE frames are separated by a blank line; data may span multiple
-// `data:` lines (joined with "\n"); `event:`, `id:`, and comment lines are
-// ignored because the payload's own "type" field discriminates the event. It
-// returns io.EOF only at a clean end with no buffered data.
-func (s *sseStream) readSSEEvent() ([]byte, error) {
-	var data []byte
-	haveData := false
-	for {
-		line, err := s.br.ReadString('\n')
-		if len(line) > 0 {
-			trimmed := strings.TrimRight(line, "\r\n")
-			switch {
-			case trimmed == "":
-				if haveData {
-					return data, nil
-				}
-				// Blank line before any data (e.g. between comment frames): keep reading.
-			case strings.HasPrefix(trimmed, "data:"):
-				v := strings.TrimPrefix(strings.TrimPrefix(trimmed, "data:"), " ")
-				if haveData {
-					data = append(data, '\n')
-				}
-				data = append(data, v...)
-				haveData = true
-			default:
-				// event:/id:/comment line — ignored.
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) && haveData {
-				return data, nil
-			}
-			return nil, err
-		}
-	}
 }
 
 // sseFrame is the union of the Anthropic stream event shapes the adapter reads.

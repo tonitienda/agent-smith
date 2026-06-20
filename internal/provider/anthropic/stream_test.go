@@ -1,45 +1,14 @@
 package anthropic
 
 import (
-	"io"
 	"strings"
 	"testing"
 
 	"github.com/tonitienda/agent-smith/internal/provider"
 )
 
-func TestReadSSEEventJoinsMultilineDataAndIgnoresComments(t *testing.T) {
-	raw := strings.Join([]string{
-		`: this is a comment`,
-		`event: message_start`,
-		`data: {"type":`,
-		`data: "ping"}`,
-		``,
-		`data: {"type":"message_stop"}`,
-		``,
-	}, "\n")
-	s := newSSEStream(io.NopCloser(strings.NewReader(raw)))
-
-	first, err := s.readSSEEvent()
-	if err != nil {
-		t.Fatalf("readSSEEvent: %v", err)
-	}
-	// Per the SSE spec, multiple data lines are joined with "\n"; JSON tolerates
-	// the embedded newline, so the frame still decodes.
-	if string(first) != "{\"type\":\n\"ping\"}" {
-		t.Errorf("first event data = %q, want newline-joined ping frame", first)
-	}
-	second, err := s.readSSEEvent()
-	if err != nil {
-		t.Fatalf("readSSEEvent: %v", err)
-	}
-	if string(second) != `{"type":"message_stop"}` {
-		t.Errorf("second event data = %q, want message_stop frame", second)
-	}
-	if _, err := s.readSSEEvent(); err != io.EOF {
-		t.Errorf("third read err = %v, want io.EOF", err)
-	}
-}
+// SSE framing is covered by internal/streamio; this file tests only the
+// Anthropic-specific normalization (stop-reason mapping, frame translation).
 
 func TestMapStopReason(t *testing.T) {
 	cases := map[string]string{
