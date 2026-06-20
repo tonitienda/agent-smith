@@ -217,17 +217,20 @@ func cutKey(line string) (key, rest string, ok bool) {
 	return strings.TrimSpace(k), v, true
 }
 
-// scalar normalizes a raw scalar value: a double-quoted value yields its quoted
+// scalar normalizes a raw scalar value: a quoted value (double or single, as YAML
+// allows to avoid escaping backticks and special characters) yields its quoted
 // contents verbatim (so a signal like "`make ship` exited 0" keeps its
 // backticks); an unquoted value is trimmed and has any trailing ` # comment`
 // stripped.
 func scalar(raw string) string {
 	raw = strings.TrimSpace(raw)
-	if strings.HasPrefix(raw, `"`) {
-		if end := strings.Index(raw[1:], `"`); end >= 0 {
-			return raw[1 : 1+end]
+	for _, q := range []byte{'"', '\''} {
+		if len(raw) > 0 && raw[0] == q {
+			if end := strings.IndexByte(raw[1:], q); end >= 0 {
+				return raw[1 : 1+end]
+			}
+			return raw[1:] // unterminated quote: take the remainder
 		}
-		return strings.TrimPrefix(raw, `"`)
 	}
 	if i := strings.Index(raw, " #"); i >= 0 {
 		raw = raw[:i]

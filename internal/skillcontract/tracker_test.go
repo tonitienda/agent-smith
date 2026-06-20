@@ -40,7 +40,10 @@ func TestTrackerSignalTeardown(t *testing.T) {
 	tr.Observe(skillBlock("deploy", schema.KindToolCall))
 	// A tool result whose stdout carries the declared signal fires teardown,
 	// preferred over the idle heuristic.
+	// The signal-bearing block also ends the turn: the final turn must still be
+	// attributed to the span the signal closes (Turns == 1, not 0).
 	res := skillBlock("deploy", schema.KindToolResult)
+	res.StopReason = "stop"
 	res.ToolResult = &schema.ToolResultBody{Stdout: "running make ship\n`make ship` exited 0\n"}
 	tr.Observe(res)
 
@@ -53,6 +56,9 @@ func TestTrackerSignalTeardown(t *testing.T) {
 	}
 	if closed[0].TornDownBy != TeardownSignal {
 		t.Errorf("TornDownBy = %q, want %q", closed[0].TornDownBy, TeardownSignal)
+	}
+	if closed[0].Actuals.Turns != 1 {
+		t.Errorf("Turns = %d, want 1 (turn-ending signal block still counts its turn)", closed[0].Actuals.Turns)
 	}
 }
 

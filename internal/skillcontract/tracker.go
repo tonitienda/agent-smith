@@ -110,6 +110,12 @@ func (t *Tracker) Observe(b schema.Block) {
 		t.accrue(inner, b)
 	}
 
+	// Capture the innermost open span before any signal closure so a block that
+	// both carries the completion signal and ends the turn still attributes that
+	// final turn to its span (the span was open through the turn) rather than
+	// dropping it once the signal removes the span from the stack.
+	activeInner := t.innermost()
+
 	// Declared signal closes its span (preferred trigger); checked after the
 	// emitting block's actuals are counted so the closing block still belongs to
 	// the span.
@@ -123,7 +129,7 @@ func (t *Tracker) Observe(b schema.Block) {
 
 	// A turn boundary advances idle accounting and the per-span turn count.
 	if b.StopReason != "" {
-		t.endTurn()
+		t.endTurn(activeInner)
 	}
 }
 
@@ -137,13 +143,15 @@ func (t *Tracker) accrue(s *Span, b schema.Block) {
 	}
 }
 
-// endTurn closes the turn: the innermost open span counts the turn, and every
-// open span resets its used-this-turn flag, incrementing the idle counter when
-// its skill went untouched and firing the idle-turns teardown when the heuristic
-// trips.
-func (t *Tracker) endTurn() {
-	if inner := t.innermost(); inner != nil {
-		inner.Actuals.Turns++
+// endTurn closes the turn: activeInner (the innermost span captured before any
+// signal closure in this block) counts the turn, and every still-open span resets
+// its used-this-turn flag, incrementing the idle counter when its skill went
+// untouched and firing the idle-turns teardown when the heuristic trips. Passing
+// the pre-closure innermost keeps a signal-and-turn-ending block's final turn
+// attributed to the span the signal just closed.
+func (t *Tracker) endTurn(activeInner *Span) {
+	if activeInner != nil {
+		activeInner.Actuals.Turns++
 	}
 	for _, s := range t.openSnapshot() {
 		if s.usedInTurn {

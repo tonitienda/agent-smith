@@ -95,6 +95,15 @@ func TestParseContractMalformedNumbersDegrade(t *testing.T) {
 	}
 }
 
+func TestParseContractSingleQuoted(t *testing.T) {
+	// Single quotes are valid YAML and avoid escaping backticks; the signal must
+	// parse to its contents verbatim so it matches later.
+	c := ParseContract("completion:\n  signal: '`make ship` exited 0'")
+	if c.Completion.Signal != "`make ship` exited 0" {
+		t.Errorf("signal = %q, want backtick-bearing contents", c.Completion.Signal)
+	}
+}
+
 func TestParseContractCRLF(t *testing.T) {
 	c := ParseContract("completion:\r\n  signal: done\r\n  idle_turns: 2")
 	if c.Completion.Signal != "done" || c.Completion.IdleTurns != 2 {
