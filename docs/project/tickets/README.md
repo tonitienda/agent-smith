@@ -124,7 +124,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-095](AS-095-core-dependency-boundaries.md) | Enforce stdlib-first dependency boundaries for core packages | quality | done | — |
 | [AS-096](AS-096-render-primitives.md) | Add tiny shared render primitives for textual reports | polish | ready | — |
 | [AS-097](AS-097-go126-test-idioms.md) | Modernize tests with Go 1.26 stdlib idioms | quality | ready | — |
-| [AS-098](AS-098-architecture-contracts.md) | Document and test package architecture contracts | architecture | ready | 095 |
+| [AS-098](AS-098-architecture-contracts.md) | Document and test package architecture contracts | architecture | done | 095 |
 
 ## Suggested build order
 

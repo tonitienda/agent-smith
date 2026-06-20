@@ -1,7 +1,7 @@
 ---
 id: AS-098
 title: Document and test package architecture contracts
-status: ready-to-implement
+status: done
 github_issue: 168
 depends_on: [AS-095]
 area: architecture
@@ -11,7 +11,7 @@ source: code-improvements.md
 
 # AS-098 · Document and test package architecture contracts
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
