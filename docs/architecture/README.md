@@ -8,6 +8,7 @@ This directory documents Agent Smith's software architecture using the [C4 model
 2. [Containers](containers.md) — C4 level 2: runtime containers, data stores, and external integrations.
 3. [Core components](core-components.md) — C4 level 3 for the critical in-process containers that make the product thesis work.
 4. [Runtime flows](runtime-flows.md) — sequence diagrams for the most important execution paths.
+5. [Dependency boundaries](dependency-boundaries.md) — which layers may import third-party code, and the guard test that enforces the stdlib-first core.
 
 ## Scope and source of truth
 
