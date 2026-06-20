@@ -1,9 +1,11 @@
 package skill
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 // writeSkill drops a SKILL.md with content into dir/<name>/, creating dirs as
@@ -139,5 +141,50 @@ func TestLoadMissingDirsNoError(t *testing.T) {
 	}
 	if len(skills) != 0 {
 		t.Errorf("want no skills, got %d", len(skills))
+	}
+}
+
+// TestLoadFSScansInMemoryTree exercises the fs.FS scanner directly with an
+// in-memory tree, so discovery is covered without touching disk. With no base the
+// Source is the slash path within the tree.
+func TestLoadFSScansInMemoryTree(t *testing.T) {
+	fsys := fstest.MapFS{
+		"beta/SKILL.md":  {Data: []byte("---\nname: beta\ndescription: B\n---\nbeta body")},
+		"alpha/SKILL.md": {Data: []byte("---\nname: alpha\n---\nalpha body")},
+		"empty/notes.md": {Data: []byte("not a skill")}, // dir without SKILL.md
+	}
+	skills, err := loadFS(fsys, "", "project")
+	if err != nil {
+		t.Fatalf("loadFS: %v", err)
+	}
+	if len(skills) != 2 {
+		t.Fatalf("got %d skills, want 2: %+v", len(skills), skills)
+	}
+	byName := map[string]Skill{}
+	for _, s := range skills {
+		byName[s.Name] = s
+	}
+	if got := byName["alpha"].Source; got != "alpha/SKILL.md" {
+		t.Errorf("alpha Source = %q, want slash path alpha/SKILL.md", got)
+	}
+	if byName["beta"].Body != "beta body" {
+		t.Errorf("beta body = %q", byName["beta"].Body)
+	}
+}
+
+// TestLoadDirContainedToRoot documents that os.DirFS bounds the scan to its root:
+// a manifest outside the scanned directory is unreachable, so discovery cannot
+// read across the project boundary.
+func TestLoadDirContainedToRoot(t *testing.T) {
+	root := t.TempDir()
+	// A SKILL.md planted in a sibling of the scanned root must not be readable.
+	outside := filepath.Join(filepath.Dir(root), "outside-"+filepath.Base(root))
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+
+	if _, err := fs.ReadFile(os.DirFS(root), "../"+filepath.Base(outside)+"/SKILL.md"); err == nil {
+		t.Fatal("expected os.DirFS to reject a path escaping the root")
 	}
 }

@@ -1,7 +1,7 @@
 ---
 id: AS-094
 title: Standardize filesystem traversal on fs.FS and WalkDir
-status: ready-to-implement
+status: done
 github_issue: 164
 depends_on: []
 area: architecture
@@ -11,7 +11,17 @@ source: code-improvements.md
 
 # AS-094 · Standardize filesystem traversal on fs.FS and WalkDir
 
-**Status: ready to implement**
+**Status: done**
+
+Implemented: the read-only scanners in `internal/skill`, `internal/customcmd`,
+and `internal/initscaffold` now do their discovery over `io/fs` — an unexported
+`loadFS`/inspection helper takes an `fs.FS` and the public entry point adapts the
+OS tree at the edge with `os.DirFS(root)`. `os.DirFS` bounds reads to the root,
+so a scanner can no longer read across the project boundary; reads use
+`fs.ReadDir`/`fs.ReadFile`/`fs.Stat` and slash paths. Recursive OS walking
+(glob/grep in `internal/tool/builtin`) already uses `filepath.WalkDir`. Tests for
+the three packages gained `fstest.MapFS` coverage that drives discovery with no
+disk I/O, plus an explicit root-containment assertion.
 
 ## Description
 

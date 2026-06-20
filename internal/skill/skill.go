@@ -25,7 +25,10 @@
 package skill
 
 import (
+	"errors"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -112,24 +115,35 @@ func loadDir(dir, scope string) ([]Skill, error) {
 	if dir == "" {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(dir)
+	return loadFS(os.DirFS(dir), dir, scope)
+}
+
+// loadFS scans fsys — the filesystem rooted at base — for skill directories,
+// reading each manifest through io/fs so the discovery logic is decoupled from
+// the OS and testable with fstest.MapFS. base is used only to attribute each
+// skill's Source to an absolute on-disk path; pass "" when scanning an in-memory
+// tree, in which case Source is the slash path within fsys. os.DirFS bounds reads
+// to base, so a manifest cannot be read from outside the scanned root.
+func loadFS(fsys fs.FS, base, scope string) ([]Skill, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
 	}
 	var skills []Skill
 	for _, e := range entries {
-		// Resolve symlinks (os.Stat, not e.IsDir) so a skill directory linked in by
-		// a dotfile manager is discovered rather than silently skipped.
-		if fi, err := os.Stat(filepath.Join(dir, e.Name())); err != nil || !fi.IsDir() {
+		// Resolve symlinks (fs.Stat follows; DirEntry.IsDir does not) so a skill
+		// directory linked in by a dotfile manager is discovered rather than
+		// silently skipped.
+		if fi, err := fs.Stat(fsys, e.Name()); err != nil || !fi.IsDir() {
 			continue
 		}
-		manifest := filepath.Join(dir, e.Name(), fileName)
-		raw, err := os.ReadFile(manifest)
+		manifest := path.Join(e.Name(), fileName)
+		raw, err := fs.ReadFile(fsys, manifest)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue // a directory without a SKILL.md is not a skill
 			}
 			return nil, err
@@ -144,20 +158,30 @@ func loadDir(dir, scope string) ([]Skill, error) {
 		if name == "" || strings.ContainsAny(name, " \t\n/\\") {
 			continue
 		}
-		abs, err := filepath.Abs(manifest)
-		if err != nil {
-			abs = manifest
-		}
 		skills = append(skills, Skill{
 			Name:        name,
 			Description: desc,
-			Source:      abs,
+			Source:      source(base, e.Name(), fileName),
 			Scope:       scope,
 			Body:        body,
 			Meta:        meta,
 		})
 	}
 	return skills, nil
+}
+
+// source builds a discovered file's display path: the absolute on-disk path of
+// base/parts when base is set, or the slash-joined parts within an in-memory tree
+// when it is "".
+func source(base string, parts ...string) string {
+	if base == "" {
+		return path.Join(parts...)
+	}
+	p := filepath.Join(append([]string{base}, parts...)...)
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }
 
 // parseFrontmatter splits an optional `---`-fenced frontmatter from the body and
