@@ -323,6 +323,8 @@ func TestParseSort(t *testing.T) {
 		"recency": composition.SortAge,
 		"type":    composition.SortType,
 		"kind":    composition.SortType,
+		"topic":   composition.SortTopic,
+		"tag":     composition.SortTopic,
 		"bogus":   composition.SortSize,
 	}
 	for in, want := range cases {
@@ -358,6 +360,46 @@ func TestGroupsRollUp(t *testing.T) {
 	}
 	if sum != c.TotalTokens {
 		t.Errorf("group token sum %d != total %d", sum, c.TotalTokens)
+	}
+}
+
+// TestTopicsRollUp checks the by-topic breakdown (AS-027): every segment carries
+// at least one tag, file reads in the same directory share a module topic, and
+// SortTopic groups the largest topic first.
+func TestTopicsRollUp(t *testing.T) {
+	events := []schema.Block{
+		fileRead("f1", "internal/topic/topic.go", 400, 1),
+		fileRead("f2", "internal/topic/topic_test.go", 400, 2),
+		text("u", schema.RoleUser, 40, 3),
+	}
+	c := build(t, events, composition.SortTopic)
+
+	// Every segment carries at least one topic tag.
+	for _, s := range c.Segments {
+		if len(s.Tags) == 0 {
+			t.Fatalf("segment %q has no tags", s.ID)
+		}
+	}
+
+	byTopic := map[string]composition.TopicTotal{}
+	for _, t := range c.ByTopic {
+		byTopic[t.Topic] = t
+	}
+	// Both reads live under internal/topic, so the module topic counts both.
+	if got := byTopic["file:internal/topic"].Count; got != 2 {
+		t.Errorf("file:internal/topic count = %d, want 2", got)
+	}
+	if got := byTopic["file"].Count; got != 2 {
+		t.Errorf("file count = %d, want 2", got)
+	}
+	if got := byTopic["conversation"].Count; got != 1 {
+		t.Errorf("conversation count = %d, want 1", got)
+	}
+
+	// SortTopic puts the heaviest topic group first: the two file reads outweigh
+	// the small user turn, so a file segment leads.
+	if len(c.Segments) > 0 && c.Segments[0].Tags[0] != "file" {
+		t.Errorf("first segment primary tag = %q, want file", c.Segments[0].Tags[0])
 	}
 }
 

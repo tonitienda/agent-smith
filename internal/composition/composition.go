@@ -20,18 +20,21 @@
 // itself ships the read-only composition; the interactive multi-select UI lives
 // with the removal it drives, in AS-028.
 //
-// The topic dimension (§7.11) depends on the labeling engine (AS-027, still in
-// clarification) and is added when that lands; this view ships without it, with
-// the type/file/recency/size dimensions that are mechanically derivable today.
+// The topic dimension (§7.11) is supplied by the deterministic labeling engine
+// (internal/topic, AS-027): every segment carries sorted topic tags and the view
+// rolls them into a "by topic" breakdown (ByTopic) and a SortTopic ordering,
+// alongside the type/file/recency/size dimensions.
 package composition
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/projection"
+	"github.com/tonitienda/agent-smith/internal/topic"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -61,6 +64,9 @@ const (
 	SortAge
 	// SortType groups segments by kind, largest group first, size-ordered within.
 	SortType
+	// SortTopic groups segments by primary topic tag (AS-027), largest topic
+	// first, size-ordered within.
+	SortTopic
 )
 
 // ParseSort maps a /context argument to a Sort, defaulting to SortSize for an
@@ -71,6 +77,8 @@ func ParseSort(s string) Sort {
 		return SortAge
 	case "type", "kind", "group":
 		return SortType
+	case "topic", "tag", "tags":
+		return SortTopic
 	default:
 		return SortSize
 	}
@@ -90,6 +98,7 @@ type Segment struct {
 	Age     time.Duration // now − append time
 	Seq     int           // append order (recency)
 	Path    string        // file path for a file read, else ""
+	Tags    []string      // deterministic topic tags (AS-027), sorted; never empty
 	Live    bool          // in the model-facing window; false for an excluded segment
 	Reason  string        // why a non-live segment was dropped (projection.Reason*)
 }
@@ -97,6 +106,17 @@ type Segment struct {
 // GroupTotal is the per-type rollup shown in the "by type" breakdown.
 type GroupTotal struct {
 	Group   string
+	Tokens  int
+	CostUSD float64
+	Count   int
+}
+
+// TopicTotal is the per-topic rollup shown in the "by topic" breakdown (AS-027).
+// A segment carries multiple tags, so it contributes to every one of its
+// topics; the per-topic counts therefore overlap and need not sum to the window
+// total (unlike ByGroup, where each segment lands in exactly one group).
+type TopicTotal struct {
+	Topic   string
 	Tokens  int
 	CostUSD float64
 	Count   int
@@ -125,6 +145,7 @@ type Composition struct {
 	Window       int          // model context-window size; 0 when unknown
 	TopConsumers []Segment    // the largest segments, biggest first
 	ByGroup      []GroupTotal // per-type rollup, largest group first
+	ByTopic      []TopicTotal // per-topic rollup (AS-027), largest topic first
 	Duplicates   []Duplicate  // files read more than once, biggest combined first
 	Stale        []Segment    // large, old reclaim candidates, biggest first
 	Excluded     []Segment    // blocks dropped from the window, biggest first (not in the total)
@@ -148,6 +169,8 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 
 	groups := map[string]*GroupTotal{}
 	var groupOrder []string
+	topics := map[string]*TopicTotal{}
+	var topicOrder []string
 	dupes := map[string]*Duplicate{}
 	var dupeOrder []string
 
@@ -180,6 +203,20 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 		g.CostUSD += seg.CostUSD
 		g.Count++
 
+		// Every tag of the segment contributes to its topic rollup (AS-027); a
+		// segment counts toward each of its topics, so the totals overlap.
+		for _, tag := range seg.Tags {
+			t, ok := topics[tag]
+			if !ok {
+				t = &TopicTotal{Topic: tag}
+				topics[tag] = t
+				topicOrder = append(topicOrder, tag)
+			}
+			t.Tokens += tokens
+			t.CostUSD += seg.CostUSD
+			t.Count++
+		}
+
 		if seg.Path != "" {
 			d, ok := dupes[seg.Path]
 			if !ok {
@@ -195,6 +232,7 @@ func Build(proj *projection.Projection, table *cost.Table, model string, now tim
 	}
 
 	c.ByGroup = collectGroups(groups, groupOrder)
+	c.ByTopic = collectTopics(topics, topicOrder)
 	c.Duplicates = collectDuplicates(dupes, dupeOrder)
 	c.TopConsumers = topConsumers(c.Segments)
 	c.Stale = staleCandidates(c.Segments)
@@ -218,6 +256,7 @@ func segmentOf(b projection.Block, tokens int, rate cost.Rate, priced bool, now 
 		Age:     now.Sub(b.TS),
 		Seq:     b.Seq,
 		Path:    filePath(b.Block),
+		Tags:    topic.Tags(b.Block),
 		Live:    b.Live,
 		Reason:  b.Reason,
 	}
@@ -322,6 +361,22 @@ func collectGroups(groups map[string]*GroupTotal, order []string) []GroupTotal {
 	return out
 }
 
+// collectTopics rolls the per-topic totals into a list ordered largest first,
+// the topic name breaking an exact tie so the order is deterministic (AS-027).
+func collectTopics(topics map[string]*TopicTotal, order []string) []TopicTotal {
+	out := make([]TopicTotal, 0, len(order))
+	for _, name := range order {
+		out = append(out, *topics[name])
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Tokens != out[j].Tokens {
+			return out[i].Tokens > out[j].Tokens
+		}
+		return out[i].Topic < out[j].Topic
+	})
+	return out
+}
+
 func collectDuplicates(dupes map[string]*Duplicate, order []string) []Duplicate {
 	var out []Duplicate
 	for _, name := range order {
@@ -356,6 +411,22 @@ func staleCandidates(segs []Segment) []Segment {
 	return out
 }
 
+// primaryTag is a segment's lead topic tag — the first specific tag (carrying a
+// ":"), falling back to the lexically first (coarse) tag. Preferring the
+// specific tag keeps SortTopic distinct from SortType, which groups on the
+// coarse tag. Mirrors topic.Primary; segments here always carry Tags.
+func primaryTag(s Segment) string {
+	for _, t := range s.Tags {
+		if strings.Contains(t, ":") {
+			return t
+		}
+	}
+	if len(s.Tags) == 0 {
+		return ""
+	}
+	return s.Tags[0]
+}
+
 // sortSegments orders the full list in place per the requested Sort.
 func sortSegments(segs []Segment, by Sort) {
 	switch by {
@@ -375,6 +446,23 @@ func sortSegments(segs []Segment, by Sort) {
 			}
 			if segs[i].Group != segs[j].Group {
 				return segs[i].Group < segs[j].Group
+			}
+			return segs[i].Tokens > segs[j].Tokens
+		})
+	case SortTopic:
+		// Largest topic first, then largest segment within a topic, keyed on each
+		// segment's primary (lead) tag; the tag name breaks an exact tie.
+		totals := map[string]int{}
+		for _, s := range segs {
+			totals[primaryTag(s)] += s.Tokens
+		}
+		sort.SliceStable(segs, func(i, j int) bool {
+			pi, pj := primaryTag(segs[i]), primaryTag(segs[j])
+			if ti, tj := totals[pi], totals[pj]; ti != tj {
+				return ti > tj
+			}
+			if pi != pj {
+				return pi < pj
 			}
 			return segs[i].Tokens > segs[j].Tokens
 		})

@@ -35,6 +35,7 @@ func Render(c Composition) string {
 
 	renderTopConsumers(&b, c)
 	renderByGroup(&b, c)
+	renderByTopic(&b, c)
 	renderDuplicates(&b, c)
 	renderStale(&b, c)
 	renderAll(&b, c)
@@ -66,6 +67,22 @@ func renderByGroup(b *strings.Builder, c Composition) {
 	for _, g := range c.ByGroup {
 		row("  %s\t%s\t%s\t%s\t\n",
 			g.Group, render.Tokens(g.Tokens), percent(g.Tokens, c.TotalTokens), render.Count(g.Count, "segment"))
+	}
+	_ = tw.Flush()
+}
+
+// renderByTopic shows the per-topic rollup (AS-027). A segment carries several
+// tags and so contributes to several topics, so this breakdown deliberately
+// overlaps and is not expected to sum to the window total — the note says so.
+func renderByTopic(b *strings.Builder, c Composition) {
+	if len(c.ByTopic) == 0 {
+		return
+	}
+	b.WriteString("\nBy topic (segments carry multiple tags, so topics overlap)\n")
+	tw, row := render.Tab(b, 0)
+	for _, t := range c.ByTopic {
+		row("  %s\t%s\t%s\t\n",
+			t.Topic, render.Tokens(t.Tokens), render.Count(t.Count, "segment"))
 	}
 	_ = tw.Flush()
 }
@@ -192,6 +209,8 @@ func sortLabel(s Sort) string {
 		return "oldest first"
 	case SortType:
 		return "grouped by type"
+	case SortTopic:
+		return "grouped by topic"
 	default:
 		return "largest first"
 	}
