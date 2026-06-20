@@ -114,7 +114,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
 | [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
-| [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | ready | 044 |
+| [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | done | 044 |
 | [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | done | 065, 066 |
 | [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | done | 066 |
 | [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | done | — |
@@ -133,6 +133,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | done | 090 |
 | [AS-105](AS-105-migrate-mode-flag-commands.md) | Migrate the remaining mode-flag commands onto the shared flag contract | commands | done | 104 |
 | [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | ready | 048 |
+| [AS-107](AS-107-subagent-runner-composition.md) | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | subagents | ready | 088, 048 |
 
 ## Suggested build order
 

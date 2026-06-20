@@ -27,7 +27,7 @@ those lower layers never depend back up.
 | **Provider contracts** | `internal/provider` | `schema` | concrete providers, loop, faces |
 | **Concrete providers** | `internal/provider/anthropic`, `internal/provider/openai` | `internal/provider`, `schema` | loop, faces, `cmd/*` |
 | **Tools** | `internal/tool` (+ `builtin`) | `schema` | loop, faces |
-| **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget | faces (`internal/tui`), `cmd/*` |
+| **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`), `cmd/*` |
 | **Faces** | `internal/tui` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 

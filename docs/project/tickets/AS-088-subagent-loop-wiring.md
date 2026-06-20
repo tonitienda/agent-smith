@@ -1,7 +1,7 @@
 ---
 id: AS-088
 title: Wire the sub-agent Runner into the turn loop lifecycle
-status: ready-to-implement
+status: done
 github_issue: 158
 depends_on: [AS-044, AS-018]
 area: subagents
@@ -36,13 +36,32 @@ nil, so a session with no sub-agents pays nothing.
 
 ## Acceptance criteria
 
-- [ ] The loop drives `Begin`/`Observe`/`End` at the right lifecycle points when a
+- [x] The loop drives `Begin`/`Observe`/`End` at the right lifecycle points when a
       Runner is installed; it is a no-op when none is.
-- [ ] `Observe` runs inline (it is passive and cheap) but `End`/teardown work is
+- [x] `Observe` runs inline (it is passive and cheap) but `End`/teardown work is
       kept off the turn's critical path.
-- [ ] A test exercises the loop with a spy sub-agent and asserts it is inited,
+- [x] A test exercises the loop with a spy sub-agent and asserts it is inited,
       observed per block, and torn down — without a model call.
 
 ## Dependencies
 
 - AS-044 (the framework + Runner this wires in), AS-018 (the loop lifecycle points)
+
+## Implementation notes
+
+- `loop.WithSubAgents(runner)` follows the `WithBudget` precedent: a no-op when
+  nil, so a session with no sub-agents pays nothing. The loop opens a session
+  scope for the whole `Run` and a span scope (`turn-<n>`) per turn.
+- Blocks are fanned out to `Observe` by walking the **log delta** rather than
+  hooking every append site: the log is the session's single record (AS-018), so
+  this captures every block in order regardless of which layer appended it —
+  including the tool results the runtime writes, which never pass through the
+  loop's own `Append`.
+- Teardown runs as a synchronous **post-turn step** (off the interactive
+  streaming), not in a goroutine: the framework's contract is that a sub-agent's
+  methods are never called concurrently, so a teardown must not overlap the next
+  span's `Observe` on the same instance.
+- **Follow-on (AS-107):** wiring an actual Runner into the composition root
+  (`cmd/smith`) — registering the built-in sub-agents (e.g. `factdetector`,
+  AS-048) and an insights Store, then installing `WithSubAgents` — is left to a
+  separate ticket; this one gives the loop the capability.
