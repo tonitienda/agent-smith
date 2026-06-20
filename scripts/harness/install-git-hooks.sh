@@ -30,8 +30,9 @@ case "${1:-}" in
 	;;
 esac
 
-chmod +x .githooks/pre-commit .githooks/pre-push
-git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit .githooks/pre-push \
+	scripts/harness/quick.sh scripts/harness/full.sh scripts/agent-quality-gate.sh
+git config core.hooksPath "$root/.githooks"
 printf 'Installed git hooks via core.hooksPath=.githooks\n'
 printf '  pre-commit -> scripts/harness/quick.sh\n'
 if [ "$(git config --bool harness.prePush 2>/dev/null || echo false)" = "true" ]; then
