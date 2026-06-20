@@ -44,11 +44,19 @@ func Tags(b schema.Block) []string {
 	if b.ToolCall != nil && b.ToolCall.Name != "" {
 		add("tool:" + b.ToolCall.Name)
 	}
-	// Attribution: what produced the block (AS-034 skills, AS-036 MCP, tools).
+	// Attribution: what produced the block (AS-034 skills, AS-036 MCP, AS-035
+	// hooks, tools). MCP tags both the server and the specific tool so /clean
+	// (AS-029) can match either granularity.
 	if a := b.Attribution; a != nil {
 		add(prefixed("tool:", a.Tool))
 		add(prefixed("skill:", a.Skill))
-		add(prefixed("mcp:", a.MCPServer))
+		if a.MCPServer != "" {
+			add("mcp:" + a.MCPServer)
+			if a.MCPTool != "" {
+				add("mcp:" + a.MCPServer + "/" + a.MCPTool)
+			}
+		}
+		add(prefixed("hook:", a.Hook))
 	}
 	// The command (producer) that appended the block — e.g. "/goal", "/clean".
 	if b.Provenance != nil {
@@ -63,10 +71,19 @@ func Tags(b schema.Block) []string {
 	return out
 }
 
-// Primary returns the lead tag for b — the lexically first of Tags, which is
-// the stable bucket key the "by topic" sort groups on. It is never empty.
+// Primary returns the lead tag for b — the first specific tag (one carrying a
+// ":", e.g. "file:internal/topic" or "tool:shell"), falling back to the
+// lexically first (coarse) tag when there is none. Preferring the specific tag
+// keeps the "by topic" sort distinct from the "by type" sort, which already
+// groups on the coarse tag. It is never empty.
 func Primary(b schema.Block) string {
-	return Tags(b)[0]
+	tags := Tags(b)
+	for _, t := range tags {
+		if strings.Contains(t, ":") {
+			return t
+		}
+	}
+	return tags[0]
 }
 
 // coarseType buckets a block by kind, then role, into a single coarse tag. Every
@@ -96,7 +113,7 @@ func coarseType(b schema.Block) string {
 // the module-level tag. A top-level file (no directory) is tagged by its own
 // name so it still gets a stable, specific handle.
 func moduleDir(p string) string {
-	p = strings.ReplaceAll(p, "\\", "/")
+	p = path.Clean(strings.ReplaceAll(p, "\\", "/"))
 	if d := path.Dir(p); d != "." && d != "/" && d != "" {
 		return d
 	}

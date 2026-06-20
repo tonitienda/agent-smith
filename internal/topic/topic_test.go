@@ -49,13 +49,13 @@ func TestTags(t *testing.T) {
 			want: []string{"tool", "tool:shell"},
 		},
 		{
-			name: "attribution and producer add skill, mcp, and command tags",
+			name: "attribution and producer add skill, mcp, hook, and command tags",
 			block: schema.Block{
 				Kind:        schema.KindToolResult,
-				Attribution: &schema.Attribution{Skill: "lint", MCPServer: "github", Tool: "grep"},
+				Attribution: &schema.Attribution{Skill: "lint", MCPServer: "github", MCPTool: "list_issues", Tool: "grep", Hook: "post-run"},
 				Provenance:  &schema.Provenance{Producer: "/clean"},
 			},
-			want: []string{"cmd:/clean", "mcp:github", "skill:lint", "tool", "tool:grep"},
+			want: []string{"cmd:/clean", "hook:post-run", "mcp:github", "mcp:github/list_issues", "skill:lint", "tool", "tool:grep"},
 		},
 		{
 			name:  "reasoning maps to its own coarse tag",
@@ -115,7 +115,7 @@ func TestPrimary(t *testing.T) {
 		Kind:     schema.KindFileRead,
 		FileRead: &schema.FileReadBody{Path: "internal/topic/topic.go"},
 	}
-	if got, want := topic.Primary(b), "file"; got != want {
+	if got, want := topic.Primary(b), "file:internal/topic"; got != want {
 		t.Fatalf("Primary = %q, want %q", got, want)
 	}
 }

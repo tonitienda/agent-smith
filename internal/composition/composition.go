@@ -28,6 +28,7 @@ package composition
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cost"
@@ -410,9 +411,16 @@ func staleCandidates(segs []Segment) []Segment {
 	return out
 }
 
-// primaryTag is a segment's lead topic tag — Tags is sorted and never empty, so
-// the first element is the stable bucket key SortTopic groups on.
+// primaryTag is a segment's lead topic tag — the first specific tag (carrying a
+// ":"), falling back to the lexically first (coarse) tag. Preferring the
+// specific tag keeps SortTopic distinct from SortType, which groups on the
+// coarse tag. Mirrors topic.Primary; segments here always carry Tags.
 func primaryTag(s Segment) string {
+	for _, t := range s.Tags {
+		if strings.Contains(t, ":") {
+			return t
+		}
+	}
 	if len(s.Tags) == 0 {
 		return ""
 	}
