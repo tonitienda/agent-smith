@@ -129,8 +129,12 @@ type configReader interface {
 // Load reads the `hooks` array out of cfg and compiles it into a Set, returning
 // any per-spec warnings. A missing or empty `hooks` key yields an empty Set and
 // no error, so hooks are purely opt-in. A malformed `hooks` value (not an array)
-// is the only hard error.
+// is the only hard error. A nil cfg yields an empty Set, matching the opt-in
+// contract.
 func Load(cfg configReader) (*Set, []Warning, error) {
+	if cfg == nil {
+		return New(nil), nil, nil
+	}
 	var specs []Spec
 	ok, err := cfg.Decode("hooks", &specs)
 	if err != nil {

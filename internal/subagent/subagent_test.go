@@ -306,4 +306,9 @@ func TestLoadFromConfig(t *testing.T) {
 	if _, err := reg.Load(loadConfig(t, "")); err != nil {
 		t.Fatalf("missing key should be no-op, got %v", err)
 	}
+
+	// A nil config is also a no-op, leaving manifest defaults in place.
+	if warns, err := reg.Load(nil); err != nil || len(warns) != 0 {
+		t.Fatalf("nil config should be no-op: warns=%v err=%v", warns, err)
+	}
 }

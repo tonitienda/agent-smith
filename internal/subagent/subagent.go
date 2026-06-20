@@ -183,8 +183,11 @@ type configReader interface {
 
 // Load reads the `subagents` map out of cfg and applies it as the overlay,
 // returning any warnings. A missing key is not an error: sub-agents then run on
-// their manifest defaults.
+// their manifest defaults. A nil cfg leaves the manifest defaults in place.
 func (r *Registry) Load(cfg configReader) ([]Warning, error) {
+	if cfg == nil {
+		return nil, nil
+	}
 	var m map[string]Config
 	ok, err := cfg.Decode("subagents", &m)
 	if err != nil {

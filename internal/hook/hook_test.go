@@ -252,6 +252,16 @@ func TestLoadMissingHooksKey(t *testing.T) {
 	}
 }
 
+func TestLoadNilConfig(t *testing.T) {
+	set, warns, err := Load(nil)
+	if err != nil || len(warns) != 0 {
+		t.Fatalf("nil config should be clean: err=%v warns=%v", err, warns)
+	}
+	if set.Has(SessionStart) {
+		t.Fatal("expected empty set")
+	}
+}
+
 func TestNilSetIsInert(t *testing.T) {
 	var s *Set
 	if s.Has(PreToolUse) {
