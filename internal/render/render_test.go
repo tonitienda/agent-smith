@@ -11,14 +11,17 @@ import (
 
 func TestTokens(t *testing.T) {
 	cases := map[int]string{
-		0:         "0 tok",
-		42:        "42 tok",
-		999:       "999 tok",
-		1_000:     "1k tok",
-		1_234:     "1.2k tok",
-		12_000:    "12k tok",
-		2_500_000: "2.5M tok",
-		3_000_000: "3M tok",
+		-3_000_000: "-3M tok",
+		-1_234:     "-1.2k tok",
+		-42:        "-42 tok",
+		0:          "0 tok",
+		42:         "42 tok",
+		999:        "999 tok",
+		1_000:      "1k tok",
+		1_234:      "1.2k tok",
+		12_000:     "12k tok",
+		2_500_000:  "2.5M tok",
+		3_000_000:  "3M tok",
 	}
 	for n, want := range cases {
 		if got := render.Tokens(n); got != want {
@@ -63,6 +66,9 @@ func TestCommas(t *testing.T) {
 func TestMoney(t *testing.T) {
 	if got := render.Money("$", 1.5); got != "$1.5000" {
 		t.Errorf("Money($, 1.5) = %q, want %q", got, "$1.5000")
+	}
+	if got := render.Money("$", -1.5); got != "-$1.5000" {
+		t.Errorf("Money($, -1.5) = %q, want %q", got, "-$1.5000")
 	}
 	if got := render.Money("EUR ", 0); got != "EUR 0.0000" {
 		t.Errorf("Money(EUR , 0) = %q, want %q", got, "EUR 0.0000")

@@ -18,11 +18,15 @@ import (
 // tok", 2_500_000 -> "2.5M tok". The reports use it so a column of token counts
 // stays narrow and scannable.
 func Tokens(n int) string {
+	abs, sign := n, ""
+	if n < 0 {
+		abs, sign = -n, "-"
+	}
 	switch {
-	case n >= 1_000_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e6, 'f', 1, 64)) + "M tok"
-	case n >= 1_000:
-		return trimDotZero(strconv.FormatFloat(float64(n)/1e3, 'f', 1, 64)) + "k tok"
+	case abs >= 1_000_000:
+		return sign + trimDotZero(strconv.FormatFloat(float64(abs)/1e6, 'f', 1, 64)) + "M tok"
+	case abs >= 1_000:
+		return sign + trimDotZero(strconv.FormatFloat(float64(abs)/1e3, 'f', 1, 64)) + "k tok"
 	default:
 		return strconv.Itoa(n) + " tok"
 	}
@@ -48,11 +52,12 @@ func Commas(n int) string {
 		s = s[1:]
 	}
 	var out strings.Builder
-	for i, c := range s {
+	out.Grow(len(s) + (len(s)-1)/3)
+	for i := 0; i < len(s); i++ {
 		if i > 0 && (len(s)-i)%3 == 0 {
 			out.WriteByte(',')
 		}
-		out.WriteRune(c)
+		out.WriteByte(s[i])
 	}
 	if neg {
 		return "-" + out.String()
@@ -65,6 +70,9 @@ func Commas(n int) string {
 // resolves to ("$", "EUR ", …); the empty-state and unpriced dashes stay with
 // each feature.
 func Money(symbol string, v float64) string {
+	if v < 0 {
+		return "-" + symbol + strconv.FormatFloat(-v, 'f', 4, 64)
+	}
 	return symbol + strconv.FormatFloat(v, 'f', 4, 64)
 }
 
