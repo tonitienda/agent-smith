@@ -40,9 +40,18 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
 		if d.IsDir() {
 			switch d.Name() {
 			case "testdata", "vendor", ".git":
+				return fs.SkipDir
+			}
+			// Skip whole subtrees that are allowed to import third-party code, so
+			// the guard never parses the face or executable layers at all.
+			if isThirdPartyAllowed(filepath.ToSlash(rel)) {
 				return fs.SkipDir
 			}
 			return nil
@@ -51,15 +60,6 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 		// Non-test sources only: a test file may import third-party packages to
 		// build fixtures, matching the existing face-boundary guards.
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			return nil
-		}
-
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		dir := filepath.ToSlash(filepath.Dir(rel))
-		if isThirdPartyAllowed(dir) {
 			return nil
 		}
 
