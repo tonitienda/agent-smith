@@ -14,6 +14,7 @@ package command
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"sort"
 	"strings"
@@ -218,6 +219,14 @@ type Command struct {
 	// one descriptor. A nil ArgSpec leaves arity unchecked (the backward-compatible
 	// default, D2), so a command opts into validation by setting it.
 	ArgSpec *ArgSpec
+	// Flags, when non-nil, binds command-specific flags onto a flag.FlagSet
+	// (mirroring internal/cli.Command.Flags). Both faces parse the invocation's
+	// tokens through ParseFlags before Run — the TUI after lexing the slash line,
+	// the CLI after permuting argv — so a flag is declared once on this descriptor
+	// and honored identically by both, never hand-matched against args[0]. The
+	// parsed values reach the handler via FlagsFrom(ctx). A nil Flags leaves the
+	// command flag-free (the backward-compatible default, D2).
+	Flags func(*flag.FlagSet)
 	// Mode is how the output renders (Inline or FullScreen).
 	Mode Mode
 	// Scriptability declares which faces the command serves (UX.md §17.5). The

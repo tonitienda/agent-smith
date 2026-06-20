@@ -130,7 +130,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-101](AS-101-agent-hook-integration.md) | Agent and local hook integration for the harness | quality | ready | 100 |
 | [AS-102](AS-102-quality-skills.md) | Repository skills for quality gates and CI triage | capability | ready | 099, 100 |
 | [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | ready | 100 |
-| [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | ready | 090 |
+| [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | done | 090 |
+| [AS-105](AS-105-migrate-mode-flag-commands.md) | Migrate the remaining mode-flag commands onto the shared flag contract | commands | ready | 104 |
 
 ## Suggested build order
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"flag"
 	"reflect"
 	"strings"
 	"testing"
@@ -189,6 +190,56 @@ func TestCommandWithQuotedArgs(t *testing.T) {
 
 	if !reflect.DeepEqual(rec.args, []string{"old api"}) {
 		t.Fatalf("handler args = %v, want [\"old api\"]", rec.args)
+	}
+}
+
+// TestCommandParsesDeclaredFlags covers AS-104 in the TUI face: a command's
+// declared flags are parsed off the lexed slash line through the shared path, so
+// a flag is honored even after a positional and an undeclared flag is a usage
+// error the handler never sees — the handler reads flags from its context, never
+// hand-matching --flag on args[0]. (The CLI face asserts the same behavior in
+// internal/cli.)
+func TestCommandParsesDeclaredFlags(t *testing.T) {
+	var called, gotApply bool
+	var gotArgs []string
+	clean := command.Command{
+		Name:  "clean",
+		Mode:  command.Inline,
+		Flags: func(fs *flag.FlagSet) { fs.Bool("apply", false, "confirm") },
+		Run: func(ctx context.Context, args []string) (command.Output, error) {
+			called, gotApply, gotArgs = true, command.FlagsFrom(ctx).Bool("apply"), args
+			return command.Output{Text: "ok"}, nil
+		},
+	}
+	reg := sampleRegistry(t, clean)
+
+	// A flag written after a positional is still parsed; only the positional reaches
+	// the handler.
+	m := newCommandModel(t, reg)
+	m.textarea.SetValue("/clean blk1 --apply")
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = runCmd(t, next.(model), cmd)
+	if !called || !gotApply {
+		t.Fatalf("apply flag not parsed (called=%v apply=%v)", called, gotApply)
+	}
+	if !reflect.DeepEqual(gotArgs, []string{"blk1"}) {
+		t.Fatalf("handler args = %v, want [blk1]", gotArgs)
+	}
+
+	// An undeclared flag is a usage error; the handler never runs.
+	called = false
+	m2 := newCommandModel(t, reg)
+	m2.textarea.SetValue("/clean --nope")
+	next2, cmd2 := m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m2 = next2.(model)
+	if cmd2 != nil {
+		t.Fatal("an undeclared flag should not dispatch a command")
+	}
+	if called {
+		t.Fatal("handler ran on an undeclared flag")
+	}
+	if len(m2.segs) != 1 || m2.segs[0].kind != segError {
+		t.Fatalf("expected one error segment, got %+v", m2.segs)
 	}
 }
 

@@ -217,8 +217,8 @@ func (a *App) runLeaf(cmd *Command, args []string, path string) error {
 	}
 	// stdlib flag stops at the first positional, but D-CLI-4 needs flags to work
 	// after the prompt (`smith run "…" --output json`), so permute flags ahead of
-	// positionals first.
-	if err := fs.Parse(reorder(fs, args)); err != nil {
+	// positionals first — through the same helper the slash face uses (AS-104).
+	if err := fs.Parse(command.PermuteFlags(fs, args)); err != nil {
 		return Usagef("%s: %v", path, err)
 	}
 
@@ -304,48 +304,6 @@ func pick(prefix, s string) string {
 		return s
 	}
 	return " " + s
-}
-
-// reorder permutes args so every flag precedes the positionals, letting the
-// stdlib flag parser (which stops at the first non-flag) accept flags written
-// after positionals — `smith run "prompt" --output json`. A bare "--" ends flag
-// parsing: everything after it is positional. A flag that takes a value
-// (anything but a bool) carries its following token along when not written as
-// `--flag=value`.
-func reorder(fs *flag.FlagSet, args []string) []string {
-	var flags, positional []string
-	for i := 0; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--":
-			positional = append(positional, args[i+1:]...)
-			return append(flags, positional...)
-		case len(a) > 1 && a[0] == '-':
-			flags = append(flags, a)
-			// `--name=value` is self-contained; a non-bool `--name value` needs the
-			// next token too.
-			if !strings.Contains(a, "=") && takesValue(fs, a) && i+1 < len(args) {
-				i++
-				flags = append(flags, args[i])
-			}
-		default:
-			positional = append(positional, a)
-		}
-	}
-	return append(flags, positional...)
-}
-
-// takesValue reports whether the flag token names a registered non-bool flag (so
-// the next token is its value). Unknown flags are treated as value-less; flag's
-// own parser then reports the error.
-func takesValue(fs *flag.FlagSet, token string) bool {
-	name := strings.TrimLeft(token, "-")
-	f := fs.Lookup(name)
-	if f == nil {
-		return false
-	}
-	bf, ok := f.Value.(interface{ IsBoolFlag() bool })
-	return !ok || !bf.IsBoolFlag()
 }
 
 // find returns the command named name, or nil.

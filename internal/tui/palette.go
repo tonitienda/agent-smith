@@ -206,18 +206,28 @@ func (m model) dispatchCommand() (tea.Model, tea.Cmd) {
 		m.appendSegment(segment{kind: segError, text: msg, done: true})
 		return m, nil
 	}
+	// Parse the command's declared flags off the lexed tokens before arity: both
+	// faces strip flags through this one path, so a slash command and its
+	// subcommand never disagree, and no handler hand-matches --flag on args[0]
+	// (AS-104). Slash lexing (command.Parse) already ran, so this only permutes
+	// and parses the tokens.
+	ctx, args, err := cmd.ParseFlags(context.Background(), args)
+	if err != nil {
+		m.appendSegment(segment{kind: segError, text: fmt.Sprintf("/%s: %v", cmd.Name, err), done: true})
+		return m, nil
+	}
 	if err := cmd.CheckArity(args); err != nil {
 		m.appendSegment(segment{kind: segError, text: fmt.Sprintf("/%s: %v", cmd.Name, err), done: true})
 		return m, nil
 	}
-	return m, runCommand(cmd, args)
+	return m, runCommand(ctx, cmd, args)
 }
 
 // runCommand executes a command's handler off the Update loop; the result
-// returns as a commandDoneMsg.
-func runCommand(c command.Command, args []string) tea.Cmd {
+// returns as a commandDoneMsg. ctx carries any flags ParseFlags resolved.
+func runCommand(ctx context.Context, c command.Command, args []string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := c.Run(context.Background(), args)
+		out, err := c.Run(ctx, args)
 		return commandDoneMsg{cmd: c, out: out, err: err}
 	}
 }
@@ -324,7 +334,7 @@ func (m model) openPanelByName(name string) (tea.Model, tea.Cmd) {
 		m.appendSegment(segment{kind: segNotice, text: "finish or cancel the current turn (Esc) before opening a panel", done: true})
 		return m, nil
 	}
-	return m, runCommand(cmd, nil)
+	return m, runCommand(context.Background(), cmd, nil)
 }
 
 // panelOpen reports whether a full-screen command panel is showing.

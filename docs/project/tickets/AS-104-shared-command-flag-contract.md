@@ -1,7 +1,7 @@
 ---
 id: AS-104
 title: Thread a shared flag contract through the command catalog
-status: ready-to-implement
+status: done
 github_issue:
 depends_on: [AS-090]
 area: commands
@@ -11,7 +11,24 @@ source: AS-090
 
 # AS-104 · Thread a shared flag contract through the command catalog
 
-**Status: ready to implement**
+**Status: done**
+
+## Resolution
+
+A command declares its flags once via a new `command.Command.Flags func(*flag.FlagSet)`
+binder (mirroring `internal/cli.Command.Flags`). Both faces parse them through the
+one shared path `Command.ParseFlags` before `Run`: it permutes flag tokens ahead of
+positionals via the exported `command.PermuteFlags` — the same helper `internal/cli`
+now uses (its private `reorder`/`takesValue` were removed) — parses with stdlib
+`flag.FlagSet`, and carries the parsed values to the handler on its context
+(`command.WithFlags`/`FlagsFrom`). The `command.Handler` signature is unchanged, so
+no handler that ignores flags was touched. `/clean` is migrated off `args[0]`
+matching: it declares `--apply/--undo/--cancel` and reads them via
+`FlagsFrom(ctx).Bool(...)`. Slash lexing (`command.Parse`) stays isolated — it runs
+first and `ParseFlags` only ever sees already-tokenized args. TUI and CLI tests
+assert equivalent behavior for a flag after a positional and for an undeclared flag.
+The remaining mode-flag commands (`/init`, `/rewind`, `/compact`) are migrated by
+the follow-on AS-105.
 
 ## Description
 
@@ -41,16 +58,16 @@ and honored identically by both faces.
 
 ## Acceptance criteria
 
-- [ ] A command can declare command-specific flags once on the shared descriptor,
+- [x] A command can declare command-specific flags once on the shared descriptor,
       parsed with stdlib `flag.FlagSet`.
-- [ ] Both the TUI slash form and the `smith <verb>` subcommand parse those flags
+- [x] Both the TUI slash form and the `smith <verb>` subcommand parse those flags
       through one path; neither hand-matches `--flag` on `args[0]`.
-- [ ] At least one mode-flag command (`/clean`, `/init`, `/rewind`, or
+- [x] At least one mode-flag command (`/clean`, `/init`, `/rewind`, or
       `/compact`) is migrated off ad-hoc `args[0]` flag matching.
-- [ ] TUI and CLI tests assert equivalent flag behavior (including an unknown
+- [x] TUI and CLI tests assert equivalent flag behavior (including an unknown
       flag and a flag written after a positional) for a migrated command.
-- [ ] No new external dependencies; slash lexing stays isolated from flag parsing.
-- [ ] Test updates follow the Classical testing strategy for the touched area.
+- [x] No new external dependencies; slash lexing stays isolated from flag parsing.
+- [x] Test updates follow the Classical testing strategy for the touched area.
 
 ## Dependencies
 

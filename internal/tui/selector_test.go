@@ -32,7 +32,7 @@ func openTestSelector(t *testing.T, sel command.Selector) model {
 	if !ok {
 		t.Fatal("clean not registered")
 	}
-	m = runCmd(t, m, runCommand(cmd, nil))
+	m = runCmd(t, m, runCommand(context.Background(), cmd, nil))
 	if !m.selectorOpen() {
 		t.Fatal("selector did not open")
 	}

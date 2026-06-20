@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tonitienda/agent-smith/internal/budget"
+	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
@@ -91,7 +92,7 @@ func TestCleanSelectorBuildsAndApplies(t *testing.T) {
 	appendUserTextID(t, ctl, "blk_keepme00", "keep this one")
 	appendUserTextID(t, ctl, "blk_dropme00", strings.Repeat("drop this content ", 20))
 
-	out, err := ctl.cmdClean(context.TODO(), nil)
+	out, err := runClean(t, ctl)
 	if err != nil {
 		t.Fatalf("/clean (no args): %v", err)
 	}
@@ -132,7 +133,7 @@ func TestCleanSelectorBuildsAndApplies(t *testing.T) {
 	}
 
 	// The excluded block now appears in a fresh selector's archive and restores.
-	out2, err := ctl.cmdClean(context.TODO(), nil)
+	out2, err := runClean(t, ctl)
 	if err != nil {
 		t.Fatalf("/clean (no args) after apply: %v", err)
 	}
@@ -153,6 +154,23 @@ func TestCleanSelectorBuildsAndApplies(t *testing.T) {
 	}
 }
 
+// runClean dispatches /clean exactly as a face does (AS-104): it looks up the
+// registered command and parses the args through its declared flags before
+// running the handler, so the tests exercise the real flag-parsing path
+// (--apply/--undo/--cancel) instead of reaching past it into the handler.
+func runClean(t *testing.T, ctl *chatSession, args ...string) (command.Output, error) {
+	t.Helper()
+	c, ok := chatCommands(ctl).Lookup("clean")
+	if !ok {
+		t.Fatal("clean not registered")
+	}
+	ctx, rest, err := c.ParseFlags(context.TODO(), args)
+	if err != nil {
+		return command.Output{}, err
+	}
+	return c.Run(ctx, rest)
+}
+
 // TestCleanPreviewApplyUndo covers the /clean wiring (AS-028): a preview stages
 // the removal without touching the log, --apply drops the block from the window
 // via an appended exclusion, and --undo restores it exactly.
@@ -162,7 +180,7 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 	appendUserTextID(t, ctl, "blk_dropme00", strings.Repeat("drop this content ", 20))
 
 	before := ctl.sess.Log.Len()
-	out, err := ctl.cmdClean(context.TODO(), []string{"blk_dropme00"})
+	out, err := runClean(t, ctl, "blk_dropme00")
 	if err != nil {
 		t.Fatalf("/clean preview: %v", err)
 	}
@@ -176,7 +194,7 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 		t.Fatal("/clean preview did not stage a pending plan")
 	}
 
-	if _, err := ctl.cmdClean(context.TODO(), []string{"--apply"}); err != nil {
+	if _, err := runClean(t, ctl, "--apply"); err != nil {
 		t.Fatalf("/clean --apply: %v", err)
 	}
 	if liveContains(t, ctl, "blk_dropme00") {
@@ -189,7 +207,7 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 		t.Error("pending plan not cleared after apply")
 	}
 
-	if _, err := ctl.cmdClean(context.TODO(), []string{"--undo"}); err != nil {
+	if _, err := runClean(t, ctl, "--undo"); err != nil {
 		t.Fatalf("/clean --undo: %v", err)
 	}
 	if !liveContains(t, ctl, "blk_dropme00") {
@@ -204,10 +222,10 @@ func TestCleanCancelAndInvalidation(t *testing.T) {
 	ctl := newTestController(t)
 	appendUserTextID(t, ctl, "blk_target00", strings.Repeat("content ", 20))
 
-	if _, err := ctl.cmdClean(context.TODO(), []string{"blk_target00"}); err != nil {
+	if _, err := runClean(t, ctl, "blk_target00"); err != nil {
 		t.Fatalf("/clean preview: %v", err)
 	}
-	if _, err := ctl.cmdClean(context.TODO(), []string{"--cancel"}); err != nil {
+	if _, err := runClean(t, ctl, "--cancel"); err != nil {
 		t.Fatalf("/clean --cancel: %v", err)
 	}
 	if ctl.pendingClean != nil {
@@ -215,13 +233,13 @@ func TestCleanCancelAndInvalidation(t *testing.T) {
 	}
 
 	// Stage again, then swap sessions; --apply must refuse the stale plan.
-	if _, err := ctl.cmdClean(context.TODO(), []string{"blk_target00"}); err != nil {
+	if _, err := runClean(t, ctl, "blk_target00"); err != nil {
 		t.Fatalf("/clean preview: %v", err)
 	}
 	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
 		t.Fatalf("/clear: %v", err)
 	}
-	out, err := ctl.cmdClean(context.TODO(), []string{"--apply"})
+	out, err := runClean(t, ctl, "--apply")
 	if err != nil {
 		t.Fatalf("/clean --apply after /clear: %v", err)
 	}
