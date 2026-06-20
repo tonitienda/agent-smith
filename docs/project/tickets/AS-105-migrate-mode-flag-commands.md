@@ -1,7 +1,7 @@
 ---
 id: AS-105
 title: Migrate the remaining mode-flag commands onto the shared flag contract
-status: ready-to-implement
+status: done
 github_issue:
 depends_on: [AS-104]
 area: commands

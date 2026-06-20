@@ -154,15 +154,22 @@ func TestCleanSelectorBuildsAndApplies(t *testing.T) {
 	}
 }
 
-// runClean dispatches /clean exactly as a face does (AS-104): it looks up the
-// registered command and parses the args through its declared flags before
-// running the handler, so the tests exercise the real flag-parsing path
-// (--apply/--undo/--cancel) instead of reaching past it into the handler.
+// runClean dispatches /clean exactly as a face does (AS-104).
 func runClean(t *testing.T, ctl *chatSession, args ...string) (command.Output, error) {
 	t.Helper()
-	c, ok := chatCommands(ctl).Lookup("clean")
+	return runChatCommand(t, ctl, "clean", args...)
+}
+
+// runChatCommand dispatches a registered chat command exactly as a face does
+// (AS-104/AS-105): it looks up the command and parses the args through its
+// declared flags before running the handler, so a test exercises the real
+// flag-parsing path (--apply/--undo/--cancel, --mark "<label>") instead of
+// reaching past it into the handler.
+func runChatCommand(t *testing.T, ctl *chatSession, name string, args ...string) (command.Output, error) {
+	t.Helper()
+	c, ok := chatCommands(ctl).Lookup(name)
 	if !ok {
-		t.Fatal("clean not registered")
+		t.Fatalf("%s not registered", name)
 	}
 	ctx, rest, err := c.ParseFlags(context.TODO(), args)
 	if err != nil {

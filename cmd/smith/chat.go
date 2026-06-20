@@ -254,8 +254,14 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith rewind", `smith rewind --mark "before refactor"`},
-		Run:           ctl.cmdRewind,
+		Flags: func(fs *flag.FlagSet) {
+			fs.String("mark", "", "drop a named checkpoint at the current point")
+			fs.Bool("apply", false, "confirm the staged rewind")
+			fs.Bool("undo", false, "reverse the most recent rewind")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Examples: []string{"smith rewind", `smith rewind --mark "before refactor"`},
+		Run:      ctl.cmdRewind,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "compact",
@@ -263,8 +269,13 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Args:          "[--apply | --undo | --cancel]",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith compact", "smith compact --apply"},
-		Run:           ctl.cmdCompact,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "confirm the staged compaction")
+			fs.Bool("undo", false, "restore the most recent compaction")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Examples: []string{"smith compact", "smith compact --apply"},
+		Run:      ctl.cmdCompact,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "clear",
@@ -316,8 +327,12 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Args:          "[--apply | --cancel]",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith init", "smith init --apply"},
-		Run:           ctl.cmdInit,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "write the staged scaffold to disk")
+			fs.Bool("cancel", false, "discard the staged scaffold")
+		},
+		Examples: []string{"smith init", "smith init --apply"},
+		Run:      ctl.cmdInit,
 	})
 	mustRegisterCommand(reg, seriousCommand(ctl))
 	return reg
