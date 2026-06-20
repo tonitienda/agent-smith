@@ -34,7 +34,7 @@ func runShell(t *testing.T, s *Shell, command string) tool.Output {
 	if err != nil {
 		t.Fatalf("marshal args: %v", err)
 	}
-	out, err := s.Run(context.Background(), args)
+	out, err := s.Run(t.Context(), args)
 	if err != nil {
 		t.Fatalf("Run returned a Go error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestShellEmptyCommand(t *testing.T) {
 
 func TestShellInvalidArguments(t *testing.T) {
 	s, _ := newShell(t)
-	out, err := s.Run(context.Background(), json.RawMessage(`{"command": 5}`))
+	out, err := s.Run(t.Context(), json.RawMessage(`{"command": 5}`))
 	if err != nil {
 		t.Fatalf("Run returned a Go error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestShellDenialReportedAsFeedback(t *testing.T) {
 			Arguments: args,
 		},
 	}
-	result, err := rt.Execute(context.Background(), call)
+	result, err := rt.Execute(t.Context(), call)
 	if err != nil {
 		t.Fatalf("Execute returned a Go error: %v", err)
 	}
