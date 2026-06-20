@@ -19,20 +19,20 @@ The script intentionally delegates to Make targets so CI, Claude, Codex, GrokBui
 
 ## Harness command contract
 
-The harness defines four named entry points. Each is a stable name with a documented purpose; agents pick the smallest one that covers what they changed. The named `./scripts/harness/*.sh` wrappers land in AS-100 — until then use the **current command** column directly, which is exactly what each wrapper will run.
+The harness defines four named entry points, each a thin script under `scripts/harness/`. Agents pick the smallest one that covers what they changed. Every script prints each command before running it, preserves the underlying exit code, and writes a concise (git-ignored) summary under `.cache/harness/`. Run them from the repository root.
 
-| Entry point | When to use | Current command |
-| --- | --- | --- |
-| **quick** | Inner loop while editing: fast format + affected-package tests for quick feedback. | `make fmt && go test ./<changed-packages>/...` |
-| **full** | Before every commit or handoff. The canonical gate; required to pass before pushing. | `./scripts/agent-quality-gate.sh` (`make fmt test vet lint`) |
-| **arch** | After moving packages, adding interfaces, or changing dependency direction. | `go test ./internal/archtest/...` |
-| **ci-local** | Before pushing a larger branch: approximate every CI job locally, in job order. | `make build && make test && make vet && make lint` |
+| Entry point | When to use | Script | Runs |
+| --- | --- | --- | --- |
+| **quick** | Inner loop while editing: fast format + affected-package tests for quick feedback. | `scripts/harness/quick.sh [packages...]` | `make fmt`, then `go test` on the given packages (default `./...`) |
+| **full** | Before every commit or handoff. The canonical gate; required to pass before pushing. | `scripts/harness/full.sh` | `./scripts/agent-quality-gate.sh` (`make fmt test vet lint`) |
+| **arch** | After moving packages, adding interfaces, or changing dependency direction. | `scripts/harness/arch.sh` | `go test ./internal/archtest/...` |
+| **ci-local** | Before pushing a larger branch: approximate every CI job locally, in job order. | `scripts/harness/ci-local.sh` | `make build && make test && make vet && make lint` |
 
 `full` is a superset of `quick` and `arch`; running `full` satisfies them. Use `quick`/`arch` only to shorten the inner loop, never as a substitute for `full` before handoff.
 
 ### CI/local parity
 
-Each CI job maps to a local command. If CI gains or changes a check, update this table and the harness scripts in the same change.
+Each CI job maps to a local command (`scripts/harness/ci-local.sh` runs them in this order). If CI gains or changes a check, update this table and the harness scripts in the same change.
 
 | CI job (`.github/workflows/ci.yml`) | Step | Local command |
 | --- | --- | --- |
