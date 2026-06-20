@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func write(t *testing.T, dir, name, content string) {
@@ -77,7 +78,7 @@ func TestMakeTargetsIgnoresNonTargets(t *testing.T) {
 		"\tgo test ./...",
 	}, "\n"))
 
-	got := makeTargets(dir)
+	got := makeTargets(os.DirFS(dir))
 	for _, bad := range []string{"VAR", "OTHER", "indented"} {
 		if got[bad] {
 			t.Errorf("parsed non-target %q as a target: %v", bad, got)
@@ -231,6 +232,36 @@ func TestApplyWritesScaffold(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
 			t.Errorf("expected %s on disk: %v", rel, err)
 		}
+	}
+}
+
+// The inspection helpers read through fs.FS, so they can be driven from an
+// in-memory tree with no disk I/O — Makefile targets, layout dirs, and the
+// existing memory file are all discovered from fstest.MapFS.
+func TestInspectionHelpersOverMapFS(t *testing.T) {
+	fsys := fstest.MapFS{
+		"Makefile":      {Data: []byte("build:\n\tgo build ./...\ntest:\n\tgo test ./...\n")},
+		"go.mod":        {Data: []byte("module x\n")},
+		"cmd/x/main.go": {Data: []byte("package main\n")},
+		"internal/y.go": {Data: []byte("package y\n")},
+		"CLAUDE.md":     {Data: []byte("# rules\n")},
+	}
+	if got := makeTargets(fsys); !got["build"] || !got["test"] {
+		t.Errorf("makeTargets = %v, want build+test", got)
+	}
+	build, test, lint := commands(fsys)
+	if build != "make build" || test != "make test" || lint != "go vet ./..." {
+		t.Errorf("commands = %q/%q/%q", build, test, lint)
+	}
+	if got := layout(fsys); strings.Join(got, ",") != "cmd,internal" {
+		t.Errorf("layout = %v, want [cmd internal]", got)
+	}
+	path, content, err := existingMemoryFile(fsys, "/proj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != filepath.Join("/proj", "CLAUDE.md") || content != "# rules\n" {
+		t.Errorf("existingMemoryFile = %q, %q", path, content)
 	}
 }
 

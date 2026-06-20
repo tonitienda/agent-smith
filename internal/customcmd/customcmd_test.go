@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 // write drops a command file with content into dir, creating dir as needed.
@@ -121,6 +122,30 @@ func TestLoadMissingDirsAreFine(t *testing.T) {
 	}
 	if len(cmds) != 0 {
 		t.Fatalf("got %d commands, want 0", len(cmds))
+	}
+}
+
+// TestLoadFSScansInMemoryTree exercises the fs.FS scanner directly with an
+// in-memory tree, covering discovery and filtering without touching disk. With no
+// base the Source is the file name within the tree.
+func TestLoadFSScansInMemoryTree(t *testing.T) {
+	fsys := fstest.MapFS{
+		"ok.md":       {Data: []byte("---\ndescription: D\n---\nbody $1")},
+		"notes.txt":   {Data: []byte("ignored")},
+		"bad name.md": {Data: []byte("skipped: space in name")},
+	}
+	cmds, err := loadFS(fsys, "", "project")
+	if err != nil {
+		t.Fatalf("loadFS: %v", err)
+	}
+	if len(cmds) != 1 || cmds[0].Name != "ok" {
+		t.Fatalf("got %+v, want only [ok]", cmds)
+	}
+	if cmds[0].Source != "ok.md" {
+		t.Errorf("Source = %q, want ok.md", cmds[0].Source)
+	}
+	if cmds[0].Description != "D" || cmds[0].Expand([]string{"x"}) != "body x" {
+		t.Errorf("command not parsed: %+v", cmds[0])
 	}
 }
 

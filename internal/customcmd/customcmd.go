@@ -28,6 +28,8 @@
 package customcmd
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -139,9 +141,19 @@ func loadDir(dir, scope string) ([]Command, error) {
 	if dir == "" {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(dir)
+	return loadFS(os.DirFS(dir), dir, scope)
+}
+
+// loadFS scans fsys — the filesystem rooted at base — for command files, reading
+// each through io/fs so the discovery logic is decoupled from the OS and testable
+// with fstest.MapFS. base is used only to attribute each command's Source to an
+// absolute on-disk path; pass "" when scanning an in-memory tree, in which case
+// Source is the file name within fsys. os.DirFS bounds reads to base, so a file
+// cannot be read from outside the scanned root.
+func loadFS(fsys fs.FS, base, scope string) ([]Command, error) {
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
@@ -157,29 +169,38 @@ func loadDir(dir, scope string) ([]Command, error) {
 		if name == "" || strings.ContainsAny(name, " \t\n/") {
 			continue
 		}
-		path := filepath.Join(dir, e.Name())
-		raw, err := os.ReadFile(path)
+		raw, err := fs.ReadFile(fsys, e.Name())
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, fs.ErrNotExist) {
 				continue // raced away between ReadDir and read
 			}
 			return nil, err
 		}
 		desc, hint, body := parseFrontmatter(string(raw))
-		abs, err := filepath.Abs(path)
-		if err != nil {
-			abs = path
-		}
 		cmds = append(cmds, Command{
 			Name:        name,
 			Description: desc,
 			ArgHint:     hint,
-			Source:      abs,
+			Source:      source(base, e.Name()),
 			Scope:       scope,
 			body:        body,
 		})
 	}
 	return cmds, nil
+}
+
+// source builds a discovered file's display path: the absolute on-disk path of
+// base/name when base is set, or name alone within an in-memory tree when it
+// is "".
+func source(base, name string) string {
+	if base == "" {
+		return name
+	}
+	p := filepath.Join(base, name)
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return p
 }
 
 // parseFrontmatter splits an optional `---`-fenced frontmatter from the body and

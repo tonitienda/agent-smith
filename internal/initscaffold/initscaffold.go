@@ -18,7 +18,9 @@ package initscaffold
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -75,26 +77,29 @@ type Plan struct {
 func (p Plan) Empty() bool { return len(p.Changes) == 0 }
 
 // Scan inspects wd and builds the proposed plan without touching the filesystem.
+// Reads go through an fs.FS rooted at wd (os.DirFS), so the inspection is bounded
+// to the project tree and testable with an in-memory filesystem.
 func Scan(wd string) (Plan, error) {
 	abs, err := filepath.Abs(wd)
 	if err != nil {
 		return Plan{}, fmt.Errorf("resolve working dir: %w", err)
 	}
+	fsys := os.DirFS(abs)
 
 	var p Plan
-	if err := p.planMemory(abs); err != nil {
+	if err := p.planMemory(fsys, abs); err != nil {
 		return Plan{}, err
 	}
-	p.planScaffold(abs)
+	p.planScaffold(fsys, abs)
 	return p, nil
 }
 
 // planMemory proposes the memory file: it amends an existing project-level
 // AGENT/AGENTS/CLAUDE.md with any missing sections, or creates AGENT.md.
-func (p *Plan) planMemory(wd string) error {
-	sections := memorySections(wd)
+func (p *Plan) planMemory(fsys fs.FS, wd string) error {
+	sections := memorySections(fsys)
 
-	target, existing, err := existingMemoryFile(wd)
+	target, existing, err := existingMemoryFile(fsys, wd)
 	if err != nil {
 		return err
 	}
@@ -130,17 +135,18 @@ func (p *Plan) planMemory(wd string) error {
 }
 
 // planScaffold proposes the .agent-smith/ files that do not yet exist.
-func (p *Plan) planScaffold(wd string) {
-	files := []struct{ path, content string }{
-		{filepath.Join(wd, ".agent-smith", "config.json"), configStub},
-		{filepath.Join(wd, ".agent-smith", "commands", "README.md"), commandsReadme},
+func (p *Plan) planScaffold(fsys fs.FS, wd string) {
+	files := []struct{ rel, content string }{
+		{".agent-smith/config.json", configStub},
+		{".agent-smith/commands/README.md", commandsReadme},
 	}
 	for _, f := range files {
-		if _, err := os.Stat(f.path); err == nil {
-			p.Skipped = append(p.Skipped, rel(wd, f.path)+" already exists")
+		abs := filepath.Join(wd, filepath.FromSlash(f.rel))
+		if _, err := fs.Stat(fsys, f.rel); err == nil {
+			p.Skipped = append(p.Skipped, rel(wd, abs)+" already exists")
 			continue
 		}
-		p.add(wd, f.path, "", f.content)
+		p.add(wd, abs, "", f.content)
 	}
 }
 
@@ -214,11 +220,11 @@ type section struct {
 func (s section) heading() string { return "## " + s.title }
 func (s section) render() string  { return s.heading() + "\n" + s.body }
 
-// memorySections builds the memory-file sections from a deterministic scan of wd.
-func memorySections(wd string) []section {
+// memorySections builds the memory-file sections from a deterministic scan of fsys.
+func memorySections(fsys fs.FS) []section {
 	var out []section
 
-	build, test, lint := commands(wd)
+	build, test, lint := commands(fsys)
 	if build != "" || test != "" || lint != "" {
 		var b strings.Builder
 		if build != "" {
@@ -233,7 +239,7 @@ func memorySections(wd string) []section {
 		out = append(out, section{title: "Build & test", body: b.String()})
 	}
 
-	if dirs := layout(wd); len(dirs) > 0 {
+	if dirs := layout(fsys); len(dirs) > 0 {
 		var b strings.Builder
 		for _, d := range dirs {
 			b.WriteString("- `" + d + "/`\n")
@@ -246,8 +252,8 @@ func memorySections(wd string) []section {
 // commands returns the project's build/test/lint commands. Makefile targets win
 // (they name the project's own entry points exactly); otherwise language
 // defaults are used based on the manifest present. Any of the three may be "".
-func commands(wd string) (build, test, lint string) {
-	targets := makeTargets(wd)
+func commands(fsys fs.FS) (build, test, lint string) {
+	targets := makeTargets(fsys)
 	mk := func(target, fallback string) string {
 		if targets[target] {
 			return "make " + target
@@ -257,10 +263,10 @@ func commands(wd string) (build, test, lint string) {
 
 	var db, dt, dl string
 	switch {
-	case fileExists(filepath.Join(wd, "go.mod")):
+	case fileExists(fsys, "go.mod"):
 		db, dt, dl = "go build ./...", "go test ./...", "go vet ./..."
-	case fileExists(filepath.Join(wd, "package.json")):
-		s := packageScripts(wd)
+	case fileExists(fsys, "package.json"):
+		s := packageScripts(fsys)
 		if s["build"] {
 			db = "npm run build"
 		}
@@ -274,9 +280,9 @@ func commands(wd string) (build, test, lint string) {
 	return mk("build", db), mk("test", dt), mk("lint", dl)
 }
 
-// makeTargets returns the set of top-level targets declared in wd's Makefile.
-func makeTargets(wd string) map[string]bool {
-	data, err := os.ReadFile(filepath.Join(wd, "Makefile"))
+// makeTargets returns the set of top-level targets declared in the project's Makefile.
+func makeTargets(fsys fs.FS) map[string]bool {
+	data, err := fs.ReadFile(fsys, "Makefile")
 	if err != nil {
 		return nil
 	}
@@ -307,9 +313,9 @@ func makeTargets(wd string) map[string]bool {
 	return targets
 }
 
-// packageScripts returns the set of script names defined in wd's package.json.
-func packageScripts(wd string) map[string]bool {
-	data, err := os.ReadFile(filepath.Join(wd, "package.json"))
+// packageScripts returns the set of script names defined in the project's package.json.
+func packageScripts(fsys fs.FS) map[string]bool {
+	data, err := fs.ReadFile(fsys, "package.json")
 	if err != nil {
 		return nil
 	}
@@ -326,13 +332,13 @@ func packageScripts(wd string) map[string]bool {
 	return out
 }
 
-// layout returns the conventional source directories present in wd, in a stable
+// layout returns the conventional source directories present in fsys, in a stable
 // order, so the memory file points a newcomer at where the code lives.
-func layout(wd string) []string {
+func layout(fsys fs.FS) []string {
 	candidates := []string{"cmd", "internal", "pkg", "src", "lib", "app"}
 	var out []string
 	for _, d := range candidates {
-		if fi, err := os.Stat(filepath.Join(wd, d)); err == nil && fi.IsDir() {
+		if fi, err := fs.Stat(fsys, d); err == nil && fi.IsDir() {
 			out = append(out, d)
 		}
 	}
@@ -340,16 +346,16 @@ func layout(wd string) []string {
 	return out
 }
 
-// existingMemoryFile returns the project-level memory file to amend (and its
-// content), honoring the AS-032 filename precedence, or "" when none exists.
-func existingMemoryFile(wd string) (path, content string, err error) {
+// existingMemoryFile returns the project-level memory file to amend (its absolute
+// path, rooted at wd, and content), honoring the AS-032 filename precedence, or
+// "" when none exists.
+func existingMemoryFile(fsys fs.FS, wd string) (path, content string, err error) {
 	for _, name := range memory.Filenames {
-		p := filepath.Join(wd, name)
-		data, readErr := os.ReadFile(p)
+		data, readErr := fs.ReadFile(fsys, name)
 		switch {
 		case readErr == nil:
-			return p, string(data), nil
-		case os.IsNotExist(readErr):
+			return filepath.Join(wd, name), string(data), nil
+		case errors.Is(readErr, fs.ErrNotExist):
 			continue
 		default:
 			return "", "", fmt.Errorf("read %s: %w", name, readErr)
@@ -358,8 +364,8 @@ func existingMemoryFile(wd string) (path, content string, err error) {
 	return "", "", nil
 }
 
-func fileExists(path string) bool {
-	fi, err := os.Stat(path)
+func fileExists(fsys fs.FS, name string) bool {
+	fi, err := fs.Stat(fsys, name)
 	return err == nil && !fi.IsDir()
 }
 
