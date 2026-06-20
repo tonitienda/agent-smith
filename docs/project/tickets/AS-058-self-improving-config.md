@@ -27,7 +27,7 @@ source: PRD.md §7.25
 
 ## Acceptance criteria
 
-- [ ] A friction pattern recurring across ≥N sessions yields exactly one consolidated proposal with cross-session evidence.
+- [ ] A friction pattern recurring across ≥2 sessions yields exactly one consolidated proposal with cross-session evidence.
 - [ ] Every applied edit goes through diff preview; every proposal is dismissible with memory of the dismissal.
 - [ ] Proposals never auto-apply (propose_edit permission semantics, Appendix C.5).
 - [ ] Measurable claim: applying proposals reduces the measured friction in subsequent sessions (track via AS-030/AS-057 metrics).

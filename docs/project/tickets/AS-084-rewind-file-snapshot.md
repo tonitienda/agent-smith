@@ -26,6 +26,13 @@ The mechanism is open: per-checkpoint content snapshots of touched files, a shad
 - **Conflict handling:** never silently clobber. If the file changed since the snapshot by something outside Smith, the restore preview marks a conflict and requires explicit user choice; V1 may refuse conflicted restore rather than implement merge.
 - **Scope/UX:** file restore is opt-in via an explicit flag/action (`/rewind --restore-files` or equivalent) layered on the existing preview/apply confirmation. Conversation-only rewind remains the default.
 
+## Acceptance criteria
+
+- [ ] File snapshots are captured before any file write/edit tool execution and stored under the session data directory.
+- [ ] Running `/rewind --restore-files` restores the file state to the selected checkpoint.
+- [ ] If a file has been modified externally since the snapshot, the rewind preview flags a conflict and refuses to silently overwrite it.
+- [ ] Large files exceeding the size cap are skipped, and the skip is reported in the preview.
+
 ## Dependencies
 
 - AS-037 (`/rewind` checkpoints, preview, modified-files detection).
