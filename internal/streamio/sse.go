@@ -56,6 +56,5 @@ func (r *SSEReader) ReadEvent() ([]byte, error) {
 
 func trimSSELineEnding(line string) string {
 	line = strings.TrimSuffix(line, "\n")
-	line = strings.TrimSuffix(line, "\r")
-	return line
+	return strings.TrimSuffix(line, "\r")
 }
