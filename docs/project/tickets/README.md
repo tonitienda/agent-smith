@@ -127,7 +127,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-098](AS-098-architecture-contracts.md) | Document and test package architecture contracts | architecture | done | 095 |
 | [AS-099](AS-099-harness-quality-system.md) | Harness quality system design and command contract | quality | done | 095, 098 |
 | [AS-100](AS-100-harness-scripts.md) | Add quick, full, architecture, and CI-local harness scripts | quality | done | 099 |
-| [AS-101](AS-101-agent-hook-integration.md) | Agent and local hook integration for the harness | quality | ready | 100 |
+| [AS-101](AS-101-agent-hook-integration.md) | Agent and local hook integration for the harness | quality | done | 100 |
 | [AS-102](AS-102-quality-skills.md) | Repository skills for quality gates and CI triage | capability | ready | 099, 100 |
 | [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | ready | 100 |
 | [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | done | 090 |

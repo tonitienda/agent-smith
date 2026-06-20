@@ -1,0 +1,26 @@
+{
+  "_comment": "Sample Claude Code hook configuration for the Agent Smith harness. Merge the \"hooks\" block into your .claude/settings.json (or settings.local.json). PostToolUse runs the quick gate after edits for fast feedback; Stop runs the full gate before Claude finishes a turn so nothing is handed off un-gated. Both scripts print each command and preserve exit codes, so failures stay visible in the transcript.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/harness/quick.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./scripts/harness/full.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

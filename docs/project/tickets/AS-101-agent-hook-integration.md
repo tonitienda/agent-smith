@@ -1,7 +1,7 @@
 ---
 id: AS-101
 title: Agent and local hook integration for the harness
-status: ready-to-implement
+status: done
 github_issue: 184
 depends_on: [AS-100]
 area: quality
@@ -11,7 +11,17 @@ source: docs/projects/harness-quality-system.md
 
 # AS-101 · Agent and local hook integration for the harness
 
-**Status: ready to implement**
+**Status: done**
+
+Implemented: repo-owned Git hooks in `.githooks/` (`pre-commit` → quick gate,
+opt-in `pre-push` → full gate) with `scripts/harness/install-git-hooks.sh`
+installer (sets `core.hooksPath`, `--with-pre-push`, `--uninstall`); sample
+Claude hook config in `docs/examples/claude-harness-hooks.json`
+(PostToolUse → quick, Stop → full); and a Hook integration section in
+`docs/agent-quality-gates.md` covering local Git hooks, Claude, the Codex
+workflow, and future Smith lifecycle hooks. All surfaces delegate to the same
+`scripts/harness/*.sh` commands, which print each command and preserve exit
+codes so failures stay visible.
 
 ## Description
 

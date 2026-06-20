@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Repo-owned pre-commit hook: fast format + test feedback before a commit.
+# Installed by scripts/harness/install-git-hooks.sh (sets core.hooksPath).
+# Delegates to the harness so the check list lives in one place; the script
+# prints each command and preserves its exit code, so failures are visible.
+# Bypass for emergency local workflows: git commit --no-verify
+set -eu
+root=$(git rev-parse --show-toplevel)
+exec "$root/scripts/harness/quick.sh"

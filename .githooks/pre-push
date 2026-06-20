@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Repo-owned pre-push hook: the full quality gate before code leaves the machine.
+# Opt-in because the full gate is slower than the pre-commit check. Enable with
+#   scripts/harness/install-git-hooks.sh --with-pre-push
+# (which sets `git config harness.prePush true`); otherwise this is a no-op.
+# Delegates to the harness so the check list lives in one place; the script
+# prints each command and preserves its exit code, so failures are visible.
+# Bypass for emergency local workflows: git push --no-verify
+set -eu
+if [ "$(git config --bool harness.prePush 2>/dev/null || echo false)" != "true" ]; then
+	exit 0
+fi
+root=$(git rev-parse --show-toplevel)
+exec "$root/scripts/harness/full.sh"
