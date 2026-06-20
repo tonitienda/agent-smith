@@ -3,8 +3,9 @@
 This note records the **dependency direction** and **ownership** between Agent
 Smith's core packages, for humans and agents deciding where new code belongs. It
 complements [dependency boundaries](dependency-boundaries.md), which governs
-third-party imports; this page governs how core packages may depend on *each
-other*.
+third-party imports, and [interface conventions](interface-conventions.md), which
+governs when a seam should be an interface and where it lives; this page governs
+how core packages may depend on *each other*.
 
 The most load-bearing rules are enforced by a guard test
 (`internal/archtest/layering_test.go`), not by review, so the documentation and

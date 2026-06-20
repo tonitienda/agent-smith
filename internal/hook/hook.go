@@ -117,19 +117,24 @@ type Set struct {
 	byEvent map[Event][]hook
 }
 
-// configDecoder is the slice of the config the loader reads its hooks from; the
-// config package's *Config satisfies it via Decode. Kept as an interface so this
-// package does not import config (layering: config consumers depend on config,
-// not the reverse).
-type configDecoder interface {
+// configReader is the slice of the layered config the hook loader reads; the
+// config package's *Config satisfies it via Decode. Kept as a tiny consumer-side
+// interface so this package does not import config (layering: config consumers
+// depend on config, not the reverse) — the same AS-093 reader pattern as
+// budget/compact/mcp/permission ConfigFrom.
+type configReader interface {
 	Decode(path string, v any) (bool, error)
 }
 
 // Load reads the `hooks` array out of cfg and compiles it into a Set, returning
 // any per-spec warnings. A missing or empty `hooks` key yields an empty Set and
 // no error, so hooks are purely opt-in. A malformed `hooks` value (not an array)
-// is the only hard error.
-func Load(cfg configDecoder) (*Set, []Warning, error) {
+// is the only hard error. A nil cfg yields an empty Set, matching the opt-in
+// contract.
+func Load(cfg configReader) (*Set, []Warning, error) {
+	if cfg == nil {
+		return New(nil), nil, nil
+	}
 	var specs []Spec
 	ok, err := cfg.Decode("hooks", &specs)
 	if err != nil {

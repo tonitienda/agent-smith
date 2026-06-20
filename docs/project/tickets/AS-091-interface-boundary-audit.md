@@ -1,7 +1,7 @@
 ---
 id: AS-091
 title: Audit interfaces and move small seams to consumer packages
-status: ready-to-implement
+status: done
 github_issue: 161
 depends_on: []
 area: architecture
@@ -28,15 +28,24 @@ config value" near the package that consumes them.
 
 ## Acceptance criteria
 
-- [ ] Existing interfaces are classified as product boundary, consumer seam, or
-      unnecessary abstraction.
-- [ ] At least three non-product seams are shrunk, moved to the consumer package,
-      or replaced with concrete structs/functions.
-- [ ] Tests use smaller fakes or concrete helpers after the migration.
-- [ ] A short docs note records the interface convention for future agents.
-- [ ] Test updates also restructure affected tests to follow the Classical
-      testing strategy for the touched area, so the refactor improves both
-      production code and test structure.
+- [x] Existing interfaces are classified as product boundary, consumer seam, or
+      unnecessary abstraction. See
+      [docs/architecture/interface-conventions.md](../../architecture/interface-conventions.md).
+- [x] At least three non-product seams are shrunk, moved to the consumer package,
+      or replaced with concrete structs/functions. The duplicated config-reader
+      seam was unified to the AS-093 `configReader` name in `internal/hook` and
+      `internal/subagent` (it had drifted to `configDecoder`), and the
+      hand-written `Decode` test doubles for that seam were removed in favour of
+      the real `*config.Config` collaborator.
+- [x] Tests use smaller fakes or concrete helpers after the migration: the
+      `fakeDecoder` doubles in hook/subagent tests are gone, replaced by a real
+      config built from a temp JSON file.
+- [x] A short docs note records the interface convention for future agents:
+      [docs/architecture/interface-conventions.md](../../architecture/interface-conventions.md),
+      linked from the architecture README and package-contracts.
+- [x] Test updates restructure the affected hook/subagent config-load tests to
+      the Classical strategy: real in-process config collaborator over a guessed
+      double, deterministic and offline.
 
 ## Dependencies
 
