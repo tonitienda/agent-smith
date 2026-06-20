@@ -1,7 +1,7 @@
 ---
 id: AS-027
 title: Segment topic labeling engine
-status: ready-to-implement
+status: done
 github_issue: 27
 depends_on: [AS-006]
 area: context-wedge
@@ -26,11 +26,11 @@ source: PRD.md §5 (segmented store), §7.11, §10 Q4 (adjacent)
 
 ## Acceptance criteria
 
-- [ ] Every projected segment carries at least one deterministic topic/tag.
-- [ ] Labels are derived additively and never mutate original blocks (D3).
-- [ ] `/context` gains a "by topic" grouping based on these labels.
-- [ ] Labeling has zero provider-token cost and never blocks an interactive turn on a model call.
-- [ ] Tags are stable enough to be used by AS-029 as the first-pass candidate set.
+- [x] Every projected segment carries at least one deterministic topic/tag. (`internal/topic.Tags` always returns a coarse type tag; `composition.Segment.Tags`.)
+- [x] Labels are derived additively and never mutate original blocks (D3). (`topic.Tags` is a pure function over a read-only block.)
+- [x] `/context` gains a "by topic" grouping based on these labels. (`Composition.ByTopic` rollup + `SortTopic` ordering, rendered as the "By topic" section.)
+- [x] Labeling has zero provider-token cost and never blocks an interactive turn on a model call. (Deterministic heuristics only — file paths/modules, tool/command/skill/MCP attribution, kind/role; no model calls.)
+- [x] Tags are stable enough to be used by AS-029 as the first-pass candidate set. (Sorted, de-duplicated, deterministic; covered by `TestTagsDeterministic`.)
 
 ## Dependencies
 
