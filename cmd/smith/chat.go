@@ -252,19 +252,32 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "rewind",
 		Summary:       "Rewind the conversation to an earlier turn or mark",
 		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith rewind", `smith rewind --mark "before refactor"`},
-		Run:           ctl.cmdRewind,
+		Flags: func(fs *flag.FlagSet) {
+			fs.String("mark", "", "drop a named checkpoint at the current point")
+			fs.Bool("apply", false, "confirm the staged rewind")
+			fs.Bool("undo", false, "reverse the most recent rewind")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Examples: []string{"smith rewind", `smith rewind --mark "before refactor"`},
+		Run:      ctl.cmdRewind,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "compact",
 		Summary:       "Summarize older context into one reversible block",
 		Args:          "[--apply | --undo | --cancel]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith compact", "smith compact --apply"},
-		Run:           ctl.cmdCompact,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "confirm the staged compaction")
+			fs.Bool("undo", false, "restore the most recent compaction")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Examples: []string{"smith compact", "smith compact --apply"},
+		Run:      ctl.cmdCompact,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "clear",
@@ -314,10 +327,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Name:          "init",
 		Summary:       "Scaffold project config and an AGENT.md memory file",
 		Args:          "[--apply | --cancel]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith init", "smith init --apply"},
-		Run:           ctl.cmdInit,
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "write the staged scaffold to disk")
+			fs.Bool("cancel", false, "discard the staged scaffold")
+		},
+		Examples: []string{"smith init", "smith init --apply"},
+		Run:      ctl.cmdInit,
 	})
 	mustRegisterCommand(reg, seriousCommand(ctl))
 	return reg

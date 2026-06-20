@@ -860,16 +860,12 @@ func (s *chatSession) cleanUndo() (command.Output, error) {
 // and the .agent-smith/ scaffold — without touching the filesystem. The writes
 // happen only on /init --apply; /init --cancel discards the staged plan. A
 // re-run on an initialized project proposes only the missing pieces.
-func (s *chatSession) cmdInit(_ context.Context, args []string) (command.Output, error) {
-	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "--apply":
-			return s.initApply()
-		case "--cancel":
-			return s.initCancel()
-		default:
-			return command.Output{Text: "Unknown flag " + args[0] + ". Use /init, /init --apply, or /init --cancel."}, nil
-		}
+func (s *chatSession) cmdInit(ctx context.Context, _ []string) (command.Output, error) {
+	switch f := command.FlagsFrom(ctx); {
+	case f.Bool("apply"):
+		return s.initApply()
+	case f.Bool("cancel"):
+		return s.initCancel()
 	}
 	return s.initPreview()
 }
@@ -999,20 +995,18 @@ Nothing leaves the log — a removal is reversible, and the live thread keeps wo
 //   - /rewind --apply           confirm the staged preview, appending the rewind
 //   - /rewind --undo            reverse the most recent rewind
 //   - /rewind --cancel          discard the staged preview
-func (s *chatSession) cmdRewind(_ context.Context, args []string) (command.Output, error) {
-	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "--mark":
-			return s.rewindMark(strings.Join(args[1:], " "))
-		case "--apply":
-			return s.rewindApply()
-		case "--undo":
-			return s.rewindUndo()
-		case "--cancel":
-			return s.rewindCancel()
-		default:
-			return command.Output{}, fmt.Errorf("unknown /rewind flag %q (use --mark, --apply, --undo, or --cancel)", args[0])
-		}
+func (s *chatSession) cmdRewind(ctx context.Context, args []string) (command.Output, error) {
+	switch f := command.FlagsFrom(ctx); {
+	case f.Bool("apply"):
+		return s.rewindApply()
+	case f.Bool("undo"):
+		return s.rewindUndo()
+	case f.Bool("cancel"):
+		return s.rewindCancel()
+	case f.Set("mark"):
+		// The label travels with the flag through the shared string path; an empty
+		// one is "mark requested" and rewindMark explains the label is required.
+		return s.rewindMark(f.String("mark"))
 	}
 	if len(args) == 0 {
 		return s.rewindList(), nil
@@ -1181,18 +1175,14 @@ func rewindLabel(c rewind.Checkpoint) string {
 //   - /compact --apply   confirm: summarize with the cheap tier and append the compaction
 //   - /compact --undo    reverse the most recent compaction
 //   - /compact --cancel  discard the staged preview
-func (s *chatSession) cmdCompact(ctx context.Context, args []string) (command.Output, error) {
-	if len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "--apply":
-			return s.compactApply(ctx)
-		case "--undo":
-			return s.compactUndo()
-		case "--cancel":
-			return s.compactCancel()
-		default:
-			return command.Output{}, fmt.Errorf("unknown /compact flag %q (use --apply, --undo, or --cancel)", args[0])
-		}
+func (s *chatSession) cmdCompact(ctx context.Context, _ []string) (command.Output, error) {
+	switch f := command.FlagsFrom(ctx); {
+	case f.Bool("apply"):
+		return s.compactApply(ctx)
+	case f.Bool("undo"):
+		return s.compactUndo()
+	case f.Bool("cancel"):
+		return s.compactCancel()
 	}
 	return s.compactPreview()
 }

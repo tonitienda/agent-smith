@@ -75,13 +75,13 @@ func TestCompactApplyShrinksAndItemizesCost(t *testing.T) {
 	ctl, mock := newCompactController(t)
 	seedConversation(t, ctl)
 
-	if out, err := ctl.cmdCompact(context.TODO(), nil); err != nil {
+	if out, err := runChatCommand(t, ctl, "compact"); err != nil {
 		t.Fatalf("preview: %v", err)
 	} else if !strings.Contains(out.Text, "reclaim") {
 		t.Fatalf("preview did not offer a reclaim figure: %q", out.Text)
 	}
 
-	out, err := ctl.cmdCompact(context.TODO(), []string{"--apply"})
+	out, err := runChatCommand(t, ctl, "compact", "--apply")
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -117,13 +117,13 @@ func TestCompactUndoRestores(t *testing.T) {
 	ctl, _ := newCompactController(t)
 	seedConversation(t, ctl)
 
-	if _, err := ctl.cmdCompact(context.TODO(), nil); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact"); err != nil {
 		t.Fatalf("preview: %v", err)
 	}
-	if _, err := ctl.cmdCompact(context.TODO(), []string{"--apply"}); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact", "--apply"); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if _, err := ctl.cmdCompact(context.TODO(), []string{"--undo"}); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact", "--undo"); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	for _, id := range []string{"blk_old0user", "blk_old0asst", "blk_new0user"} {
@@ -139,10 +139,10 @@ func TestCompactCancelLeavesLog(t *testing.T) {
 	seedConversation(t, ctl)
 	before := len(ctl.sess.Log.Events())
 
-	if _, err := ctl.cmdCompact(context.TODO(), nil); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact"); err != nil {
 		t.Fatalf("preview: %v", err)
 	}
-	if _, err := ctl.cmdCompact(context.TODO(), []string{"--cancel"}); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact", "--cancel"); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 	if got := len(ctl.sess.Log.Events()); got != before {
@@ -237,7 +237,7 @@ func TestAutoCompactTriggersOnThreshold(t *testing.T) {
 		t.Error("auto-compaction emitted no UIAutoCompact notice")
 	}
 	// Reversible via the same /compact --undo path.
-	if _, err := ctl.cmdCompact(context.TODO(), []string{"--undo"}); err != nil {
+	if _, err := runChatCommand(t, ctl, "compact", "--undo"); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
 	for _, id := range []string{"blk_old0user", "blk_old0asst", "blk_new0user"} {

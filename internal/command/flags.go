@@ -44,6 +44,23 @@ func (f *Flags) lookup(name string) *flag.Flag {
 	return f.fs.Lookup(name)
 }
 
+// Set reports whether the flag was present on the command line, distinct from a
+// flag left at its zero value. A string flag like /rewind --mark needs this: an
+// empty label still means "mark requested" (the handler then explains the label
+// is required), where a bare /rewind with no --mark must list instead.
+func (f *Flags) Set(name string) bool {
+	if f == nil || f.fs == nil {
+		return false
+	}
+	seen := false
+	f.fs.Visit(func(fl *flag.Flag) {
+		if fl.Name == name {
+			seen = true
+		}
+	})
+	return seen
+}
+
 type flagsKey struct{}
 
 // WithFlags carries parsed flags on ctx for the handler. Faces call it through
