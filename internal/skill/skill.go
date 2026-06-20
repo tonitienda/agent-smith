@@ -177,7 +177,7 @@ func source(base string, parts ...string) string {
 	if base == "" {
 		return path.Join(parts...)
 	}
-	p := filepath.Join(append([]string{base}, parts...)...)
+	p := filepath.Join(base, filepath.Join(parts...))
 	if abs, err := filepath.Abs(p); err == nil {
 		return abs
 	}
