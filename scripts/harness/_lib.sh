@@ -17,6 +17,9 @@ harness_init() {
 		printf 'harness: %s\n' "$harness_name"
 		printf 'started: %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 	} >"$harness_summary"
+	trap 'exit 129' HUP
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
 	trap 'harness_finish $?' EXIT
 }
 
