@@ -55,8 +55,15 @@ type Skill struct {
 	// invoked.
 	Body string
 	// Meta carries frontmatter keys beyond name/description (e.g. expected_outcome,
-	// completion), preserved verbatim for AS-047 to interpret. Never nil.
+	// completion), preserved verbatim. Never nil. Flat by construction: it does not
+	// preserve the nested C.1 contract structure — Frontmatter does, for the
+	// skillcontract parser (AS-047).
 	Meta map[string]string
+	// Frontmatter is the raw text between the `---` fences (without the fences),
+	// preserved verbatim so the living-skills layer (AS-047) can parse the nested
+	// C.1 expectation contract that Meta's flat key/value view cannot represent.
+	// Empty when the skill has no frontmatter.
+	Frontmatter string
 }
 
 // UserDir returns the user-level skills directory — <UserConfigDir>/smith/skills,
@@ -148,7 +155,7 @@ func loadFS(fsys fs.FS, base, scope string) ([]Skill, error) {
 			}
 			return nil, err
 		}
-		name, desc, meta, body := parseFrontmatter(string(raw))
+		name, desc, meta, front, body := parseFrontmatter(string(raw))
 		if name == "" {
 			name = e.Name() // fall back to the directory name
 		}
@@ -165,6 +172,7 @@ func loadFS(fsys fs.FS, base, scope string) ([]Skill, error) {
 			Scope:       scope,
 			Body:        body,
 			Meta:        meta,
+			Frontmatter: front,
 		})
 	}
 	return skills, nil
@@ -191,13 +199,13 @@ func source(base string, parts ...string) string {
 // that ends exactly at the closing fence with no trailing newline. Content
 // without an opening fence (or with an unterminated one) is treated entirely as
 // the body, so a bare Markdown skill still loads with the directory name.
-func parseFrontmatter(content string) (name, desc string, meta map[string]string, body string) {
+func parseFrontmatter(content string) (name, desc string, meta map[string]string, frontmatter, body string) {
 	meta = map[string]string{}
 	// Normalize Windows CRLF so fence detection and line splitting work regardless
 	// of how the file was checked out or saved.
 	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
 	if len(lines) == 0 || lines[0] != "---" {
-		return "", "", meta, content
+		return "", "", meta, "", content
 	}
 	closeIdx := -1
 	for i := 1; i < len(lines); i++ {
@@ -207,8 +215,9 @@ func parseFrontmatter(content string) (name, desc string, meta map[string]string
 		}
 	}
 	if closeIdx < 0 {
-		return "", "", meta, content // unterminated fence: treat as plain body
+		return "", "", meta, "", content // unterminated fence: treat as plain body
 	}
+	frontmatter = strings.Join(lines[1:closeIdx], "\n")
 	for _, line := range lines[1:closeIdx] {
 		key, val, ok := strings.Cut(line, ":")
 		if !ok {
@@ -228,5 +237,5 @@ func parseFrontmatter(content string) (name, desc string, meta map[string]string
 		}
 	}
 	body = strings.TrimLeft(strings.Join(lines[closeIdx+1:], "\n"), "\n")
-	return name, desc, meta, body
+	return name, desc, meta, frontmatter, body
 }

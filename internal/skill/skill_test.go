@@ -22,7 +22,7 @@ func writeSkill(t *testing.T, dir, name, content string) {
 }
 
 func TestParseFrontmatter(t *testing.T) {
-	name, desc, meta, body := parseFrontmatter("---\nname: deep-research\ndescription: Research a topic\nexpected_outcome: a report\n---\nDo the research.\n")
+	name, desc, meta, front, body := parseFrontmatter("---\nname: deep-research\ndescription: Research a topic\nexpected_outcome: a report\n---\nDo the research.\n")
 	if name != "deep-research" {
 		t.Errorf("name = %q, want deep-research", name)
 	}
@@ -32,13 +32,16 @@ func TestParseFrontmatter(t *testing.T) {
 	if got := meta["expected_outcome"]; got != "a report" {
 		t.Errorf("meta[expected_outcome] = %q, want preserved", got)
 	}
+	if want := "name: deep-research\ndescription: Research a topic\nexpected_outcome: a report"; front != want {
+		t.Errorf("frontmatter = %q, want %q", front, want)
+	}
 	if body != "Do the research.\n" {
 		t.Errorf("body = %q", body)
 	}
 }
 
 func TestParseFrontmatterNoFence(t *testing.T) {
-	name, desc, _, body := parseFrontmatter("Just instructions, no frontmatter")
+	name, desc, _, _, body := parseFrontmatter("Just instructions, no frontmatter")
 	if name != "" || desc != "" {
 		t.Errorf("expected empty name/desc, got %q/%q", name, desc)
 	}
@@ -48,7 +51,7 @@ func TestParseFrontmatterNoFence(t *testing.T) {
 }
 
 func TestParseFrontmatterCRLF(t *testing.T) {
-	name, _, _, body := parseFrontmatter("---\r\nname: x\r\n---\r\nbody\r\n")
+	name, _, _, _, body := parseFrontmatter("---\r\nname: x\r\n---\r\nbody\r\n")
 	if name != "x" {
 		t.Errorf("name = %q, want x (CRLF should be normalized)", name)
 	}
@@ -60,7 +63,7 @@ func TestParseFrontmatterCRLF(t *testing.T) {
 func TestParseFrontmatterNoTrailingNewline(t *testing.T) {
 	// A file ending exactly at the closing fence (no trailing newline) must still
 	// parse its frontmatter rather than swallowing it into the body.
-	name, desc, _, body := parseFrontmatter("---\nname: x\ndescription: d\n---")
+	name, desc, _, _, body := parseFrontmatter("---\nname: x\ndescription: d\n---")
 	if name != "x" || desc != "d" {
 		t.Errorf("frontmatter not parsed: name=%q desc=%q", name, desc)
 	}
@@ -72,7 +75,7 @@ func TestParseFrontmatterNoTrailingNewline(t *testing.T) {
 func TestParseFrontmatterEmpty(t *testing.T) {
 	// An empty frontmatter section must be recognized so the fences don't leak
 	// into the body.
-	name, _, _, body := parseFrontmatter("---\n---\nthe body")
+	name, _, _, _, body := parseFrontmatter("---\n---\nthe body")
 	if name != "" {
 		t.Errorf("name = %q, want empty", name)
 	}
