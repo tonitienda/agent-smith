@@ -56,7 +56,7 @@ correctly placed consumer seams (AS-093).
 Three non-product seams shrunk, all in `internal/loop`: the `Engine` previously
 accepted the whole `*eventlog.Log`, `*tool.Runtime`, and `*tool.Registry` but used
 only `Append`/`Events`, `ExecuteBatch`, and `ProviderDefs` respectively. Replaced
-with consumer-side `eventLog`, `toolExecutor`, and `toolDefs` interfaces declared
+with consumer-side `EventLog`, `ToolExecutor`, and `ToolDefs` interfaces declared
 in the loop; constructor and field types now name just those methods (callers pass
 the same concrete types, so no call sites changed). The loop's tests keep their
 real collaborators per the Classical strategy — the narrowed seams simply make a

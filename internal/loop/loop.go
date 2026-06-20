@@ -67,27 +67,27 @@ const (
 	DefaultBackoffMax = 30 * time.Second
 )
 
-// eventLog is the append-and-read seam the loop needs from the session's event
+// EventLog is the append-and-read seam the loop needs from the session's event
 // log: it appends each new block as a turn streams and reads the live log back to
 // project model-facing context. Satisfied by *eventlog.Log; declared here, at the
 // consumer, so the loop depends on the two methods it uses rather than the whole
 // log type (AS-091).
-type eventLog interface {
+type EventLog interface {
 	Append(b schema.Block) (schema.Block, error)
 	Events() []schema.Block
 }
 
-// toolExecutor runs a batch of the model's client tool calls. Satisfied by
+// ToolExecutor runs a batch of the model's client tool calls. Satisfied by
 // *tool.Runtime; the loop only ever dispatches a batch, so it depends on that one
 // method rather than the whole runtime (AS-091).
-type toolExecutor interface {
+type ToolExecutor interface {
 	ExecuteBatch(ctx context.Context, calls []schema.Block, hooks tool.BatchHooks) ([]schema.Block, error)
 }
 
-// toolDefs supplies the registered tools' provider-facing definitions for each
+// ToolDefs supplies the registered tools' provider-facing definitions for each
 // request. Satisfied by *tool.Registry; the loop only reads the definitions, so
 // it depends on that one method rather than the whole registry (AS-091).
-type toolDefs interface {
+type ToolDefs interface {
 	ProviderDefs() []provider.ToolDef
 }
 
@@ -96,9 +96,9 @@ type toolDefs interface {
 // log and the projection are the session's single source of truth.
 type Engine struct {
 	provider provider.Provider
-	log      eventLog
-	runtime  toolExecutor
-	registry toolDefs
+	log      EventLog
+	runtime  ToolExecutor
+	registry ToolDefs
 	model    string
 
 	observer    Observer
@@ -233,7 +233,7 @@ func WithCacheHints(c provider.CacheHints) Option {
 // issuing every turn against model. It returns an error if any required
 // dependency is missing, so misconfiguration fails at construction rather than
 // mid-turn.
-func New(p provider.Provider, log eventLog, rt toolExecutor, reg toolDefs, model string, opts ...Option) (*Engine, error) {
+func New(p provider.Provider, log EventLog, rt ToolExecutor, reg ToolDefs, model string, opts ...Option) (*Engine, error) {
 	switch {
 	case p == nil:
 		return nil, errors.New("loop: provider is required")

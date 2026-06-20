@@ -91,8 +91,8 @@ interface as one of three kinds:
   naming just the method(s) that code needs, satisfied by a concrete type from
   another package. Prefer this over importing a whole subsystem. Examples: the
   `configReader`/`configDecoder` views over `*config.Config` (see below), and the
-  loop's `eventLog` (`Append`/`Events`), `toolExecutor` (`ExecuteBatch`), and
-  `toolDefs` (`ProviderDefs`) — each names the one or two methods the loop uses
+  loop's `EventLog` (`Append`/`Events`), `ToolExecutor` (`ExecuteBatch`), and
+  `ToolDefs` (`ProviderDefs`) — each names the one or two methods the loop uses
   instead of taking the whole `*eventlog.Log`, `*tool.Runtime`, or
   `*tool.Registry`.
 - **Unnecessary abstraction** — a single-implementation interface that exists
