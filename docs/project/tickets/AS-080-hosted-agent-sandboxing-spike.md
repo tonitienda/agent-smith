@@ -1,7 +1,7 @@
 ---
 id: AS-080
 title: "Spike: hosted multi-tenant live-agent sandboxing"
-status: needs-clarification
+status: ready-to-implement
 github_issue: 135
 depends_on: [AS-077, AS-059]
 area: security
@@ -11,7 +11,7 @@ source: PRD.md §9, D9, §10 Q12; GUI grilling session 2026-06
 
 # AS-080 · Spike — hosting a live agent for strangers
 
-**Status: needs clarification (spike)**
+**Status: ready to implement (spike)**
 
 ## Description
 
@@ -33,22 +33,14 @@ any build work — and the likely honest answer for the demo case is "don't host
 live agent for strangers; ship the read-only inspector (AS-079) as the public
 demo instead."
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Is a live hosted demo even in scope, or does AS-079 (read-only inspector
-   with canned sessions) satisfy the "let strangers try it" goal?** If the
-   inspector suffices, this spike closes as "won't do for now."
-2. **Isolation model** if pursued: container/microVM per session, ephemeral
-   filesystem, network egress policy, CPU/mem/time quotas — what's the minimum
-   that makes untrusted execution defensible?
-3. **Keys & cost:** whose API keys run the demo? A keyless / bring-your-own-key /
-   rate-limited shared-key model, and abuse/cost controls.
-4. **Tool surface:** does the demo expose only a read-only / no-network tool
-   subset, and is that still a useful product demo?
-5. **Relationship to AS-059** (plugin trust & sandboxing): can both share one
-   isolation substrate, or are they different threat models?
+- **Scope decision for now:** a live hosted demo for strangers is not in implementation scope. AS-079 (read-only inspector with canned/session-uploaded logs) is the public demo path.
+- **Purpose of this spike:** document the threat model and the explicit "not now" recommendation, and only sketch what would be required if the project later revisits hosted live execution.
+- **If revisited later:** the minimum bar would include per-session microVM/container isolation, ephemeral filesystem, no ambient secrets, strict egress policy, quotas, and a bring-your-own-key or abuse-capped key model. Those are follow-on product/security decisions, not prerequisites for AS-077/AS-078.
+- **Relationship to AS-059:** plugin trust and hosted stranger execution are different threat models. Share terminology where useful, but do not block the local plugin spike on hosted multi-tenancy.
 
-## Acceptance criteria (draft, confirm after clarification)
+## Acceptance criteria
 
 - [ ] A written recommendation: pursue hosted live demo, or close in favour of
       AS-079, with the threat model that drove the call.

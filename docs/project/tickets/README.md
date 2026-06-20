@@ -38,7 +38,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-014](AS-014-file-and-search-tools.md) | File & search tools (read/write/edit/glob/grep) | tools | done | 013 |
 | [AS-015](AS-015-shell-tool.md) | Shell tool | tools | done | 013, 016 |
 | [AS-016](AS-016-permission-model.md) | Permission model + security posture doc | security | done | 013 |
-| [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | **needs clarification** | 001 |
+| [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | ready | 001 |
 | [AS-018](AS-018-agentic-loop.md) | Agentic loop orchestrator | loop | done | 006, 008, 013 |
 | [AS-019](AS-019-parallel-tool-execution.md) | Parallel tool execution | loop | done | 018 |
 | [AS-020](AS-020-cost-accounting.md) | Token & cost accounting + `/cost` | cost | done | 009, 010, 022 |
@@ -48,10 +48,10 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-024](AS-024-tui-tool-transparency.md) | Tool transparency, diff review, permission prompts | tui | done | 021, 016, 067 |
 | [AS-025](AS-025-context-meter.md) | Always-visible context meter | tui | done | 006, 020, 021 |
 | [AS-026](AS-026-context-composition-view.md) | `/context` composition view (wedge) | context-wedge | done | 006, 020, 022 |
-| [AS-027](AS-027-segment-topic-labeling.md) | Segment topic labeling engine | context-wedge | **needs clarification** | 006 |
+| [AS-027](AS-027-segment-topic-labeling.md) | Segment topic labeling engine | context-wedge | ready | 006 |
 | [AS-028](AS-028-clean-manual.md) | `/clean` manual removal + preview/undo (wedge) | context-wedge | done | 006, 026 |
-| [AS-029](AS-029-clean-semantic.md) | `/clean "<topic>"` semantic matching (wedge) | context-wedge | **needs clarification** | 028, 027 |
-| [AS-030](AS-030-benchmark-guardrail-suite.md) | Cost/speed benchmark suite (D5 guardrail) | quality | **needs clarification** | 018, 020 |
+| [AS-029](AS-029-clean-semantic.md) | `/clean "<topic>"` semantic matching (wedge) | context-wedge | ready | 028, 027 |
+| [AS-030](AS-030-benchmark-guardrail-suite.md) | Cost/speed benchmark suite (D5 guardrail) | quality | ready | 018, 020 |
 | [AS-060](AS-060-session-capture-corpus.md) | Capture & compare real vendor session files before V1 schema freeze | schema | ready | 002, 003 |
 | [AS-061](AS-061-json-schema-publication.md) | Publish the block schema as JSON Schema (+ Go↔schema divergence guard) | schema | ready | 003, 004, 060 |
 | [AS-062](AS-062-tool-arg-schema-validation.md) | Fuller JSON-Schema validation for tool arguments | tools | done | 013 |
@@ -75,42 +75,42 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | done | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
-| [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | **needs clarification** | 008, 031, 044 |
-| [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | **needs clarification** | 006, 027, 028 |
+| [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | ready | 008, 031, 044 |
+| [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | ready | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | ready | 020, 022, 044 |
 | [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | ready | 034 |
-| [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | **needs clarification** | 032, 044, 047 |
+| [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | ready | 032, 044, 047 |
 | [AS-049](AS-049-skill-expectation-analyzer.md) | skill-expectation-analyzer (experimental) | living-skills | ready | 044, 047, 048 |
 | [AS-050](AS-050-skills-report.md) | `/skills` report + cross-session rollup | living-skills | ready | 007, 022, 049 |
 | [AS-051](AS-051-headless-cli.md) | Headless CLI mode | faces | done | 018, 031 |
-| [AS-052](AS-052-acp-server.md) | ACP server | faces | **needs clarification** | 018, 051 |
+| [AS-052](AS-052-acp-server.md) | ACP server | faces | ready | 018, 051 |
 | [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |
-| [AS-054](AS-054-async-runner.md) | Background/async runner | async | **needs clarification** | 007, 041, 051 |
+| [AS-054](AS-054-async-runner.md) | Background/async runner | async | ready | 007, 041, 051 |
 | [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | ready | 005, 007, 020 |
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | ready (spike) | 005 |
-| [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | **needs clarification** | 007, 020, 045 |
-| [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | **needs clarification** | 032, 045, 050 |
+| [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | ready | 007, 020, 045 |
+| [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | ready | 032, 045, 050 |
 | [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | ready (spike) | 044 |
 | [AS-066](AS-066-command-registry-parity.md) | Shared command registry — slash ↔ subcommand parity | commands | done | 022, 065 |
 | [AS-068](AS-068-clean-interactive-selection.md) | `/clean` interactive multi-select + per-item archive restore | context-wedge | done | 028, 067 |
 | [AS-069](AS-069-headless-prompt-file-precedence.md) | `smith run -f <file>` shadowed by ambient stdin on a non-TTY | faces | done | 065 |
 | [AS-070](AS-070-leaf-help-command-flags.md) | `smith <cmd> --help` omits command-specific flags | faces | done | 065 |
 | [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | done | 031 |
-| [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | **needs clarification** | 006, 033, 040 |
-| [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | **needs clarification** | 067, 072 |
+| [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | ready | 006, 033, 040 |
+| [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | ready | 067, 072 |
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | ready | 032, 072 |
-| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | **needs clarification** | 045, 048, 072 |
+| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | ready | 045, 048, 072 |
 | [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | ready | 018, 051, 066 |
 | [AS-078](AS-078-web-gui-thin-client.md) | Web GUI — thin client over `smith serve` | faces | ready | 077 |
 | [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061, 038 |
-| [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | **needs clarification** (spike) | 077, 059 |
-| [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | **needs clarification** | 077, 078 |
+| [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Spike: hosted multi-tenant live-agent sandboxing | security | ready (spike) | 077, 059 |
+| [AS-081](AS-081-viscose-vscode-extension.md) | Viscose (VS Code) extension over `smith serve` | faces | ready | 077, 078 |
 | [AS-082](AS-082-memory-file-imports.md) | Memory file `@import`-style includes | capability | done | 032 |
 | [AS-083](AS-083-mcp-resources-prompts-reconnect.md) | MCP resources, prompts, reconnect & pagination | capability | done | 036 |
-| [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | **needs clarification** | 037 |
+| [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | ready | 037 |
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
 | [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
@@ -147,27 +147,14 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 ## Needs clarification — decisions to make
 
-| Ticket | The decision |
-|---|---|
-| [AS-017](AS-017-keychain-key-storage.md) | V1 platform scope (Windows?), no-keychain fallback, multi-profile keys |
-| [AS-027](AS-027-segment-topic-labeling.md) | How topics are derived (heuristics / embeddings / cheap model), when labeling runs, cost budget |
-| [AS-029](AS-029-clean-semantic.md) | PRD §10 Q4: `/clean` matching engine + latency/cost budget |
-| [AS-030](AS-030-benchmark-guardrail-suite.md) | Benchmark task suite, the "naive baseline harness", run budget/cadence, variance |
-| [AS-042](AS-042-model-routing.md) | Does routing touch the main loop in v1; escalation semantics; cross-provider policy |
-| [AS-043](AS-043-tidy.md) | Dead-end detection, fidelity-diff definition, model budget, topic-label dependency |
-| [AS-048](AS-048-rediscovered-fact-detector.md) | Detection mechanism + precision bar, durable-fact definition, save-target rule, offer UX |
-| [AS-052](AS-052-acp-server.md) | PRD §10 Q5: ACP now vs minimal JSON-RPC first; spec pinning; first editor |
-| [AS-054](AS-054-async-runner.md) | Process model (daemon?), queue semantics, scheduling ownership, completion surface |
-| [AS-057](AS-057-cross-session-analytics.md) | Surface (TUI/HTML), aggregation index vs on-demand scan, friction scope |
-| [AS-058](AS-058-self-improving-config.md) | Trigger/cadence, edit-target scope, approval UX, conflict handling |
-| [AS-072](AS-072-coding-mode-shell.md) | coding-mode.prd.md Q1 (naming `/feature` vs `/mode`, mode primitive?), Q2 (phase-advancement trigger), Q4 (multi-feature interleaving) |
-| [AS-073](AS-073-coding-mode-phase-tracker.md) | coding-mode.prd.md Q5 (does Coding Mode mean anything headless/ACP, or TUI-only) |
-| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Blocked on AS-048 (needs-clarification); reflect-artifact depth (scratch note vs synced check-back tickets) |
-| [AS-080](AS-080-hosted-agent-sandboxing-spike.md) | Is a live hosted demo in scope at all (vs AS-079 inspector)? If so: isolation model, key/cost model, tool subset (D9 collision) |
-| [AS-084](AS-084-rewind-file-snapshot.md) | Snapshot mechanism (content/git/log-replay), shell-change capture, snapshot cost/pruning, working-tree conflict handling, opt-in vs default |
-| [AS-081](AS-081-viscose-vscode-extension.md) | How the extension reaches the core (bundle native binary / spawn user's `smith` / WASM-in-host); workspace integration depth; lifecycle; distribution |
+All previously listed `needs-clarification` tickets have been triaged against the
+current repo documentation and clarified where the documented direction was
+sufficient. As of this backlog update, there are no tickets left in
+`needs-clarification`; new ambiguous follow-on work should be captured by adding
+a fresh ticket with a focused Open questions section.
 
-The spikes (AS-056, AS-059, AS-080) are themselves the clarification work for PRD open questions (Q13, Q12, and the D9 hosted-execution collision) — AS-056/AS-059 are ready to start; AS-080's first question is whether it should exist.
+The clarified decisions are recorded in the individual ticket files rather than
+repeated here, so the ticket remains the source of truth for implementation.
 
 ## Syncing to GitHub issues
 

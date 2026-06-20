@@ -1,7 +1,7 @@
 ---
 id: AS-030
 title: Cost/speed benchmark suite (the D5 internal guardrail)
-status: needs-clarification
+status: ready-to-implement
 github_issue: 30
 depends_on: [AS-018, AS-020]
 area: quality
@@ -11,7 +11,7 @@ source: PRD.md D5, §6
 
 # AS-030 · Cost/speed benchmark suite
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -22,19 +22,20 @@ D5 makes "cheaper/faster than a *naive* harness on the same model" an **internal
 - Metrics per run: cost per completed task, task success, time-to-first-token, median turn latency, end-of-session live-context %.
 - Repeatable runner + report (markdown/JSON) comparing branches over time.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Task suite definition** — which tasks, how many, which repos? Hand-built micro-tasks, an adapted public benchmark (e.g., SWE-bench-style subset), or both? Who judges "completed"?
-2. **What exactly is the "naive baseline harness"?** A minimal loop we build and freeze? Pinning this down is required for the comparison to mean anything.
-3. **Run economics** — real API spend per benchmark run; budget and cadence (per-PR is too expensive — nightly? pre-release?).
-4. **Variance handling** — models are stochastic (§8 rules out full determinism); how many repetitions per task, and what counts as a regression?
+- **Task suite:** start with a small repo-local deterministic suite of 5-8 fixture tasks that can be judged by tests or file diffs, plus a harness shape that can later import public benchmark tasks. No external benchmark dependency is required for V1.
+- **Naive baseline:** build and freeze a minimal headless loop using the same provider/model and tools but without Smith context projection, `/clean`, `/tidy`, routing, or cache-aware context trimming. Version the baseline alongside the suite.
+- **Run economics/cadence:** the suite is not a per-PR CI gate by default. It supports dry-run/offline fixture validation locally and real provider runs on demand before release or major context/routing changes.
+- **Variance:** each real-provider report records model/provider/settings and supports multiple repetitions, but V1 regression detection is report-only: flag large directional changes instead of failing CI on stochastic results.
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
-- [ ] One command runs the full suite against a chosen provider/model and emits a comparable report.
+- [ ] One command runs the suite against a chosen provider/model and emits JSON plus Markdown reports.
 - [ ] Reports include all §6 primary + secondary metrics that exist at V1.
 - [ ] Baseline harness is versioned and frozen alongside the suite.
-- [ ] A deliberate context-bloat regression is detectable in the report (prove the guardrail works).
+- [ ] A deliberate context-bloat regression is detectable in the report.
+- [ ] Default tests for the benchmark framework are deterministic/offline.
 
 ## Dependencies
 

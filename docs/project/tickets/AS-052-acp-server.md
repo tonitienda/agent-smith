@@ -1,7 +1,7 @@
 ---
 id: AS-052
 title: ACP server (editor / programmatic protocol face)
-status: needs-clarification
+status: ready-to-implement
 github_issue: 52
 depends_on: [AS-018, AS-051]
 area: faces
@@ -11,7 +11,7 @@ source: PRD.md §7.18, §5, §9, §10 Q5
 
 # AS-052 · ACP server
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -19,14 +19,14 @@ source: PRD.md §7.18, §5, §9, §10 Q5
 
 Whatever the answer, the architecture work is the same and can be specified now: a protocol-agnostic adapter layer over the loop's face-agnostic events (AS-018 already enforces this), session lifecycle mapping, streaming, permission-request forwarding to the client.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **§10 Q5 verbatim:** commit to Agent Client Protocol now, or ship a minimal JSON-RPC surface first and adopt ACP once stable? (§9 mitigation suggests: abstract the protocol layer, ship JSON-RPC fallback, track the spec.)
-2. **Spec version pinning** — if ACP: which revision, and what's the compatibility policy while the spec churns (does additive-only D2 discipline extend to our protocol surface)?
-3. **First target client** — which editor integration proves it (Zed is the natural ACP candidate)? Defines the conformance bar.
-4. **Permission UX over the wire** — how do ask-mode prompts map to protocol messages, and what happens with a client that can't render them (fall back to headless deny-fast behavior)?
+- **Protocol plan:** AS-077 is the first programmatic transport: local JSON-RPC/WebSocket. This ticket implements an ACP-compatible adapter additively on top of the same protocol-agnostic session/event layer rather than replacing AS-077.
+- **Spec pinning:** pin the ACP revision in documentation and tests at implementation time. Treat our adapter surface as additive-only where possible, but isolate spec churn behind the adapter package.
+- **First target client:** prove the adapter with a minimal local conformance/client fixture first; a full editor integration can be AS-081 or a follow-on.
+- **Permission UX:** permission requests are first-class protocol events. Clients that cannot answer them must choose an explicit deny-fast or preconfigured allow policy; silent approval is forbidden.
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
 - [ ] An external client can start a session, stream a turn, see tool calls, and respond to permission requests over the chosen protocol.
 - [ ] The protocol adapter contains no business logic (loop stays face-agnostic — enforced as in AS-018).

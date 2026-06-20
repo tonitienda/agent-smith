@@ -1,7 +1,7 @@
 ---
 id: AS-017
 title: OS-keychain API key storage
-status: needs-clarification
+status: ready-to-implement
 github_issue: 17
 depends_on: [AS-001]
 area: security
@@ -11,7 +11,7 @@ source: PRD.md D9
 
 # AS-017 · OS-keychain API key storage
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -19,19 +19,20 @@ D9 commits to OS-keychain storage for provider API keys in V1. Store Anthropic/O
 
 Proposed approach (pending the clarifications below): use a cross-platform keyring library (e.g., `zalando/go-keyring`) targeting macOS Keychain and Linux Secret Service; environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) always override as the escape hatch; a `smith auth` command to set/remove keys.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **Platform scope for V1** — macOS + Linux only, or is Windows in scope? (PRD never states supported platforms; CI in AS-001 currently assumes macOS/Linux.)
-2. **Fallback when no keychain is available** (headless Linux, CI, containers): env var only, or also an encrypted file? Plaintext file ever acceptable with a warning?
-3. **Multiple keys per provider** (work/personal profiles): in scope for V1 or single key per provider?
-4. **Key naming/namespacing** in the keychain — per profile, per project, or global?
+- **V1 platform scope:** support macOS Keychain, Linux Secret Service, and Windows Credential Manager through one small keyring adapter. CI/headless environments are supported through environment variables rather than requiring a desktop keychain.
+- **Fallback:** Agent Smith must never create a plaintext key file. If no keychain is available, `smith auth set` fails with an actionable message and instructs the user to use `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for that process. Environment variables always override stored credentials.
+- **Profiles:** V1 stores one global key per provider plus optional endpoint-specific entries for OpenAI-compatible endpoints. Work/personal profiles are deferred until the layered config has a concrete profile concept for credentials.
+- **Namespacing:** keychain service name is `agent-smith`; account names are stable provider IDs (`anthropic`, `openai`, and `openai-compatible:<config-name>`).
 
-## Acceptance criteria (draft, to confirm after clarification)
+## Acceptance criteria
 
 - [ ] Keys are never written to disk in plaintext by Agent Smith.
 - [ ] `smith auth set/remove/status` manages keys per provider.
 - [ ] Env vars override stored keys, enabling CI/headless use.
-- [ ] A missing key produces a clear, actionable error naming the fix.
+- [ ] A missing key produces a clear, actionable error naming both `smith auth set` and the provider env var escape hatch.
+- [ ] Key lookup goes through a narrow internal interface so tests can run without the host keychain.
 
 ## Dependencies
 

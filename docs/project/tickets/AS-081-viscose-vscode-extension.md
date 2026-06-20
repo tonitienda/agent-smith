@@ -1,7 +1,7 @@
 ---
 id: AS-081
 title: Viscose (VS Code) extension over `smith serve`
-status: needs-clarification
+status: ready-to-implement
 github_issue: 136
 depends_on: [AS-077, AS-078]
 area: faces
@@ -11,7 +11,7 @@ source: PRD.md §5, §7.18; GUI grilling session 2026-06
 
 # AS-081 · Viscose (VS Code) extension
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -26,25 +26,14 @@ PRD §5 names the editor/desktop UI as the eventual home of this work; AS-052
 (ACP) is the future-proof transport, but per the GUI grilling we ship on the
 AS-077 JSON-RPC surface first and adopt ACP additively later.
 
-## Open questions (why this needs clarification)
+## Clarified implementation decisions
 
-1. **How does the extension reach the core?** Parked in the grilling — decide:
-   - **Bundle/locate the native `smith` binary** and have the extension spawn
-     `smith serve`, then talk AS-077 (laziest; reuses everything; cost is
-     shipping/locating per-platform binaries).
-   - **Spawn the user's already-installed `smith`** (no bundling; depends on PATH
-     / a configured path).
-   - **WASM core inside the extension host** (single cross-platform artifact, but
-     reimplements fs/exec bridges Node gives for free — likely not worth it).
-2. **Workspace integration depth for v1:** chat webview only, or also editor
-   affordances (open the file a tool edited, show diffs in the diff view,
-   surface permission prompts as VS Code modals)?
-3. **Lifecycle:** one `serve` per workspace window? Reuse a running daemon?
-   Startup/shutdown ownership.
-4. **Packaging & distribution:** marketplace vs sideload for v1; per-platform
-   binary matrix if bundling.
+- **Core wiring:** V1 locates an existing native `smith` binary from configured path or PATH and spawns `smith serve`. Bundled per-platform binaries are deferred; WASM-in-extension-host is out of scope.
+- **Workspace integration depth:** V1 embeds the AS-078 web UI in a webview and adds thin VS Code bridges for opening files/diffs and permission prompts. It must not fork a second client UI.
+- **Lifecycle:** one `smith serve` child process per workspace window, owned by the extension and stopped when the window closes unless the user configured an external server URL.
+- **Packaging/distribution:** start with sideload/dev packaging; marketplace distribution and bundled binaries are follow-ons.
 
-## Acceptance criteria (draft, confirm after clarification)
+## Acceptance criteria
 
 - [ ] The extension starts or connects to a `smith serve` instance and renders the
       AS-078 UI in a webview.
