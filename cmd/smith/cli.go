@@ -64,7 +64,7 @@ func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(
 		Scriptability: desc.Scriptability.String(),
 		Reason:        desc.Reason,
 		OutputSchema:  desc.OutputSchema,
-		Run:           registryCommand(regName, pickArgs),
+		Run:           registryCommand(regName, desc.ArgSpec, pickArgs),
 	}
 }
 
@@ -107,7 +107,7 @@ func sessionCommand(reg *command.Registry) *cli.Command {
 				Summary:       "List this project's sessions",
 				Examples:      []string{"smith session list"},
 				Scriptability: resumable,
-				Run:           registryCommand("resume", func(*cli.Context) []string { return nil }),
+				Run:           registryCommand("resume", &command.ArgSpec{Min: 0, Max: 0}, func(*cli.Context) []string { return nil }),
 			},
 			{
 				Name:          "resume",
@@ -115,7 +115,7 @@ func sessionCommand(reg *command.Registry) *cli.Command {
 				Usage:         "<id>",
 				Examples:      []string{"smith session resume 1a2b3c4d"},
 				Scriptability: resumable,
-				Run:           registryCommand("resume", firstArg),
+				Run:           registryCommand("resume", &command.ArgSpec{Min: 1, Max: 1}, firstArg),
 			},
 		},
 	}
@@ -157,8 +157,16 @@ func allArgs(c *cli.Context) []string { return c.Args }
 // (D-CLI-10). pickArgs maps the CLI positionals to the handler's args (nil passes
 // none). The handler runs over a read-only controller bound to the project's most
 // recent session.
-func registryCommand(name string, pickArgs func(*cli.Context) []string) func(*cli.Context) error {
+func registryCommand(name string, argSpec *command.ArgSpec, pickArgs func(*cli.Context) []string) func(*cli.Context) error {
 	return func(c *cli.Context) error {
+		// Arity is static descriptor metadata, so enforce it over the raw
+		// positionals before opening a session: the subcommand rejects the same
+		// counts the slash command does — even where pickArgs would drop extras —
+		// at no cost when the usage is wrong (AS-090).
+		probe := command.Command{Name: name, ArgSpec: argSpec}
+		if err := probe.CheckArity(c.Args); err != nil {
+			return cli.Usagef("%v", err)
+		}
 		ctl, closeFn, err := readonlyController(c.Globals.Config)
 		if err != nil {
 			return err

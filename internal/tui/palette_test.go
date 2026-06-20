@@ -371,3 +371,31 @@ func TestCustomCommandSubmitsExpandedPrompt(t *testing.T) {
 		}
 	}
 }
+
+// TestCommandArityRejectedBeforeRun asserts the slash face enforces a command's
+// ArgSpec before dispatch: an over-arity invocation surfaces the descriptor's
+// error and never reaches the handler. The CLI face enforces the same descriptor
+// (cmd/smith TestArityParityAcrossFaces), so the two faces reject identically.
+func TestCommandArityRejectedBeforeRun(t *testing.T) {
+	rec := &recorder{}
+	reg := sampleRegistry(t,
+		command.Command{Name: "cost", ArgSpec: &command.ArgSpec{Min: 0, Max: 0}, Run: rec.handler(command.Output{Text: "ok"})},
+	)
+	m := newCommandModel(t, reg)
+	m.textarea.SetValue("/cost extra")
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(model)
+	if cmd != nil {
+		t.Fatal("over-arity command should not run a handler")
+	}
+	if rec.called {
+		t.Fatal("handler ran despite over-arity invocation")
+	}
+	if len(m.segs) != 1 || m.segs[0].kind != segError {
+		t.Fatalf("expected one error segment, got %+v", m.segs)
+	}
+	if want := "takes no arguments"; !strings.Contains(m.segs[0].text, want) {
+		t.Fatalf("error = %q, want containing %q", m.segs[0].text, want)
+	}
+}

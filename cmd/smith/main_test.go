@@ -211,3 +211,32 @@ func TestResolvePromptSources(t *testing.T) {
 		})
 	}
 }
+
+// TestArityParityAcrossFaces asserts the CLI face enforces the same descriptor
+// arity the slash face does (internal/tui TestCommandArityRejectedBeforeRun):
+// an over-arity subcommand is a usage error before any session is opened, and
+// `session resume` with no id is rejected just like the slash command needs an
+// argument to load. The bound is read from the shared command.Registry, so the
+// two faces can't disagree about valid argument counts (AS-090).
+func TestArityParityAcrossFaces(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"cost rejects extra", []string{"cost", "extra"}, "takes no arguments"},
+		{"session resume rejects two", []string{"session", "resume", "a", "b"}, "takes at most 1 argument"},
+		{"session resume needs id", []string{"session", "resume"}, "needs at least 1 argument"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app, _, errb := testApp(true, true)
+			if code := app.Run(tc.args); code != cli.ExitUsage {
+				t.Fatalf("%v exit = %d, want %d (stderr: %s)", tc.args, code, cli.ExitUsage, errb.String())
+			}
+			if !strings.Contains(errb.String(), tc.want) {
+				t.Errorf("stderr = %q, want containing %q", errb.String(), tc.want)
+			}
+		})
+	}
+}

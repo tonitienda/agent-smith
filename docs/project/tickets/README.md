@@ -116,7 +116,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
 | [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | ready | 044 |
 | [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | done | 065, 066 |
-| [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | ready | 066 |
+| [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | done | 066 |
 | [AS-091](AS-091-interface-boundary-audit.md) | Audit interfaces and move small seams to consumer packages | architecture | ready | — |
 | [AS-092](AS-092-shared-streamio.md) | Extract shared stream I/O mechanics for providers and MCP | architecture | ready | 010, 036, 083 |
 | [AS-093](AS-093-typed-config-views.md) | Add typed consumer config views over layered config | foundation | done | 031, 071 |
@@ -130,6 +130,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-101](AS-101-agent-hook-integration.md) | Agent and local hook integration for the harness | quality | ready | 100 |
 | [AS-102](AS-102-quality-skills.md) | Repository skills for quality gates and CI triage | capability | ready | 099, 100 |
 | [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | ready | 100 |
+| [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | ready | 090 |
 
 ## Suggested build order
 
