@@ -205,20 +205,12 @@ func (s *chatSession) workingLine() string {
 	return s.pers.StatusLine()
 }
 
-// defaultAutoCompactThreshold is the window fraction auto-compaction triggers at
-// when enabled without an explicit (or in-range) compact.auto_threshold. 0.85
-// leaves headroom for the turn's own output before the window limit.
-const defaultAutoCompactThreshold = 0.85
-
 // setAutoCompact records the auto-compaction config (AS-085), read once from
-// layered config at startup. enabled off (default) is a no-op at turn time. A
-// threshold outside (0,1) falls back to defaultAutoCompactThreshold so a stray 0
-// or 1 cannot disable the guard or make it fire every turn.
+// layered config at startup via compact.ConfigFrom (AS-093), which owns the
+// `compact.*` paths and normalizes the threshold into (0,1). enabled off
+// (default) is a no-op at turn time.
 func (s *chatSession) setAutoCompact(enabled bool, threshold float64) {
 	s.autoCompact = enabled
-	if threshold <= 0 || threshold >= 1 {
-		threshold = defaultAutoCompactThreshold
-	}
 	s.autoCompactThreshold = threshold
 }
 

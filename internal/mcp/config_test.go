@@ -28,7 +28,7 @@ func TestParseServers(t *testing.T) {
 		},
 	}))
 
-	specs, warns, err := Parse(cfg)
+	specs, warns, err := ConfigFrom(cfg)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestParseServers(t *testing.T) {
 }
 
 func TestParseAbsent(t *testing.T) {
-	specs, warns, err := Parse(config.New())
+	specs, warns, err := ConfigFrom(config.New())
 	if err != nil || specs != nil || warns != nil {
 		t.Fatalf("empty config: specs=%v warns=%v err=%v", specs, warns, err)
 	}

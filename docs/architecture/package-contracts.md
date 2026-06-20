@@ -56,3 +56,13 @@ The enforced contracts (guard test) are the corners most prone to drift:
   textual reports): the generic primitive goes in `internal/render` (stdlib-only
   leaf); feature-specific `Render` logic stays in each feature package and calls
   the primitive.
+- **Reading config for a feature** (AS-093): `internal/config` stays the generic
+  layered substrate (dotted-path getters + `Decode`). A feature that consumes
+  config owns a small typed view — a `ConfigFrom` constructor that takes a tiny
+  consumer-side reader interface (`interface{ Decode(path string, v any) (bool,
+  error) }`, satisfied by `*config.Config`) and returns a concrete validated
+  struct. The dotted path strings, type validation, defaulting, and
+  tolerate-but-warn (D2) all live with the feature, so dotted keys never spread
+  through the composition root and the feature does not import `internal/config`.
+  See `budget.ConfigFrom`, `compact.ConfigFrom`, `permission.ConfigFrom`,
+  `mcp.ConfigFrom`.
