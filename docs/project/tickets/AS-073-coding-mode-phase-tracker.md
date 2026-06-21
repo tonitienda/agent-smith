@@ -1,7 +1,7 @@
 ---
 id: AS-073
 title: Coding Mode phase tracker panel + mode presentation
-status: ready-to-implement
+status: done
 github_issue: 123
 depends_on: [AS-067, AS-072]
 area: coding-mode
@@ -31,14 +31,19 @@ inspect-mode panel framework (AS-067, D-TUI-3) so it reuses focus/hotkey routing
 
 ## Acceptance criteria
 
-- [ ] Entering the mode shows the phase tracker with the current phase
-      highlighted; advancing/jumping phases updates it live.
-- [ ] The current goal and produced artifacts are visible while in the mode and
-      reachable via the panel framework's focus/hotkey rules (AS-067).
-- [ ] Exiting the mode returns to the normal work-mode shell with no residual
-      chrome.
-- [ ] Non-interactive faces (`smith run`, ACP) produce phase-tagged events with
+- [x] Entering the mode shows the phase tracker with the current phase
+      highlighted; advancing/jumping phases updates it live. (Pinned mode bar
+      below the status line, fed by `Meta.PhaseTracker`; re-read each delta.)
+- [x] The current goal and produced artifacts are visible while in the mode and
+      reachable via the panel framework's focus/hotkey rules (AS-067). (Goal in
+      the status line; `Ctrl+G m` opens the mode panel — goal, tracker, phases
+      visited. Phase-produced *artifacts* are recorded by AS-076 and slot into
+      `mode.Panel` when that lands; the display surface is in place.)
+- [x] Exiting the mode returns to the normal work-mode shell with no residual
+      chrome. (`Meta.Mode` empties on exit, so the bar drops; a test guards it.)
+- [x] Non-interactive faces (`smith run`, ACP) produce phase-tagged events with
       no layout/flavor; nothing mode-specific leaks into machine-readable output.
+      (Chrome lives only in the TUI status stack; commands emit plain text.)
 
 ## Clarified implementation decisions
 

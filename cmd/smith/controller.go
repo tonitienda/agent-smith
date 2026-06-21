@@ -177,6 +177,16 @@ type chatSession struct {
 	goalLog   *eventlog.Log
 	goalLen   int
 	goalCache string
+
+	// mode chrome memo: the Coding Mode name, pinned phase tracker, and richer
+	// panel (AS-073) the status line shows. Like the goal memo, Meta() runs on
+	// every token delta, so the mode projection (Current scans the log) is cached
+	// and only re-derived when the active log or its length changes.
+	modeLog     *eventlog.Log
+	modeLen     int
+	modeName    string
+	modeTracker string
+	modePanel   string
 }
 
 // newChatSession builds the controller over an already-opened session, wiring
@@ -490,13 +500,44 @@ func promptRewrite(raw []byte) string {
 func (s *chatSession) Meta() tui.Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	goal := s.currentGoal()
+	name, tracker, panel := s.currentModeChrome(goal)
 	return tui.Meta{
-		Provider: s.provName,
-		Model:    s.model,
-		Session:  shortID(s.sess.ID),
-		Project:  s.project,
-		Goal:     s.currentGoal(),
+		Provider:     s.provName,
+		Model:        s.model,
+		Session:      shortID(s.sess.ID),
+		Project:      s.project,
+		Goal:         goal,
+		Mode:         name,
+		PhaseTracker: tracker,
+		ModePanel:    panel,
 	}
+}
+
+// currentModeChrome returns the active Coding Mode name and the pre-rendered
+// status-line tracker and inspect panel (AS-073), or empties when no mode is
+// active. The render is memoized on the active log and its length so the
+// per-delta status refresh (refreshMeter → Meta) stays O(1) like the goal and
+// meter; it only re-derives when the log grows or is swapped. The face displays
+// these strings as chrome, so the mode package stays out of the TUI's imports.
+// Callers must hold s.mu. goal is threaded in (not re-projected) so the cached
+// panel reflects the current objective.
+func (s *chatSession) currentModeChrome(goal string) (name, tracker, panel string) {
+	log := s.sess.Log
+	if log == s.modeLog && log.Len() == s.modeLen {
+		return s.modeName, s.modeTracker, s.modePanel
+	}
+	events := log.Events()
+	name, tracker, panel = "", "", ""
+	if cur, ok := mode.Current(events); ok {
+		phases := mode.DefaultPhases()
+		name = cur.Mode
+		tracker = mode.Tracker(phases, cur.Phase)
+		panel = mode.Panel(events, phases, goal)
+	}
+	s.modeLog, s.modeLen = log, log.Len()
+	s.modeName, s.modeTracker, s.modePanel = name, tracker, panel
+	return name, tracker, panel
 }
 
 // currentGoal returns the active session objective for the status line (AS-040),

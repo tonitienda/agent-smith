@@ -493,6 +493,10 @@ var (
 	dimStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	bannerStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
 	statusBarStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8"))
+	// modeBarStyle dresses the pinned Coding Mode phase tracker (AS-073) in a
+	// distinct color from the status bar so entering the mode reads as crossing a
+	// threshold (D-CODE-4), not just another status row.
+	modeBarStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("6"))
 )
 
 // lipglossWidth reports the rendered cell width of s, ignoring style escapes.

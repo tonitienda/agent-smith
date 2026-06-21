@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tonitienda/agent-smith/internal/eventlog"
@@ -155,3 +156,43 @@ func TestTrackerBracketsCurrent(t *testing.T) {
 		t.Errorf("Tracker = %q, want %q", got, want)
 	}
 }
+
+func TestPhaseHistoryRecordsTrail(t *testing.T) {
+	l := eventlog.New()
+	id := enter(t, l)
+	mustAppend(t, l, SetPhase(id, "plan"))
+	mustAppend(t, l, SetPhase(id, "implement"))
+	mustAppend(t, l, SetPhase(id, "plan")) // jumped back; the trail keeps the repeat
+
+	got := PhaseHistory(l.Events(), id)
+	want := []string{"think", "plan", "implement", "plan"}
+	if len(got) != len(want) {
+		t.Fatalf("PhaseHistory = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("PhaseHistory = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestPanelRendersGoalTrackerAndTrail(t *testing.T) {
+	l := eventlog.New()
+	id := enter(t, l)
+	mustAppend(t, l, SetPhase(id, "analyse"))
+
+	got := Panel(l.Events(), DefaultPhases(), "ship the thing")
+	for _, want := range []string{"Mode: coding", "Goal: ship the thing", "[analyse]", "Visited:", "think → analyse"} {
+		if !contains(got, want) {
+			t.Fatalf("Panel missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestPanelWithoutModeIsInert(t *testing.T) {
+	if got := Panel(eventlog.New().Events(), DefaultPhases(), ""); !contains(got, "No coding mode active") {
+		t.Fatalf("Panel on empty log = %q", got)
+	}
+}
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }
