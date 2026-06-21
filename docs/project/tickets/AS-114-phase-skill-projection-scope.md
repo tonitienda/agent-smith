@@ -1,8 +1,8 @@
 ---
 id: AS-114
 title: Scope Coding Mode process-skill blocks to the active phase
-status: ready-to-implement
-github_issue: null
+status: done
+github_issue: 247
 depends_on: [AS-074, AS-006]
 area: coding-mode
 priority: P2

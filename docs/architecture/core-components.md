@@ -85,6 +85,7 @@ Key rules:
 | Blocks are the interchange unit. | `schema.Block` and friends. | Providers, tools, sessions, and commands all speak the same substrate. |
 | Logs append; they do not update/delete. | `internal/eventlog.Log.Append`. | Edits are auditable, reversible, and crash-safe. |
 | Context is projected, not stored. | `internal/projection.Project`. | `/clean`, `/rewind`, `/compact`, and replay can derive views without mutating history. |
+| Projection-time scoping keeps blocks on the log but out of the window. | `internal/projection` reasons (`excluded`, `replay_scope`, `phase_scope`). | Same-model reasoning and Coding Mode per-phase process skills (AS-074/AS-114) leave context when out of scope yet stay auditable/reversible (D3). |
 | Schema evolution is additive-only. | `schema`, `cmd/schema-guard`, `internal/schemaguard`. | Downstream consumers can build on a stable data API. |
 
 ## Provider components

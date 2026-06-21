@@ -265,6 +265,17 @@ func NewPhaseChange(producer, instanceID, phase string) schema.Block {
 	}
 }
 
+// PhaseSkillProducer attributes the process-skill context blocks Coding Mode
+// auto-loads per phase (AS-074), and ExtPhaseSkillPhase is the Block.Ext key under
+// which each such block records (as a JSON string) the phase it was loaded for.
+// They live here, beside the mode lifecycle kinds, because both the face that
+// appends these blocks and the projection engine that scopes them to the active
+// phase (AS-114) need the same vocabulary without depending on either other.
+const (
+	PhaseSkillProducer = "coding-mode/skills"
+	ExtPhaseSkillPhase = "coding_mode_phase"
+)
+
 // NewModeExit builds a mode-exit event ending the mode instance (instanceID, the
 // mode_enter block's ID), attributed to producer (e.g. "/mode"). The instance is
 // named on Provenance.DerivedFrom; phase history stays on the log. The returned
