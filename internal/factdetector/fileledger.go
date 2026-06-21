@@ -123,6 +123,13 @@ func (l *FileLedger) persist() error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("write fact ledger temp: %w", err)
 	}
+	// Flush to stable storage before the rename so a crash can't leave the renamed
+	// file pointing at unwritten data.
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("sync fact ledger temp: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("close fact ledger temp: %w", err)

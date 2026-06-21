@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/factdetector"
@@ -97,11 +98,18 @@ func anchorDir(wd string, files []string) string {
 		if !filepath.IsAbs(fd) {
 			fd = filepath.Join(wd, fd)
 		}
-		if len(fd) > len(dir) {
+		if pathDepth(fd) > pathDepth(dir) {
 			dir = fd
 		}
 	}
 	return dir
+}
+
+// pathDepth counts a path's directory segments by its separators, so the deepest
+// directory is chosen by nesting rather than by string length (a long shallow
+// name is not deeper than a short nested one).
+func pathDepth(p string) int {
+	return strings.Count(p, string(filepath.Separator))
 }
 
 // deepestMemoryFile returns the most specific memory file visible from dir, or ""
