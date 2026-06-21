@@ -24,6 +24,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/initscaffold"
 	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/mode"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/projection"
@@ -616,6 +617,148 @@ func (s *chatSession) renderBudget(events []schema.Block) string {
 		sym, strconv.FormatFloat(g.WarnThresholdUSD(), 'f', 2, 64),
 		sym, strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64),
 		g.Check(summary.TotalUSD))
+}
+
+// cmdFeature enters Coding Mode with a feature prompt (AS-072 /feature): it sets
+// the session goal to the prompt (AS-040) and enters the mode at the first phase.
+// Coding Mode is the thin lifecycle shell (coding-mode.prd.md D-CODE-1) — entry,
+// phase state, and exit are all events on the log (D3), and the mode is a soft
+// advisor that never gates work (D-CODE-2).
+//
+//   - /feature "<prompt>"  set the goal, enter coding mode, start at "think"
+//
+// Only one feature/mode runs per session (V1): with one already active, /feature
+// asks the user to exit first rather than silently replacing it.
+func (s *chatSession) cmdFeature(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+
+	if cur, ok := mode.Current(events); ok {
+		return command.Output{Text: fmt.Sprintf(
+			"Already in %s mode (phase: %s). Exit with /mode off before starting a new feature.",
+			cur.Mode, cur.Phase)}, nil
+	}
+
+	prompt := strings.TrimSpace(strings.Join(args, " "))
+	if prompt == "" {
+		return command.Output{}, fmt.Errorf(`/feature needs a prompt, e.g. /feature "add OAuth login"`)
+	}
+
+	// Set the goal first (retiring any active goal so exactly one stays live, as
+	// /goal does); the mode then anchors to it.
+	if g, ok := goal.Current(events); ok {
+		if _, err := s.sess.Log.Append(goal.Retire(g.BlockID)); err != nil {
+			return command.Output{}, fmt.Errorf("retire previous goal: %w", err)
+		}
+	}
+	if _, err := s.sess.Log.Append(goal.Set(prompt)); err != nil {
+		return command.Output{}, fmt.Errorf("record goal: %w", err)
+	}
+	if err := s.enterMode(); err != nil {
+		return command.Output{}, err
+	}
+	return command.Output{Text: fmt.Sprintf("Entered coding mode · goal: %s\n%s", prompt, mode.Render(s.sess.Log.Events()))}, nil
+}
+
+// cmdMode enters or exits Coding Mode, or shows its status (AS-072 /mode). The
+// mode lives on the event log (D3): entering and exiting are appended events and
+// phase history survives the exit.
+//
+//   - /mode            show the active mode and its phase tracker
+//   - /mode coding     enter coding mode (without setting a goal)
+//   - /mode off        exit the mode (phase history stays on the log)
+func (s *chatSession) cmdMode(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+
+	if len(args) == 0 {
+		return command.Output{Text: mode.Render(events)}, nil
+	}
+
+	switch arg := strings.ToLower(strings.TrimSpace(strings.Join(args, " "))); arg {
+	case "off", "exit", "none":
+		cur, ok := mode.Current(events)
+		if !ok {
+			return command.Output{Text: "No coding mode active."}, nil
+		}
+		if _, err := s.sess.Log.Append(mode.Exit(cur.InstanceID)); err != nil {
+			return command.Output{}, fmt.Errorf("exit coding mode: %w", err)
+		}
+		return command.Output{Text: "Exited coding mode. Phase history stays on the log."}, nil
+	case mode.Coding:
+		if cur, ok := mode.Current(events); ok {
+			return command.Output{Text: fmt.Sprintf("Already in %s mode (phase: %s).", cur.Mode, cur.Phase)}, nil
+		}
+		if err := s.enterMode(); err != nil {
+			return command.Output{}, err
+		}
+		return command.Output{Text: "Entered coding mode.\n" + mode.Render(s.sess.Log.Events())}, nil
+	default:
+		return command.Output{}, fmt.Errorf("unknown mode %q; use `coding` or `off`", arg)
+	}
+}
+
+// cmdPhase advances, rewinds, or jumps to a Coding Mode phase (AS-072 /phase).
+// Every transition is an appended event (D3) and the user can move to any phase
+// at any time — nothing is gated (D-CODE-2).
+//
+//   - /phase           show the current phase and tracker
+//   - /phase next      advance to the next phase
+//   - /phase back      step to the previous phase
+//   - /phase <name>    jump to a named phase
+func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	events := s.sess.Log.Events()
+
+	cur, ok := mode.Current(events)
+	if !ok {
+		return command.Output{}, fmt.Errorf("no coding mode active; start one with /feature or /mode coding")
+	}
+	if len(args) == 0 {
+		return command.Output{Text: mode.Render(events)}, nil
+	}
+
+	arg := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
+	var target string
+	switch arg {
+	case "next":
+		t, ok := mode.NextPhase(mode.DefaultPhases, cur.Phase)
+		if !ok {
+			return command.Output{Text: fmt.Sprintf("Already at the last phase (%s).", cur.Phase)}, nil
+		}
+		target = t
+	case "back", "prev", "previous":
+		t, ok := mode.PrevPhase(mode.DefaultPhases, cur.Phase)
+		if !ok {
+			return command.Output{Text: fmt.Sprintf("Already at the first phase (%s).", cur.Phase)}, nil
+		}
+		target = t
+	default:
+		t, ok := mode.CanonicalPhase(mode.DefaultPhases, arg)
+		if !ok {
+			return command.Output{}, fmt.Errorf("unknown phase %q; phases: %s", arg, strings.Join(mode.DefaultPhases, ", "))
+		}
+		target = t
+	}
+
+	if _, err := s.sess.Log.Append(mode.SetPhase(cur.InstanceID, target)); err != nil {
+		return command.Output{}, fmt.Errorf("record phase change: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Phase → %s\n%s", target, mode.Tracker(mode.DefaultPhases, target))}, nil
+}
+
+// enterMode appends the coding-mode entry events (mode_enter + initial
+// phase-change). Callers hold s.mu and have already checked no mode is active.
+func (s *chatSession) enterMode() error {
+	for _, b := range mode.Enter(mode.Coding, mode.DefaultPhases) {
+		if _, err := s.sess.Log.Append(b); err != nil {
+			return fmt.Errorf("enter coding mode: %w", err)
+		}
+	}
+	return nil
 }
 
 // parseBudgetAmount parses a /budget amount, tolerating a leading currency

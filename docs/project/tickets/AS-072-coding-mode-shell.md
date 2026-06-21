@@ -1,7 +1,7 @@
 ---
 id: AS-072
 title: Coding Mode shell — /feature & /mode entry/exit + phase-as-block
-status: ready-to-implement
+status: done
 github_issue: 122
 depends_on: [AS-006, AS-033, AS-040]
 area: coding-mode
@@ -58,3 +58,27 @@ primitives and records mode state on the append-only log.
 
 - AS-006 (projection — phase derived from the log), AS-033 (custom commands —
   `/feature`, `/mode`, `/phase`), AS-040 (`/goal` — entry sets the objective).
+
+## Implementation notes
+
+- Lifecycle core lives in `internal/mode` (mirrors `internal/goal`): `Enter`,
+  `SetPhase`, `Exit`, `Current`, `History`, phase navigation, and a plain-text
+  `Tracker`. Mode state is **derived from the log alone** — `Current` scans for
+  the latest non-exited `mode_enter` and projects its current phase from the
+  latest `phase_change`. No stored field.
+- Three additive control kinds in `internal/eventlog`: `mode_enter`,
+  `phase_change`, `mode_exit`. The `mode_enter` block's own ID is the mode
+  instance ID; phase-change and exit events reference it via
+  `Provenance.DerivedFrom`. Each entry appends a `mode_enter` plus an initial
+  `phase_change`, so every instance has at least one phase event and derivation
+  is uniform.
+- `DefaultPhases` (think → analyse → plan → implement → verify → refactor →
+  reflect) is package **data**, not control flow, so AS-074/AS-075 can override
+  it. The shell never gates: `/phase next|back|<name>` always succeeds (D-CODE-2).
+- Commands `/feature`, `/mode`, `/phase` registered in `cmd/smith/chat.go`;
+  handlers in `cmd/smith/controller.go`. `/feature` sets the goal then enters;
+  one active instance per session — a second `/feature` asks the user to exit
+  first. Subcommand/slash parity flows through the shared registry (AS-066);
+  `docs/project/command-parity.md` regenerated.
+- The pinned phase-tracker panel and distinct TUI presentation (D-CODE-4) are
+  AS-073; bundled process skills are AS-074; method override is AS-075.
