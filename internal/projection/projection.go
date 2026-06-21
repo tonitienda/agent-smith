@@ -25,6 +25,9 @@
 package projection
 
 import (
+	"encoding/json"
+	"strings"
+
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -53,6 +56,11 @@ const (
 	// ReasonReplayScope: a same-model-only reasoning block dropped because the
 	// target model differs from the model that produced it (see Options).
 	ReasonReplayScope = "replay_scope"
+	// ReasonPhaseScope: a Coding Mode process-skill block (AS-074) dropped because
+	// its tagged phase is no longer the active phase of its mode instance — or the
+	// mode has exited (AS-114). It stays on the log; it just leaves the window
+	// until that phase is current again.
+	ReasonPhaseScope = "phase_scope"
 )
 
 // Block is a projected block: a copy of the log event plus projection-time
@@ -103,6 +111,7 @@ func ProjectAt(events []schema.Block, n int, opts Options) *Projection {
 	events = events[:n]
 
 	excludedBy := computeExclusions(events)
+	phaseDropped := computePhaseScoping(events)
 
 	// At most one rendered block per event; pre-size to avoid reallocations.
 	p := &Projection{blocks: make([]Block, 0, len(events))}
@@ -118,6 +127,9 @@ func ProjectAt(events []schema.Block, n int, opts Options) *Projection {
 		} else if droppedByReplay(e, opts) {
 			pb.Live = false
 			pb.Reason = ReasonReplayScope
+		} else if phaseDropped[e.ID] {
+			pb.Live = false
+			pb.Reason = ReasonPhaseScope
 		} else {
 			pb.Live = true
 			p.liveLen++
@@ -166,6 +178,107 @@ func computeExclusions(events []schema.Block) map[string][]string {
 		excludedIDs[id] = by
 	}
 	return excludedIDs
+}
+
+// computePhaseScoping returns the set of Coding Mode process-skill block IDs that
+// must drop from the projection because their tagged phase is not their mode
+// instance's current phase, or the instance has exited (AS-114).
+//
+// AS-074 auto-loads a phase's process skills as system text blocks tagged with
+// the phase (eventlog.PhaseSkillProducer / .ExtPhaseSkillPhase) and derived from
+// the mode instance. The blocks stay on the log for the whole session — auditable
+// and reversible (D3) — but the per-phase guidance should only be in the window
+// while its phase is active, so it does not pile up and dilute later phases.
+//
+// "Current phase" is itself a projection over the log: the latest phase_change for
+// the instance wins, and a mode_exit ends the instance. Re-entering a phase (a new
+// phase_change back to it) makes its blocks live again with no re-append. Because
+// the events are already sliced for point-in-time projection, this stays correct
+// for /rewind: only phase changes up to the cut are considered.
+func computePhaseScoping(events []schema.Block) map[string]bool {
+	// Pass 1: per instance, its current (latest) phase and whether it has exited.
+	// The maps are allocated lazily and a process-skill block is noted as we go, so
+	// the overwhelmingly common case — a session with no Coding Mode at all —
+	// allocates nothing and skips the second pass entirely.
+	var currentPhase map[string]string
+	var exited map[string]bool
+	sawSkill := false
+	for _, e := range events {
+		switch e.Kind {
+		case eventlog.KindPhaseChange:
+			if id, ok := instanceOf(e); ok {
+				if currentPhase == nil {
+					currentPhase = make(map[string]string)
+				}
+				currentPhase[id] = blockText(e)
+			}
+		case eventlog.KindModeExit:
+			if id, ok := instanceOf(e); ok {
+				if exited == nil {
+					exited = make(map[string]bool)
+				}
+				exited[id] = true
+			}
+		}
+		if e.Provenance != nil && e.Provenance.Producer == eventlog.PhaseSkillProducer {
+			sawSkill = true
+		}
+	}
+	if !sawSkill {
+		// No process-skill blocks to scope; a nil set drops nothing.
+		return nil
+	}
+	// Pass 2: drop a process-skill block unless its instance is active and on the
+	// block's tagged phase.
+	dropped := make(map[string]bool)
+	for _, e := range events {
+		if e.Provenance == nil || e.Provenance.Producer != eventlog.PhaseSkillProducer {
+			continue
+		}
+		id, ok := instanceOf(e)
+		if !ok {
+			continue
+		}
+		phase, ok := taggedPhase(e)
+		if !ok {
+			continue
+		}
+		if exited[id] || !strings.EqualFold(currentPhase[id], phase) {
+			dropped[e.ID] = true
+		}
+	}
+	return dropped
+}
+
+// instanceOf returns the mode instance ID an event references through
+// Provenance.DerivedFrom (the first reference), or false when it names none.
+func instanceOf(b schema.Block) (string, bool) {
+	if b.Provenance == nil || len(b.Provenance.DerivedFrom) == 0 {
+		return "", false
+	}
+	return b.Provenance.DerivedFrom[0], true
+}
+
+// taggedPhase returns the phase a process-skill block was loaded for, decoded from
+// its Block.Ext entry, or false when the tag is absent or unreadable.
+func taggedPhase(b schema.Block) (string, bool) {
+	raw, present := b.Ext[eventlog.ExtPhaseSkillPhase]
+	if !present {
+		return "", false
+	}
+	var phase string
+	if err := json.Unmarshal(raw, &phase); err != nil {
+		return "", false
+	}
+	return phase, true
+}
+
+// blockText returns a block's text body, or "" when absent.
+func blockText(b schema.Block) string {
+	if b.Text == nil {
+		return ""
+	}
+	return b.Text.Text
 }
 
 // isRendered reports whether an event contributes content to the projection.

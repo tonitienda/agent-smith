@@ -400,3 +400,107 @@ func goldenLog() []schema.Block {
 
 	return []schema.Block{a, b, c, excl, undo, sum, stillExcl}
 }
+
+// phaseSkillBlock builds a Coding Mode process-skill block (AS-074) tagged with
+// the phase it was loaded for and derived from its mode instance, mirroring what
+// the face appends so the projection can scope it (AS-114).
+func phaseSkillBlock(id, instanceID, phase string) schema.Block {
+	raw, _ := json.Marshal(phase)
+	return schema.Block{
+		ID:          id,
+		Kind:        schema.KindText,
+		Role:        schema.RoleSystem,
+		Text:        &schema.TextBody{Text: "guidance for " + phase},
+		Provenance:  &schema.Provenance{Producer: eventlog.PhaseSkillProducer, DerivedFrom: []string{instanceID}},
+		Attribution: &schema.Attribution{Skill: "grill-gaps"},
+		Ext:         map[string]json.RawMessage{eventlog.ExtPhaseSkillPhase: raw},
+	}
+}
+
+// TestPhaseSkillLiveOnlyOnActivePhase: a process-skill block is live only while
+// its tagged phase is the mode instance's current phase (AS-114 AC #1), and comes
+// back when the phase is re-entered without re-appending the block (AC #2).
+func TestPhaseSkillLiveOnlyOnActivePhase(t *testing.T) {
+	enter := eventlog.NewModeEnter("/mode", "coding")
+	enter.ID = "inst"
+	toAnalyse := eventlog.NewPhaseChange("/phase", "inst", "analyse")
+	toAnalyse.ID = "pc-analyse"
+	skill := phaseSkillBlock("sk-analyse", "inst", "analyse")
+	toImplement := eventlog.NewPhaseChange("/phase", "inst", "implement")
+	toImplement.ID = "pc-implement"
+	backToAnalyse := eventlog.NewPhaseChange("/phase", "inst", "analyse")
+	backToAnalyse.ID = "pc-analyse-2"
+
+	// While on analyse the skill is live.
+	base := []schema.Block{enter, toAnalyse, skill}
+	if got := liveIDs(Project(base, Options{})); !contains(got, "sk-analyse") {
+		t.Fatalf("skill should be live on its phase; live=%v", got)
+	}
+
+	// Moving to implement drops it (out of phase) but keeps it on the log.
+	onImplement := append(append([]schema.Block(nil), base...), toImplement)
+	p := Project(onImplement, Options{})
+	if contains(liveIDs(p), "sk-analyse") {
+		t.Fatalf("skill should drop off its phase; live=%v", liveIDs(p))
+	}
+	if r := reasonFor(p, "sk-analyse"); r != ReasonPhaseScope {
+		t.Fatalf("dropped skill reason = %q, want %q", r, ReasonPhaseScope)
+	}
+
+	// Re-entering analyse makes it live again with no new block appended.
+	reentered := append(append([]schema.Block(nil), onImplement...), backToAnalyse)
+	if got := liveIDs(Project(reentered, Options{})); !contains(got, "sk-analyse") {
+		t.Fatalf("skill should be live again after re-entering phase; live=%v", got)
+	}
+}
+
+// TestPhaseSkillDropsOnModeExit: exiting the mode drops all its process-skill
+// blocks from the window while leaving them on the log (AS-114 AC #3).
+func TestPhaseSkillDropsOnModeExit(t *testing.T) {
+	enter := eventlog.NewModeEnter("/mode", "coding")
+	enter.ID = "inst"
+	toAnalyse := eventlog.NewPhaseChange("/phase", "inst", "analyse")
+	toAnalyse.ID = "pc-analyse"
+	skill := phaseSkillBlock("sk-analyse", "inst", "analyse")
+	exit := eventlog.NewModeExit("/mode", "inst")
+	exit.ID = "exit"
+
+	events := []schema.Block{enter, toAnalyse, skill, exit}
+	p := Project(events, Options{})
+	if contains(liveIDs(p), "sk-analyse") {
+		t.Fatalf("skill should drop after mode exit; live=%v", liveIDs(p))
+	}
+	if r := reasonFor(p, "sk-analyse"); r != ReasonPhaseScope {
+		t.Fatalf("exited skill reason = %q, want %q", r, ReasonPhaseScope)
+	}
+	// History stays on the log: the rendered block is still present, just dropped.
+	if reasonFor(p, "sk-analyse") == "" && !contains(blockIDs(p), "sk-analyse") {
+		t.Fatalf("skill block should remain rendered (dropped) on the log")
+	}
+}
+
+func contains(s []string, v string) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+func blockIDs(p *Projection) []string {
+	var ids []string
+	for _, b := range p.Blocks() {
+		ids = append(ids, b.ID)
+	}
+	return ids
+}
+
+func reasonFor(p *Projection, id string) string {
+	for _, b := range p.Blocks() {
+		if b.ID == id {
+			return b.Reason
+		}
+	}
+	return ""
+}

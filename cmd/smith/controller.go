@@ -820,13 +820,15 @@ func (s *chatSession) enterMode() error {
 
 // phaseSkillProducer attributes the auto-loaded process-skill context blocks
 // (AS-074) so /context can show where the guidance came from and so injection
-// can dedupe against what the log already carries.
-const phaseSkillProducer = "coding-mode/skills"
-
-// extPhaseSkillPhase tags an injected process-skill block with the phase it was
-// loaded for, so re-entering a phase does not re-inject and so the trail is
-// auditable on the log.
-const extPhaseSkillPhase = "coding_mode_phase"
+// can dedupe against what the log already carries. extPhaseSkillPhase tags an
+// injected block with the phase it was loaded for, so re-entering a phase does
+// not re-inject, the trail is auditable on the log, and the projection engine can
+// scope the block to its phase (AS-114). Both are defined in eventlog so the
+// projection engine shares the same vocabulary.
+const (
+	phaseSkillProducer = eventlog.PhaseSkillProducer
+	extPhaseSkillPhase = eventlog.ExtPhaseSkillPhase
+)
 
 // injectPhaseSkills auto-loads the active phase's process skills (AS-074) into
 // context, the way the skill tool would but without waiting for the model to ask
