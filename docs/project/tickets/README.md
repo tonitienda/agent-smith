@@ -132,7 +132,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-103](AS-103-harness-ci-parity-guard.md) | Guard CI and local harness parity | quality | done | 100 |
 | [AS-104](AS-104-shared-command-flag-contract.md) | Thread a shared flag contract through the command catalog | commands | done | 090 |
 | [AS-105](AS-105-migrate-mode-flag-commands.md) | Migrate the remaining mode-flag commands onto the shared flag contract | commands | done | 104 |
-| [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | ready | 048 |
+| [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | done | 048 |
 | [AS-107](AS-107-subagent-runner-composition.md) | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | subagents | done | 088, 048 |
 | [AS-108](AS-108-subagent-ledger-resolver.md) | Persist the rediscovered-fact ledger + memory/skill-aware save-target resolver | subagents | done | 107, 032, 034 |
 | [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |

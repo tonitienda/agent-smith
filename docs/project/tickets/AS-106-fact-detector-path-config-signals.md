@@ -1,8 +1,8 @@
 ---
 id: AS-106
 title: "Rediscovered-fact detector: path-convergence + config-key signals"
-status: ready-to-implement
-github_issue: null
+status: done
+github_issue: 210
 depends_on: [AS-048]
 area: living-skills
 priority: P2
@@ -11,7 +11,7 @@ source: PRD.md D7, §7.20; spun out of AS-048
 
 # AS-106 · Fact detector — path & config-key signals
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -32,15 +32,23 @@ high-precision-over-recall: each signal needs a clear trial-and-error link
 (prior flailing + a meaningful relation to the resolved fact), never a single
 lucky search/read.
 
-## Open questions
+## Resolution
 
-- What is the precision-preserving relation for path convergence? Candidate:
-  the settled `read` path's basename (or a path segment) must appear as a token
-  in a preceding `grep`/`glob` pattern, and there must be ≥2 prior searches with
-  no successful read in between.
-- How is a config key/value recognized mechanically without a model call? It may
-  need a small allow-list of signals (env-var-not-set stderr, a `*.env`/config
-  file edit following a failed run) rather than free-text parsing.
+- **Path convergence:** ≥2 `grep`/`glob` searches must precede the settling
+  `read` (a successful read ends the flail run, so a direct read is never
+  flagged), and a significant token of the read path (a path segment or the
+  basename, alphanumeric, length ≥3) must appear in one of those search
+  patterns. Implemented as `detectPaths` reusing `candidate`/`Ledger`/`Resolve`;
+  the resolved path is passed to the save-target resolver so the deepest
+  applicable memory file is chosen.
+- **Config keys:** a small allow-list of stderr signatures
+  (`envVarPatterns`: `unbound variable`, `… (is) not set/unset/required/missing`,
+  `environment variable …`) mechanically names a missing `UPPER_SNAKE` env var
+  on a failed shell run; a subsequent successful shell run confirms the fix and
+  proposes the var. The uppercase convention is the precision filter, so ordinary
+  config reads are never flagged. The `*.env`-edit sub-signal was dropped as
+  lower-precision; the stderr allow-list covers the failed-then-fixed case
+  cleanly. Implemented as `detectConfigKeys`.
 
 ## Acceptance criteria
 

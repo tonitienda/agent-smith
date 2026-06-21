@@ -155,6 +155,141 @@ func TestLocalScriptTokenized(t *testing.T) {
 	}
 }
 
+// searchCallBlock builds a grep/glob tool_call carrying a pattern, keyed by id.
+func searchCallBlock(id, toolName, pattern string) schema.Block {
+	args, _ := json.Marshal(map[string]string{"pattern": pattern})
+	return schema.Block{
+		Kind:     schema.KindToolCall,
+		Role:     schema.RoleAssistant,
+		ToolCall: &schema.ToolCallBody{ToolUseID: id, Name: toolName, Arguments: args},
+	}
+}
+
+// readCall builds a read tool_call carrying a path, keyed by id.
+func readCall(id, path, skill string) schema.Block {
+	args, _ := json.Marshal(map[string]string{"path": path})
+	b := schema.Block{
+		Kind:     schema.KindToolCall,
+		Role:     schema.RoleAssistant,
+		ToolCall: &schema.ToolCallBody{ToolUseID: id, Name: "read", Arguments: args},
+	}
+	if skill != "" {
+		b.Attribution = &schema.Attribution{Skill: skill}
+	}
+	return b
+}
+
+// shellResultText is a shell tool_result whose combined output (content text)
+// carries the given text — how real shell results surface stderr signatures.
+func shellResultText(id, text string, failed bool) schema.Block {
+	b := shellResult(id, failed)
+	b.ToolResult.Content = []schema.Part{{Type: "text", Text: text}}
+	return b
+}
+
+// AC: a session that flails across searches before reading one file proposes that
+// path as a fact, with the search trace as evidence.
+func TestDetectsRediscoveredPath(t *testing.T) {
+	blocks := []schema.Block{
+		searchCallBlock("s1", "grep", "func detectConfigKeys"),
+		shellResult("s1", false),
+		searchCallBlock("s2", "glob", "**/factdetector*.go"),
+		shellResult("s2", false),
+		readCall("r1", "internal/factdetector/factdetector.go", ""),
+		shellResult("r1", false),
+	}
+	d := New(nil, NewMemLedger())
+	got := d.Teardown(subagent.Scope{}, blocks).Findings
+	if len(got) != 1 {
+		t.Fatalf("want 1 path finding, got %d: %+v", len(got), got)
+	}
+	f := got[0]
+	if !strings.Contains(f.Summary, "file location") {
+		t.Fatalf("summary not a path fact: %q", f.Summary)
+	}
+	if !strings.Contains(f.Proposal.Description, "internal/factdetector/factdetector.go") {
+		t.Fatalf("diff does not propose the path: %q", f.Proposal.Description)
+	}
+	if !strings.Contains(f.Detail, "factdetector") {
+		t.Fatalf("evidence does not cite the searches: %q", f.Detail)
+	}
+}
+
+// Precision: a single direct read with no preceding flailing is not a fact.
+func TestSingleDirectReadNoPathFact(t *testing.T) {
+	blocks := []schema.Block{
+		readCall("r1", "internal/factdetector/factdetector.go", ""),
+		shellResult("r1", false),
+	}
+	d := New(nil, NewMemLedger())
+	if got := d.Teardown(subagent.Scope{}, blocks).Findings; len(got) != 0 {
+		t.Fatalf("want no finding for a direct read, got %+v", got)
+	}
+}
+
+// Precision: searches that do not name the read path are not linked to it.
+func TestUnrelatedSearchesNoPathFact(t *testing.T) {
+	blocks := []schema.Block{
+		searchCallBlock("s1", "grep", "TODO"),
+		shellResult("s1", false),
+		searchCallBlock("s2", "glob", "**/*.json"),
+		shellResult("s2", false),
+		readCall("r1", "internal/factdetector/factdetector.go", ""),
+		shellResult("r1", false),
+	}
+	d := New(nil, NewMemLedger())
+	if got := d.Teardown(subagent.Scope{}, blocks).Findings; len(got) != 0 {
+		t.Fatalf("want no finding for unrelated searches, got %+v", got)
+	}
+}
+
+// AC: a config key discovered through a failed-then-fixed run is proposed with
+// its trace.
+func TestDetectsRediscoveredConfigKey(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "go run ./cmd/server", ""),
+		shellResultText("c1", "[exit code 1]\nfatal: DATABASE_URL is not set", true),
+		shellCall("c2", "go run ./cmd/server", ""),
+		shellResult("c2", false),
+	}
+	d := New(nil, NewMemLedger())
+	got := d.Teardown(subagent.Scope{}, blocks).Findings
+	// The failed-then-successful command is also a command fact; assert the config
+	// fact is present among the findings.
+	var cfg *subagent.Finding
+	for i := range got {
+		if strings.Contains(got[i].Summary, "required config") {
+			cfg = &got[i]
+		}
+	}
+	if cfg == nil {
+		t.Fatalf("no config finding among %+v", got)
+	}
+	if !strings.Contains(cfg.Proposal.Description, "DATABASE_URL") {
+		t.Fatalf("config diff lost the var: %q", cfg.Proposal.Description)
+	}
+	if !strings.Contains(cfg.Detail, "go run ./cmd/server") {
+		t.Fatalf("config evidence lost the failing command: %q", cfg.Detail)
+	}
+}
+
+// Precision: a failed-then-fixed run whose output names no env var is not a
+// config fact, and an ordinary config read is never flagged.
+func TestOrdinaryConfigNotFlagged(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "go build ./...", ""),
+		shellResultText("c1", "undefined: Foo", true),
+		shellCall("c2", "cat README.md", ""),
+		shellResult("c2", false),
+	}
+	d := New(nil, NewMemLedger())
+	for _, f := range d.Teardown(subagent.Scope{}, blocks).Findings {
+		if strings.Contains(f.Summary, "required config") {
+			t.Fatalf("ordinary run flagged as config: %+v", f)
+		}
+	}
+}
+
 // AC: declining records the dismissal and the same fact is not re-suggested.
 func TestDismissedFactNotResuggested(t *testing.T) {
 	led := NewMemLedger()

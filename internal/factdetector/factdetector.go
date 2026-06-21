@@ -11,11 +11,15 @@
 // propose-only (D9, C.5): a finding carries a one-line memory/skill diff for the
 // user to confirm; the detector never writes.
 //
-// V1 detects the failed-then-successful command pattern (the canonical "flailing
-// to find the test command" case). Repeated-search→path convergence and
-// config-key facts are tracked as the precision-tuned follow-on AS-106; shipping
-// one mechanical signal well serves D7's high-precision-over-recall mandate
-// better than three noisy ones.
+// Three mechanical signals, each held to D7's high-precision-over-recall bar (a
+// clear trial-and-error link, never a single lucky call):
+//
+//   - command (AS-048): a failed-then-successful shell command sharing a
+//     significant token (the canonical "flailing to find the test command").
+//   - path (AS-106): ≥2 searches (grep/glob) whose pattern names a file that a
+//     later successful read settles on — "the thing lives at <path>".
+//   - config (AS-106): a shell run that fails naming a missing env var (an
+//     allow-list of stderr signatures), then succeeds once it is set.
 //
 // Layering: this package consumes subagent + schema and points inward, the same
 // way the analyzers sit below the loop (see docs/architecture/package-contracts.md).
@@ -24,6 +28,7 @@ package factdetector
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -38,8 +43,30 @@ const Name = "rediscovered-fact-detector"
 // /insights (AS-045) can recognize a rediscovered-fact offer without running it.
 const FindingKind = "rediscovered_fact"
 
-// CommandFact marks a durable command fact (the only fact kind in V1).
+// CommandFact marks a durable command fact (the failed-then-successful command).
 const CommandFact = "command"
+
+// PathFact marks a durable file-location fact (searches converging on a path).
+const PathFact = "path"
+
+// ConfigFact marks a durable config fact (a required env var found the hard way).
+const ConfigFact = "config"
+
+// Tool names whose calls the path signal reads: searches that flail and the read
+// that settles on a concrete file.
+const (
+	readToolName = "read"
+	grepToolName = "grep"
+	globToolName = "glob"
+)
+
+// minSearchFlail is how many searches must precede a settling read before the
+// path signal fires — D7 precision: a single lucky search is not rediscovery.
+const minSearchFlail = 2
+
+// minToken is the shortest alphanumeric token treated as a meaningful link
+// between a search pattern and a path (drops "go", "md", and other noise).
+const minToken = 3
 
 // DefaultTarget is the fallback save target — the project-root memory file —
 // used when no resolver is wired or the resolver declines (the C.1 save-target
@@ -199,8 +226,11 @@ func (d *Detector) Observe(schema.Block) {}
 // spends nothing (no model calls), so it is never budget-capped.
 func (d *Detector) Teardown(_ subagent.Scope, slice []schema.Block) subagent.Result {
 	var findings []subagent.Finding
-	seen := map[string]bool{} // de-dupe within one session
-	for _, c := range detectCommands(slice) {
+	seen := map[string]bool{} // de-dupe within one session (kind-prefixed fingerprints never collide)
+	candidates := detectCommands(slice)
+	candidates = append(candidates, detectPaths(slice)...)
+	candidates = append(candidates, detectConfigKeys(slice)...)
+	for _, c := range candidates {
 		if seen[c.Fingerprint] {
 			continue
 		}
@@ -218,13 +248,13 @@ func (d *Detector) Teardown(_ subagent.Scope, slice []schema.Block) subagent.Res
 func (d *Detector) finding(c candidate) subagent.Finding {
 	target := DefaultTarget
 	if d.resolve != nil {
-		if t := d.resolve(c.Skill, nil); t != "" {
+		if t := d.resolve(c.Skill, c.files()); t != "" {
 			target = t
 		}
 	}
 	return subagent.Finding{
 		Kind:    FindingKind,
-		Summary: fmt.Sprintf("Rediscovered working command: %s", c.Value),
+		Summary: c.summary(),
 		Detail:  c.evidence(),
 		Proposal: &subagent.Edit{
 			Target:      target,
@@ -234,18 +264,39 @@ func (d *Detector) finding(c candidate) subagent.Finding {
 }
 
 // candidate is one durable fact found through trial and error, with the trace
-// that justifies it (the user-checkable evidence D7 requires).
+// that justifies it (the user-checkable evidence D7 requires). Failed holds the
+// prior attempts that justify the fact — failed commands, flailing search
+// patterns, or the run that named a missing config key — depending on Kind.
 type candidate struct {
 	Kind        string
-	Value       string   // the durable fact (the working command)
+	Value       string   // the durable fact (command, file path, or config key)
 	Fingerprint string   // stable identity for de-dupe and dismissal
 	Skill       string   // the active skill when discovered, if any
-	Failed      []string // the failed variants tried first
+	Failed      []string // the prior attempts that justify the fact
+}
+
+// summary is the human-readable headline for the offered fact.
+func (c candidate) summary() string {
+	switch c.Kind {
+	case PathFact:
+		return fmt.Sprintf("Rediscovered file location: %s", c.Value)
+	case ConfigFact:
+		return fmt.Sprintf("Rediscovered required config: %s", c.Value)
+	default:
+		return fmt.Sprintf("Rediscovered working command: %s", c.Value)
+	}
 }
 
 // diff is the minimal one-line memory/skill addition proposed for this fact.
 func (c candidate) diff() string {
-	return fmt.Sprintf("+ `%s` — working command (found after trial and error)", c.Value)
+	switch c.Kind {
+	case PathFact:
+		return fmt.Sprintf("+ `%s` — where the relevant code lives (found after searching)", c.Value)
+	case ConfigFact:
+		return fmt.Sprintf("+ `%s` — required config/env (discovered through a failed run)", c.Value)
+	default:
+		return fmt.Sprintf("+ `%s` — working command (found after trial and error)", c.Value)
+	}
 }
 
 // evidence is the human-readable trace backing the proposal.
@@ -257,12 +308,38 @@ func (c candidate) evidence() string {
 	for i, f := range c.Failed {
 		tried[i] = "`" + f + "`"
 	}
-	return "tried " + strings.Join(tried, ", ") + " before `" + c.Value + "` worked"
+	switch c.Kind {
+	case PathFact:
+		return "searched " + strings.Join(tried, ", ") + " before `" + c.Value + "` had it"
+	case ConfigFact:
+		return "`" + c.Value + "` was missing when " + strings.Join(tried, ", ") + " failed"
+	default:
+		return "tried " + strings.Join(tried, ", ") + " before `" + c.Value + "` worked"
+	}
+}
+
+// files is the set of files the fact concerns, so the save-target resolver can
+// pick the deepest applicable memory file. Only a path fact names a file.
+func (c candidate) files() []string {
+	if c.Kind == PathFact && c.Value != "" {
+		return []string{c.Value}
+	}
+	return nil
 }
 
 // commandFingerprint is the stable identity of a command fact.
 func commandFingerprint(cmd string) string {
 	return CommandFact + ":" + normalize(cmd)
+}
+
+// pathFingerprint is the stable identity of a file-location fact.
+func pathFingerprint(p string) string {
+	return PathFact + ":" + normalize(p)
+}
+
+// configFingerprint is the stable identity of a config-key fact.
+func configFingerprint(key string) string {
+	return ConfigFact + ":" + normalize(key)
 }
 
 // detectCommands finds the failed-then-successful command pattern: one or more
@@ -431,4 +508,181 @@ func shares(a, b map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// detectPaths finds the search→path-convergence pattern: at least minSearchFlail
+// grep/glob searches whose pattern names a file, resolved by a later successful
+// read settling on that path. Precision (D7): a token of the read path (basename
+// or a path segment) must appear in a preceding search pattern, and a single
+// direct read with no flailing is never flagged. Any successful read ends the
+// current flail run, so an unrelated read cannot orphan earlier searches.
+func detectPaths(slice []schema.Block) []candidate {
+	results := pairResults(slice)
+	var out []candidate
+	var searches []string // patterns of the current flail run
+	for _, b := range slice {
+		if b.Kind != schema.KindToolCall || b.ToolCall == nil {
+			continue
+		}
+		switch b.ToolCall.Name {
+		case grepToolName, globToolName:
+			if p := searchPattern(b.ToolCall); p != "" {
+				searches = append(searches, p)
+			}
+		case readToolName:
+			res, ok := results[b.ToolCall.ToolUseID]
+			if !ok || isFailure(res) {
+				continue // unknown or failed read does not resolve the flail
+			}
+			path := readPath(b.ToolCall)
+			if path != "" && len(searches) >= minSearchFlail && searchesNamePath(searches, path) {
+				out = append(out, candidate{
+					Kind:        PathFact,
+					Value:       path,
+					Fingerprint: pathFingerprint(path),
+					Skill:       skillOf(b),
+					Failed:      searches,
+				})
+			}
+			searches = nil // a successful read ends the run
+		}
+	}
+	return out
+}
+
+// searchesNamePath reports whether any search pattern shares a significant token
+// with the read path — the meaningful trial-and-error link the path signal needs.
+func searchesNamePath(searches []string, path string) bool {
+	want := wordTokens(path)
+	for _, p := range searches {
+		if shares(want, wordTokens(p)) {
+			return true
+		}
+	}
+	return false
+}
+
+// wordTokens splits a string on non-alphanumeric runs and returns the lowercased
+// tokens of length >= minToken, so a path's segments/basename and a pattern's
+// words are compared on meaningful identifiers rather than punctuation or noise.
+func wordTokens(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, w := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}) {
+		if len(w) >= minToken {
+			out[w] = true
+		}
+	}
+	return out
+}
+
+// readPath extracts the file path from a read tool call's arguments.
+func readPath(c *schema.ToolCallBody) string {
+	var a struct {
+		Path string `json:"path"`
+	}
+	if len(c.Arguments) > 0 {
+		_ = json.Unmarshal(c.Arguments, &a)
+	}
+	return strings.TrimSpace(a.Path)
+}
+
+// searchPattern extracts the pattern from a grep/glob tool call's arguments.
+func searchPattern(c *schema.ToolCallBody) string {
+	var a struct {
+		Pattern string `json:"pattern"`
+	}
+	if len(c.Arguments) > 0 {
+		_ = json.Unmarshal(c.Arguments, &a)
+	}
+	return strings.TrimSpace(a.Pattern)
+}
+
+// envVarPatterns is the allow-list of stderr signatures that mechanically name a
+// missing environment variable (D7: a small allow-list, never free-text parsing).
+// Each captures an UPPER_SNAKE var name in group 1; the uppercase convention is
+// itself the precision filter that keeps ordinary output from matching.
+var envVarPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\b([A-Z][A-Z0-9_]{2,})\b:?\s+unbound variable`),
+	regexp.MustCompile(`\b([A-Z][A-Z0-9_]{2,})\b\s+(?:is\s+)?(?:not set|unset|required|missing)`),
+	regexp.MustCompile(`(?:environment variable|env var)\s+"?\b([A-Z][A-Z0-9_]{2,})\b"?`),
+}
+
+// detectConfigKeys finds the config-key pattern: a shell run that fails while its
+// output names a missing env var (via envVarPatterns), then a later successful
+// shell run — the var was set in between, so it is the durable fact. Precision
+// (D7): only an allow-listed stderr signature pends a key, so ordinary config
+// reads are never flagged; a subsequent success is required to confirm the fix.
+func detectConfigKeys(slice []schema.Block) []candidate {
+	results := pairResults(slice)
+	var out []candidate
+	type miss struct{ name, cmd string }
+	var pending []miss
+	for _, b := range slice {
+		if b.Kind != schema.KindToolCall || b.ToolCall == nil || b.ToolCall.Name != shellTool {
+			continue
+		}
+		res, ok := results[b.ToolCall.ToolUseID]
+		if !ok {
+			continue
+		}
+		cmd := command(b.ToolCall)
+		if isFailure(res) {
+			for _, v := range missingEnvVars(resultText(res)) {
+				pending = append(pending, miss{name: v, cmd: cmd})
+			}
+			continue
+		}
+		// A success: any var named by a prior failure is now considered resolved.
+		for _, m := range pending {
+			out = append(out, candidate{
+				Kind:        ConfigFact,
+				Value:       m.name,
+				Fingerprint: configFingerprint(m.name),
+				Skill:       skillOf(b),
+				Failed:      []string{m.cmd},
+			})
+		}
+		pending = nil
+	}
+	return out
+}
+
+// missingEnvVars returns the distinct env-var names an output names as missing,
+// in first-seen order, applying the envVarPatterns allow-list.
+func missingEnvVars(text string) []string {
+	if text == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, re := range envVarPatterns {
+		for _, m := range re.FindAllStringSubmatch(text, -1) {
+			if v := m[1]; !seen[v] {
+				seen[v] = true
+				out = append(out, v)
+			}
+		}
+	}
+	return out
+}
+
+// resultText is the searchable text of a tool result: explicit stderr/stdout
+// fields plus any text content parts (the shell tool records combined output as
+// content parts, so the named-var signatures live there in real sessions).
+func resultText(r *schema.ToolResultBody) string {
+	var b strings.Builder
+	write := func(s string) {
+		if s != "" {
+			b.WriteString(s)
+			b.WriteByte('\n')
+		}
+	}
+	write(r.Stderr)
+	write(r.Stdout)
+	for _, p := range r.Content {
+		write(p.Text)
+	}
+	return b.String()
 }
