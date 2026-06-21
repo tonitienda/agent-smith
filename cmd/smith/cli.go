@@ -19,6 +19,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/subagent"
@@ -42,6 +43,7 @@ func commands() []*cli.Command {
 		sessionCommand(reg),
 		contextCommand(reg),
 		registryLeaf(reg, "cost", "cost", nil),
+		registryLeaf(reg, "route", "route", nil),
 		registryLeaf(reg, "insights", "insights", allArgs),
 		configCommand(),
 		tuiCommand(),
@@ -219,6 +221,13 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	}
 	provName, model := appRuntime.SelectProviderModel(pricing, providers, model)
 	ctl := newChatSession(store, nil, pricing, providers, sess, provName, model, wd, nil, nil)
+	// Apply the configured routing policy (AS-042) so `smith route` shows the same
+	// tiers the interactive face does. A config load error degrades to the default
+	// policy rather than failing a read-only inspection.
+	if cfg, err := loadLayeredConfig(override); err == nil {
+		routingCfg, _ := routing.ConfigFrom(cfg)
+		ctl.setRouter(routingCfg)
+	}
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }
 

@@ -240,7 +240,7 @@ The TUI has two modes of attention.
 - `/resume`
 - future `/insights`
 - future `/skills`
-- future `/route`
+- `/route`
 
 The user should be able to switch between work and inspection without losing the
 sense of what is currently running.

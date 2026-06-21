@@ -29,6 +29,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/rewind"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/subagent"
@@ -118,6 +119,12 @@ type chatSession struct {
 	// new engine; each Runner the controller builds records into this same store.
 	insights subagent.Store
 
+	// router is the model routing/tiering policy (AS-042): tier-declaring work
+	// (/compact summarization) resolves its concrete model through it instead of
+	// hardcoding ids. Defaults to routing.Default() so a face that never calls
+	// setRouter keeps the previous hardcoded cheap-tier behavior.
+	router routing.Policy
+
 	mu       sync.Mutex
 	sess     *session.Session
 	provName string
@@ -188,8 +195,14 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 		wd:        wd,
 		skills:    skills,
 		hooks:     hooks,
+		router:    routing.Default(),
 	}
 }
+
+// setRouter installs the model routing/tiering policy (AS-042), read from layered
+// config at startup via routing.ConfigFrom (AS-093). A face that does not call it
+// keeps routing.Default() — the previous hardcoded cheap-tier behavior.
+func (s *chatSession) setRouter(p routing.Policy) { s.router = p }
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -688,6 +701,26 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	proj := projection.Project(events, projection.Options{TargetModel: model})
 	comp := composition.Build(proj, table, model, time.Now(), sortBy)
 	return command.Output{Text: composition.Render(comp)}, nil
+}
+
+// cmdRoute renders the /route inspector (AS-042, PRD §7.15): the active model
+// routing/tiering policy (each tier's concrete model per vendor and the
+// per-feature overrides) plus the tier that served each recent call, mapped from
+// the same cost accounting /cost reads. It is read-only — config owns the policy
+// in V1; a per-session override and auto-escalation are tracked as follow-on
+// (AS-110) — so the panel opens instantly with no model calls.
+func (s *chatSession) cmdRoute(_ context.Context, _ []string) (command.Output, error) {
+	summary := cost.Summarize(s.events(), s.pricing)
+	turns := summary.Turns
+	const maxRecent = 5
+	if len(turns) > maxRecent {
+		turns = turns[len(turns)-maxRecent:]
+	}
+	recent := make([]routing.Call, 0, len(turns))
+	for _, t := range turns {
+		recent = append(recent, routing.Call{Index: t.Index, Model: t.Model})
+	}
+	return command.Output{Text: routing.Render(s.router, recent)}, nil
 }
 
 // cmdInsights renders the /insights session retrospective (AS-045, PRD §7.14): a
@@ -1463,19 +1496,15 @@ func (s *chatSession) clearPendingCompact() {
 	s.mu.Unlock()
 }
 
-// cheapModel resolves the cheap-tier model to summarize with, keeping the active
-// vendor (so its provider is already configured) and dropping to that vendor's
-// cheapest family (AS-038 AC4). An unknown vendor falls back to the active model
-// rather than guessing an id the provider would reject.
+// cheapModel resolves the model to summarize with, keeping the active vendor (so
+// its provider is already configured) and routing through the tier policy
+// (AS-042): /compact defaults to the cheap tier (AS-038 AC4), which config can
+// remap. An unmapped vendor/tier falls back to the active model rather than
+// guessing an id the provider would reject — the default policy reproduces the
+// previous per-vendor cheap families exactly.
 func (s *chatSession) cheapModel() (vendor, model string) {
-	switch s.provName {
-	case "anthropic":
-		return s.provName, "claude-haiku-4-5"
-	case "openai":
-		return s.provName, "gpt-4o-mini"
-	default:
-		return s.provName, s.model
-	}
+	tier := s.router.FeatureTier("compact", routing.Cheap)
+	return s.provName, s.router.Resolve(tier, s.provName, s.model)
 }
 
 // pluralBlocks labels a block count for the compact confirm/undo lines.
