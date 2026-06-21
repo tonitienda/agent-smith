@@ -28,7 +28,7 @@ those lower layers never depend back up.
 | **Concrete providers** | `internal/provider/anthropic`, `internal/provider/openai` | `internal/provider`, `schema` | loop, faces, `cmd/*` |
 | **Tools** | `internal/tool` (+ `builtin`) | `schema` | loop, faces |
 | **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`), `cmd/*` |
-| **Faces** | `internal/tui` | core packages below | other faces, `cmd/*` |
+| **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 
 The enforced contracts (guard test) are the corners most prone to drift:
@@ -57,7 +57,17 @@ The enforced contracts (guard test) are the corners most prone to drift:
   follow-on work, AS-104.)
 - **A new face** (alternate UI): a new `internal/<face>` package that depends on
   the loop and core packages. It must not import another face or `cmd/*`, and the
-  loop must not learn about it.
+  loop must not learn about it. The terminal face (`internal/tui`) may import the
+  Charmbracelet stack; every other face stays stdlib-first like the rest of the
+  core. The `internal/serve` JSON-RPC/WebSocket face (AS-077) is the worked
+  example: it owns the transport (a hand-rolled minimal RFC 6455 codec) and the
+  JSON-RPC dispatch but no business logic — a `serve.Backend` consumer seam
+  (implemented by `cmd/smith`) builds the loop/tools/permission gate, so the
+  protocol adapter stays a pure translation layer and the loop stays
+  face-agnostic. Server→client notifications carry the loop's `UIEvent` stream
+  (mapped to `serve.Event` in the composition root, so `serve` never imports the
+  loop); an ask-mode permission prompt is forwarded as a server-initiated request,
+  failing fast to a denial when the client cannot answer (D-CLI-9 parity).
 - **A new provider**: a concrete adapter under `internal/provider/<vendor>` that
   implements the `internal/provider` contracts using the standard library. It
   must not import the loop, faces, or `cmd/*`.

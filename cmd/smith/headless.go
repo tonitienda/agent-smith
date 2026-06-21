@@ -135,19 +135,32 @@ func headlessPermission(root, override string, auto bool) (*denialRecorder, erro
 // the allowlist-then-deny posture (D-CLI-9). A project that wants a headless run
 // to use a tool grants it an allow-rule (or runs with `--auto`).
 func buildHeadlessPolicy(root, override string) (*permission.Policy, error) {
-	cfg, err := loadLayeredConfig(override)
+	cfg, err := mergedPermissionConfig(root, override)
 	if err != nil {
 		return nil, err
+	}
+	return permission.New(cfg), nil
+}
+
+// mergedPermissionConfig resolves the same merged permission configuration the
+// TUI and headless faces use: the unified config `permissions` section overlaid
+// with the legacy user/project permissions.json. The serve face (AS-077) reuses
+// it, wiring an Asker on top so an ask-mode call is forwarded to the connected
+// client instead of being denied outright.
+func mergedPermissionConfig(root, override string) (permission.Config, error) {
+	cfg, err := loadLayeredConfig(override)
+	if err != nil {
+		return permission.Config{}, err
 	}
 	unified, err := permission.ConfigFrom(cfg)
 	if err != nil {
-		return nil, err
+		return permission.Config{}, err
 	}
 	legacy, err := permission.LoadLayered(permission.UserConfigPath(), permission.ProjectConfigPath(root))
 	if err != nil {
-		return nil, err
+		return permission.Config{}, err
 	}
-	return permission.New(permission.Merge(unified, legacy)), nil
+	return permission.Merge(unified, legacy), nil
 }
 
 // classifyExit maps a finished headless run to its process exit code and the

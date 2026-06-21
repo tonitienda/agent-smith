@@ -1,7 +1,7 @@
 ---
 id: AS-077
 title: "`smith serve` — local JSON-RPC/WebSocket session server"
-status: ready-to-implement
+status: done
 github_issue: 132
 depends_on: [AS-018, AS-051, AS-066]
 area: faces
@@ -11,7 +11,16 @@ source: PRD.md §5, §7.18, §10 Q5; GUI grilling session 2026-06
 
 # AS-077 · `smith serve` — local session server
 
-**Status: ready to implement**
+**Status: done.** `smith serve` starts a JSON-RPC 2.0 server framed on a
+WebSocket, bound to loopback by default (`--addr`, `--unsafe-bind` for a
+non-loopback bind with the AS-080 caveat). The transport and protocol live in the
+stdlib-only `internal/serve` face (a hand-rolled minimal RFC 6455 codec, no new
+dependency); the composition root (`cmd/smith/serve.go`) implements the
+`serve.Backend`, reusing the headless loop wiring (AS-051). Methods: `session.start`
+(`resume_id?`), `turn.run` (streams `event` notifications, resolves with the
+`Result`), `turn.cancel`, `session.list`. Permission asks (AS-016) are forwarded
+to the client as a server-initiated `permission.ask` request; a client that
+cannot answer fails fast to a denial (D-CLI-9 parity). No personality on this face.
 
 ## Description
 
