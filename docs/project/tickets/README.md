@@ -100,7 +100,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-071](AS-071-config-consumer-migration.md) | Migrate config consumers onto the layered config substrate | foundation | done | 031 |
 | [AS-072](AS-072-coding-mode-shell.md) | Coding Mode shell — `/feature` & `/mode` entry/exit + phase-as-block | coding-mode | done | 006, 033, 040 |
 | [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | done | 067, 072 |
-| [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | ready | 034, 072 |
+| [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | done | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | ready | 032, 072 |
 | [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | ready | 045, 048, 072 |
 | [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | ready | 018, 051, 066 |
@@ -140,6 +140,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-111](AS-111-scoped-plugin-context-slices.md) | Scope-gated context slices for third-party sub-agents (spun out of AS-059) | security | ready | 044 |
 | [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | done | 044, 098 |
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
+| [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | ready | 074, 006 |
 
 ## Suggested build order
 

@@ -114,6 +114,23 @@ func Load(userDir, projectDir string) ([]Skill, error) {
 	return out, nil
 }
 
+// LoadFS discovers skills from an in-memory or embedded filesystem (e.g. an
+// embed.FS shipping a bundled skill pack, AS-074), scanning its top-level
+// directories for SKILL.md manifests exactly like Load does for on-disk
+// directories. scope labels where the skills came from (e.g. "bundled"); Source
+// is the slash path within fsys since there is no on-disk base. The result is
+// sorted by name. A skill pack thus reuses the same parser and rules as the
+// user/project locations, so a bundled skill and a hand-written one are
+// indistinguishable to consumers.
+func LoadFS(fsys fs.FS, scope string) ([]Skill, error) {
+	skills, err := loadFS(fsys, "", scope)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
+	return skills, nil
+}
+
 // loadDir reads every immediate subdirectory of dir that holds a SKILL.md into a
 // Skill. A missing dir yields no skills and no error (the locations are optional);
 // a read error on an existing manifest is surfaced so a broken setup fails loudly

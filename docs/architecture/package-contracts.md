@@ -102,6 +102,17 @@ The enforced contracts (guard test) are the corners most prone to drift:
   for the `/insights` seam (AS-045). Like `subagent`/`skillcontract` the analyzer
   packages ship substrate-first — registration and the offer UX are consumer
   steps, not their concern.
+- **Coding Mode process skills** (AS-074): the bundled, per-phase skill pack lives
+  in `internal/codingskills` — an `//go:embed`-ed set of `SKILL.md` files parsed
+  through `skill.LoadFS` into ordinary `skill.Skill` values (it depends only on
+  `skill` + stdlib). The phase→skill-name mapping is data on the phase definitions
+  (`mode.PhaseSkills`), so the lifecycle core (`internal/mode`) stays string-only
+  and never imports skill content. The composition root (`cmd/smith`) does the
+  wiring: on each Coding Mode phase entry it auto-loads the phase's skill bodies as
+  system text blocks (producer `coding-mode/skills`, attributed to the skill),
+  deduped per `(instance, phase)` and skipped entirely when the mode is off. A
+  user/project skill of the same name shadows the bundled one; the grounding
+  discipline (D-CODE-8) is the `codingskills.IsGrounded` predicate.
 - **Session retrospective** (`/insights`, AS-045): `internal/insights` analyzes a
   session's blocks into measured signals (cost, costliest turns, repeated reads /
   commands, oversized tool outputs, error loops, live-vs-stale context health) and

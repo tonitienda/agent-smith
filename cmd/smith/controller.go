@@ -14,6 +14,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/clean"
+	"github.com/tonitienda/agent-smith/internal/codingskills"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/compact"
 	"github.com/tonitienda/agent-smith/internal/composition"
@@ -76,6 +77,14 @@ type chatSession struct {
 	// mid-run (/clear) records exactly the catalog the tool offers — they cannot
 	// diverge from an in-flight filesystem change.
 	skills []skill.Skill
+	// codingPack is the bundled Coding Mode process skill pack (AS-074),
+	// auto-enabled per phase while the mode is active. It is loaded once, lazily,
+	// under s.mu (the command handlers that trigger injection already hold the
+	// lock); codingPackDone guards that one-time load so a parse error is not
+	// retried every transition. A bundled-pack parse failure is non-fatal — the
+	// mode is a soft advisor (D-CODE-2), so injection is simply skipped.
+	codingPack     []skill.Skill
+	codingPackDone bool
 	// hooks is the lifecycle-hook set (AS-035) loaded once from config at startup.
 	// buildEngine wires its pre/post-tool-use hooks into every runtime, and Run /
 	// start fire its prompt-submit and session lifecycle events. A nil-safe *Set
@@ -789,18 +798,148 @@ func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output
 	if _, err := s.sess.Log.Append(mode.SetPhase(cur.InstanceID, target)); err != nil {
 		return command.Output{}, fmt.Errorf("record phase change: %w", err)
 	}
+	// Auto-load the target phase's process skills (AS-074); a no-op for phases
+	// that declare none.
+	if err := s.injectPhaseSkills(); err != nil {
+		return command.Output{}, err
+	}
 	return command.Output{Text: fmt.Sprintf("Phase → %s\n%s", target, mode.Tracker(phases, target))}, nil
 }
 
 // enterMode appends the coding-mode entry events (mode_enter + initial
-// phase-change). Callers hold s.mu and have already checked no mode is active.
+// phase-change) and auto-loads the first phase's process skills. Callers hold
+// s.mu and have already checked no mode is active.
 func (s *chatSession) enterMode() error {
 	for _, b := range mode.Enter(mode.Coding, mode.DefaultPhases()) {
 		if _, err := s.sess.Log.Append(b); err != nil {
 			return fmt.Errorf("enter coding mode: %w", err)
 		}
 	}
+	return s.injectPhaseSkills()
+}
+
+// phaseSkillProducer attributes the auto-loaded process-skill context blocks
+// (AS-074) so /context can show where the guidance came from and so injection
+// can dedupe against what the log already carries.
+const phaseSkillProducer = "coding-mode/skills"
+
+// extPhaseSkillPhase tags an injected process-skill block with the phase it was
+// loaded for, so re-entering a phase does not re-inject and so the trail is
+// auditable on the log.
+const extPhaseSkillPhase = "coding_mode_phase"
+
+// injectPhaseSkills auto-loads the active phase's process skills (AS-074) into
+// context, the way the skill tool would but without waiting for the model to ask
+// (D-CODE-5.2/-6: bundled, auto-enabled per phase). It is a no-op when no coding
+// mode is active, so the pack adds zero cost outside the mode. Each skill body is
+// appended once per (instance, phase): re-entering a phase, or calling this after
+// a transition that did not change phase, injects nothing new. A project/user
+// skill of the same name shadows the bundled one (AS-075); an override with an
+// empty body disables that skill for the phase. Callers hold s.mu.
+func (s *chatSession) injectPhaseSkills() error {
+	events := s.sess.Log.Events()
+	cur, ok := mode.Current(events)
+	if !ok {
+		return nil
+	}
+	names := mode.PhaseSkills(cur.Phase)
+	if len(names) == 0 {
+		return nil
+	}
+	loaded := s.loadedPhaseSkills(events, cur.InstanceID, cur.Phase)
+	phaseJSON, err := json.Marshal(cur.Phase)
+	if err != nil {
+		return fmt.Errorf("marshal phase: %w", err)
+	}
+	for _, name := range names {
+		if loaded[name] {
+			continue
+		}
+		body, ok := s.resolvePhaseSkill(name)
+		if !ok || strings.TrimSpace(body) == "" {
+			// Unknown skill or an override that disables it: nothing to load.
+			continue
+		}
+		b := schema.Block{
+			ID:          schema.NewID(),
+			Kind:        schema.KindText,
+			Role:        schema.RoleSystem,
+			Text:        &schema.TextBody{Text: body},
+			Provenance:  &schema.Provenance{Producer: phaseSkillProducer, DerivedFrom: []string{cur.InstanceID}},
+			Attribution: &schema.Attribution{Skill: name},
+			Ext:         map[string]json.RawMessage{extPhaseSkillPhase: phaseJSON},
+		}
+		if _, err := s.sess.Log.Append(b); err != nil {
+			return fmt.Errorf("auto-load phase skill %q: %w", name, err)
+		}
+	}
 	return nil
+}
+
+// loadedPhaseSkills returns the set of process-skill names already auto-loaded
+// for the given mode instance and phase, so injection stays idempotent across
+// repeated phase entries.
+func (s *chatSession) loadedPhaseSkills(events []schema.Block, instanceID, phase string) map[string]bool {
+	loaded := map[string]bool{}
+	for _, b := range events {
+		if b.Provenance == nil || b.Provenance.Producer != phaseSkillProducer || b.Attribution == nil {
+			continue
+		}
+		if !derivedFrom(b, instanceID) {
+			continue
+		}
+		var p string
+		if raw, present := b.Ext[extPhaseSkillPhase]; present {
+			if err := json.Unmarshal(raw, &p); err == nil && strings.EqualFold(p, phase) {
+				loaded[b.Attribution.Skill] = true
+			}
+		}
+	}
+	return loaded
+}
+
+// resolvePhaseSkill returns the instruction body for a named process skill,
+// preferring a user/project skill of the same name (AS-075 override) over the
+// bundled pack. ok is false when no skill of that name exists anywhere.
+func (s *chatSession) resolvePhaseSkill(name string) (body string, ok bool) {
+	for _, sk := range s.skills { // project/user override shadows the bundled pack
+		if sk.Name == name {
+			return sk.Body, true
+		}
+	}
+	for _, sk := range s.bundledPack() {
+		if sk.Name == name {
+			return sk.Body, true
+		}
+	}
+	return "", false
+}
+
+// bundledPack lazily loads and memoizes the bundled process skill pack (AS-074).
+// A parse error leaves the pack empty rather than failing the session — the mode
+// is a soft advisor, and the embedded pack is covered by codingskills tests.
+// Callers hold s.mu.
+func (s *chatSession) bundledPack() []skill.Skill {
+	if !s.codingPackDone {
+		s.codingPackDone = true
+		if pack, err := codingskills.Pack(); err == nil {
+			s.codingPack = pack
+		}
+	}
+	return s.codingPack
+}
+
+// derivedFrom reports whether b's provenance derives from id.
+func derivedFrom(b schema.Block, id string) bool {
+	if b.Provenance == nil {
+		return false
+	}
+	for _, d := range b.Provenance.DerivedFrom {
+		if d == id {
+			return true
+		}
+	}
+	return false
 }
 
 // parseBudgetAmount parses a /budget amount, tolerating a leading currency
