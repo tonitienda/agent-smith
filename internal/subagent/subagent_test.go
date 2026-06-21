@@ -86,6 +86,53 @@ func TestLoadManifestDeclarative(t *testing.T) {
 	}
 }
 
+// TestDeclarativeBoundaryNoOp is the behavioral half of the D9 declarative-only
+// boundary guard (AS-112, plugin-trust.md §4.3): a third-party manifest is data,
+// never code, so a LoadManifest'd sub-agent must do *nothing* on every lifecycle
+// call — no findings, no spend — no matter what the manifest declares.
+//
+// IMPORTANT: this assertion ("zero spend, zero findings") is valid only while
+// declarative plugins are entirely non-functional (the v1 line). When a
+// framework-side model-execution path for declarative plugins lands (running a
+// plugin's prompt on the user's behalf), these sub-agents *will* emit findings
+// and incur spend — at that point re-parameterize this guard to "no arbitrary
+// third-party code runs; spend is bounded by the budget cap" rather than deleting
+// it. Update it deliberately, do not drop it in confusion.
+func TestDeclarativeBoundaryNoOp(t *testing.T) {
+	manifests := []struct {
+		name string
+		data string
+	}{
+		{"minimal", `{"name":"minimal","kind":"analyzer"}`},
+		{"session", `{"name":"session","kind":"analyzer","schedule":"session_end","scope":"session","enabledByDefault":true,"emits":["note"]}`},
+		{"budgeted", `{"name":"budgeted","kind":"analyzer","modelTier":"cheap","budgetUSD":5,"emits":["a","b"]}`},
+		{"permissive", `{"name":"permissive","kind":"analyzer","permissions":["read_transcript","propose_edit"]}`},
+	}
+	slice := []schema.Block{block("one"), block("two")}
+	for _, tc := range manifests {
+		reg := NewRegistry()
+		if err := reg.LoadManifest([]byte(tc.data)); err != nil {
+			t.Fatalf("load %s: %v", tc.name, err)
+		}
+		// Reach through the registry factory to the actual instance the Runner would
+		// drive — that is the value whose lifecycle must be inert.
+		sa := reg.entries[tc.name].factory()
+		if _, isDecl := sa.(declarative); !isDecl {
+			t.Fatalf("%s: loaded sub-agent is %T, not the declarative wrapper", tc.name, sa)
+		}
+		m := sa.Manifest()
+		scope := Scope{Kind: m.effectiveScope(), Session: "s1", Span: "1"}
+		sa.Init(scope)
+		for _, b := range slice {
+			sa.Observe(b)
+		}
+		got := sa.Teardown(scope, slice)
+		if len(got.Findings) != 0 || got.SpentUSD != 0 {
+			t.Fatalf("%s: declarative sub-agent was not inert: findings=%d spent=%.4f", tc.name, len(got.Findings), got.SpentUSD)
+		}
+	}
+}
+
 // AC: enabling/disabling is one config line; a disabled analyzer is never driven.
 func TestConfigEnableDisable(t *testing.T) {
 	reg := NewRegistry()

@@ -1,7 +1,7 @@
 ---
 id: AS-112
 title: Guard the declarative-only plugin boundary with a test + archtest
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-044, AS-098]
 area: quality
@@ -38,13 +38,13 @@ Two guards:
 
 ## Acceptance criteria
 
-- [ ] A test asserts `LoadManifest`'d sub-agents are no-op / zero-spend across a
-      table of valid manifests.
-- [ ] An `archtest` assertion forbids `os/exec` and `net/http` on the declarative
-      plugin path (or documents precisely why the package boundary already prevents it).
-- [ ] The guards run in the standard `make test` / `arch` harness.
+- [x] A test asserts `LoadManifest`'d sub-agents are no-op / zero-spend across a
+      table of valid manifests. (`TestDeclarativeBoundaryNoOp`, `internal/subagent`)
+- [x] An `archtest` assertion forbids `os/exec` and `net/http` on the declarative
+      plugin path. (`TestDeclarativePluginBoundaryHasNoExecOrEgress`, `internal/archtest`)
+- [x] The guards run in the standard `make test` / `arch` harness.
 
 ## Dependencies
 
 - AS-044 (the registry), AS-098 (architecture-contract test substrate).
-</content>
+

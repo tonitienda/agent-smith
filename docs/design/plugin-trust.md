@@ -168,7 +168,9 @@ asserts (a) `LoadManifest` of any manifest yields a sub-agent whose `Init/Observ
 produce no findings and zero spend, and (b) there is no code path from a parsed third-party
 manifest to `exec`/`os` write/network. (a) is a unit test; (b) is partially an `archtest`
 assertion (the `subagent` package must not import `os/exec`, `net/http` for the declarative
-path). Drafted as AS-112 below.
+path). **Implemented (AS-112):** (a) `TestDeclarativeBoundaryNoOp` in
+`internal/subagent`, (b) `TestDeclarativePluginBoundaryHasNoExecOrEgress` in
+`internal/archtest`.
 
 ---
 
