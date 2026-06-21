@@ -37,6 +37,7 @@ func TestRedactHighConfidenceSecrets(t *testing.T) {
 		{"google", "AIzaSyA1234567890abcdefghijklmnopqrstuv key", "google_api_key", "AIzaSyA1234567890abcdefghijklmnopqrstuv"},
 		{"slack", "xoxb-1234567890-ABCDEFabcdef token", "slack_token", "xoxb-1234567890-ABCDEFabcdef"},
 		{"bearer", "Authorization: Bearer abcDEF1234567890ghiJKL", "bearer_token", "abcDEF1234567890ghiJKL"},
+		{"bearer_base64", "Authorization: Bearer abc/def+ghi=jklMNO123", "bearer_token", "abc/def+ghi=jklMNO123"},
 	}
 	r := Default()
 	for _, tc := range cases {

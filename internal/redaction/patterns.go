@@ -35,7 +35,10 @@ var builtinRules = []rule{
 	// OpenAI keys (sk-…, sk-proj-…).
 	{"openai_key", regexp.MustCompile(`\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}`)},
 	// Bearer / Authorization credentials: keep the scheme/header, redact the token.
-	{"bearer_token", regexp.MustCompile(`(?i)(?:authorization|bearer)["'\s:=]+([A-Za-z0-9._\-]{16,})`)},
+	// The token class covers base64url (-_) and standard base64 (+/=) so a padded
+	// or +//-bearing token is redacted whole rather than truncated at the first
+	// such byte (which would leak the tail).
+	{"bearer_token", regexp.MustCompile(`(?i)(?:authorization|bearer)["'\s:=]+([A-Za-z0-9._+/=\-]{16,})`)},
 }
 
 // placeholder is the text a redacted span is replaced with. It carries the rule
