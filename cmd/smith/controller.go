@@ -698,7 +698,10 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 // numbered suggestion's memory-file edit through a shown diff. The numbering is
 // stable because the analysis is deterministic, so no preview state is staged.
 func (s *chatSession) cmdInsights(_ context.Context, args []string) (command.Output, error) {
-	if len(args) > 0 && args[0] == "apply" {
+	if len(args) > 0 {
+		if args[0] != "apply" {
+			return command.Output{Text: "Usage: /insights [apply <n>]"}, nil
+		}
 		return s.insightsApply(args[1:])
 	}
 	s.mu.Lock()
@@ -749,13 +752,27 @@ func (s *chatSession) insightsApply(args []string) (command.Output, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return command.Output{}, fmt.Errorf("read memory file: %w", err)
 	}
-	if strings.Contains(string(existing), edit.Line) {
+	if containsLine(existing, edit.Line) {
 		return command.Output{Text: fmt.Sprintf("Already in %s — nothing to apply.", edit.Target)}, nil
 	}
 	if err := appendMemoryLine(path, existing, edit.Line); err != nil {
 		return command.Output{}, fmt.Errorf("write memory file: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Applied to %s:\n\n  + %s", edit.Target, edit.Line)}, nil
+}
+
+// containsLine reports whether content already has line as a whole line (ignoring
+// surrounding whitespace), so applying the same suggestion twice is idempotent
+// without the false positives a substring match would hit (e.g. "- make test"
+// matching an existing "- make test-all").
+func containsLine(content []byte, line string) bool {
+	want := strings.TrimSpace(line)
+	for _, l := range strings.Split(string(content), "\n") {
+		if strings.TrimSpace(l) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // appendMemoryLine appends line to the memory file at path, creating it if absent
