@@ -49,6 +49,10 @@ needed them yet:
       session, layered over the config policy.
 - [ ] Per-session overrides reset on `/clear` and a fresh session; config is
       unchanged.
+- [ ] Overrides do **not** mutate the shared config-owned `routing.Policy` maps
+      (they are reference types — copying the struct by value shares them). Use a
+      separate session override layer, or a `Policy.Clone()` deep copy, so the
+      durable config policy stays untouched. *(Gemini review on #216.)*
 
 ## Dependencies
 
