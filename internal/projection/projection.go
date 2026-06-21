@@ -197,19 +197,36 @@ func computeExclusions(events []schema.Block) map[string][]string {
 // for /rewind: only phase changes up to the cut are considered.
 func computePhaseScoping(events []schema.Block) map[string]bool {
 	// Pass 1: per instance, its current (latest) phase and whether it has exited.
-	currentPhase := make(map[string]string)
-	exited := make(map[string]bool)
+	// The maps are allocated lazily and a process-skill block is noted as we go, so
+	// the overwhelmingly common case — a session with no Coding Mode at all —
+	// allocates nothing and skips the second pass entirely.
+	var currentPhase map[string]string
+	var exited map[string]bool
+	sawSkill := false
 	for _, e := range events {
 		switch e.Kind {
 		case eventlog.KindPhaseChange:
 			if id, ok := instanceOf(e); ok {
+				if currentPhase == nil {
+					currentPhase = make(map[string]string)
+				}
 				currentPhase[id] = blockText(e)
 			}
 		case eventlog.KindModeExit:
 			if id, ok := instanceOf(e); ok {
+				if exited == nil {
+					exited = make(map[string]bool)
+				}
 				exited[id] = true
 			}
 		}
+		if e.Provenance != nil && e.Provenance.Producer == eventlog.PhaseSkillProducer {
+			sawSkill = true
+		}
+	}
+	if !sawSkill {
+		// No process-skill blocks to scope; a nil set drops nothing.
+		return nil
 	}
 	// Pass 2: drop a process-skill block unless its instance is active and on the
 	// block's tagged phase.
