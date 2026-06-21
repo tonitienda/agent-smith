@@ -124,9 +124,17 @@ func (c *wsConn) ReadMessage() ([]byte, error) {
 			_ = c.writeFrame(opClose, nil)
 			return nil, io.EOF
 		case opText, opBinary:
+			// A new data frame before the previous fragmented message finished is a
+			// protocol violation (RFC 6455 §5.4).
+			if inMessage {
+				return nil, errors.New("serve: new data frame before previous message finished")
+			}
 			inMessage = true
 			msg = append(msg, payload...)
 		case opContinuation:
+			if !inMessage {
+				return nil, errors.New("serve: continuation frame without an open message")
+			}
 			msg = append(msg, payload...)
 		default:
 			return nil, fmt.Errorf("serve: unsupported opcode %d", opcode)
@@ -154,6 +162,12 @@ func (c *wsConn) readFrame() (fin bool, opcode byte, payload []byte, err error) 
 	}
 	opcode = head[0] & 0x0f
 	masked := head[1]&0x80 != 0
+	// A client MUST mask every frame (RFC 6455 §5.1); an unmasked frame is a
+	// protocol/security violation (cache poisoning, smuggling), so reject it.
+	if !masked {
+		err = errors.New("serve: client frame is not masked (RFC 6455 §5.1)")
+		return
+	}
 	n := int64(head[1] & 0x7f)
 	switch n {
 	case 126:
@@ -172,6 +186,18 @@ func (c *wsConn) readFrame() (fin bool, opcode byte, payload []byte, err error) 
 	if n < 0 || n > maxMessageBytes {
 		err = errors.New("serve: frame exceeds size limit")
 		return
+	}
+	// Control frames (opcode >= 0x8) must carry <=125 bytes and must not be
+	// fragmented (RFC 6455 §5.5).
+	if opcode >= 0x8 {
+		if n > 125 {
+			err = errors.New("serve: control frame payload exceeds 125 bytes")
+			return
+		}
+		if !fin {
+			err = errors.New("serve: fragmented control frame")
+			return
+		}
 	}
 	var mask [4]byte
 	if masked {

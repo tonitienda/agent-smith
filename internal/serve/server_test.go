@@ -182,6 +182,22 @@ func TestServeUnknownMethod(t *testing.T) {
 	}
 }
 
+func TestServeRejectsUnmaskedClientFrame(t *testing.T) {
+	addr := startTestServer(t, &fakeBackend{})
+	c := dial(t, addr)
+	defer c.Close()
+
+	// An unmasked client frame violates RFC 6455 §5.1; the server must drop the
+	// connection rather than process it.
+	if _, err := c.conn.Write([]byte{0x81, 0x01, 'x'}); err != nil {
+		t.Fatalf("write unmasked frame: %v", err)
+	}
+	_ = c.conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := c.readFrame(); err == nil {
+		t.Fatal("expected the server to close the connection on an unmasked frame")
+	}
+}
+
 func mustResult(t *testing.T, msg rpcMessage, v any) {
 	t.Helper()
 	if msg.Error != nil {

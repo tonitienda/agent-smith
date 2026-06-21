@@ -249,6 +249,14 @@ type conn struct {
 func (c *conn) serve() {
 	defer func() { _ = c.ws.Close() }()
 	defer func() {
+		// Cancel any in-flight turn so a client disconnect does not leave the turn
+		// goroutine running (and burning provider/tool work) after the read loop ends.
+		c.turnMu.Lock()
+		cancel := c.cancel
+		c.turnMu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
 		c.mu.Lock()
 		sess := c.sess
 		c.mu.Unlock()
@@ -311,6 +319,15 @@ func (c *conn) handleStart(msg rpcMessage) {
 	if err != nil {
 		c.reply(msg.ID, nil, &rpcError{Code: codeRunFailed, Message: err.Error()})
 		return
+	}
+	// Cancel any turn still running against the previous session before swapping it
+	// out, so its goroutine cannot keep streaming stale events to the client.
+	c.turnMu.Lock()
+	cancel := c.cancel
+	c.cancel = nil
+	c.turnMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 	c.mu.Lock()
 	old := c.sess
