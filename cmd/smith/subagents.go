@@ -8,6 +8,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/factdetector"
+	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
@@ -29,6 +30,12 @@ import (
 func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger factdetector.Ledger, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
 	reg := subagent.NewRegistry()
 	if err := reg.Register(factdetector.Factory(resolve, ledger)); err != nil {
+		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
+	}
+	// insights-writer (AS-045): the session-end retrospective that records measured
+	// suggestions as findings. Like the fact detector it makes no model calls, so it
+	// is free when idle and within budget when enabled.
+	if err := reg.Register(insights.Factory()); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
 	}
 	// Guard the typed-nil here rather than relying on Load's nil check: a nil

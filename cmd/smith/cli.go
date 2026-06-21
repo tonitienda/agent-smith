@@ -42,6 +42,7 @@ func commands() []*cli.Command {
 		sessionCommand(reg),
 		contextCommand(reg),
 		registryLeaf(reg, "cost", "cost", nil),
+		registryLeaf(reg, "insights", "insights", allArgs),
 		configCommand(),
 		tuiCommand(),
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -21,6 +22,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/initscaffold"
+	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/personality"
@@ -686,6 +688,88 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	proj := projection.Project(events, projection.Options{TargetModel: model})
 	comp := composition.Build(proj, table, model, time.Now(), sortBy)
 	return command.Output{Text: composition.Render(comp)}, nil
+}
+
+// cmdInsights renders the /insights session retrospective (AS-045, PRD §7.14): a
+// dashboard of measured signals (cost, costliest turns, repeated work, oversized
+// outputs, error loops, context health) and grounded, applicable suggestions,
+// computed from the log alone — no model calls, so the panel opens instantly and
+// renders even with no pricing configured. `/insights apply <n>` lands the
+// numbered suggestion's memory-file edit through a shown diff. The numbering is
+// stable because the analysis is deterministic, so no preview state is staged.
+func (s *chatSession) cmdInsights(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 && args[0] == "apply" {
+		return s.insightsApply(args[1:])
+	}
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model := s.model
+	table := s.pricing
+	s.mu.Unlock()
+
+	return command.Output{Text: insights.Render(insights.Analyze(events, table, model))}, nil
+}
+
+// insightsApply lands the memory-file edit of the suggestion at the given 1-based
+// index, showing the diff that landed. A suggestion is re-derived from the live
+// log (deterministic, so the index is stable), the line is appended to its target
+// memory file under the working directory, and a duplicate is reported rather than
+// re-appended — the propose-only edit becomes a confirmed write only here, never
+// from the sub-agent (D9, C.5).
+func (s *chatSession) insightsApply(args []string) (command.Output, error) {
+	if len(args) != 1 {
+		return command.Output{Text: "Usage: /insights apply <n>"}, nil
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n < 1 {
+		return command.Output{Text: fmt.Sprintf("Not a suggestion number: %q", args[0])}, nil
+	}
+
+	s.mu.Lock()
+	events := s.sess.Log.Events()
+	model := s.model
+	table := s.pricing
+	wd := s.wd
+	s.mu.Unlock()
+
+	rep := insights.Analyze(events, table, model)
+	if n > len(rep.Suggestions) {
+		return command.Output{Text: fmt.Sprintf("No suggestion #%d (the dashboard lists %d).", n, len(rep.Suggestions))}, nil
+	}
+	edit := rep.Suggestions[n-1].Edit
+	if edit == nil {
+		return command.Output{Text: fmt.Sprintf("Suggestion #%d is guidance only — nothing to apply.", n)}, nil
+	}
+
+	path := edit.Target
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(wd, path)
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return command.Output{}, fmt.Errorf("read memory file: %w", err)
+	}
+	if strings.Contains(string(existing), edit.Line) {
+		return command.Output{Text: fmt.Sprintf("Already in %s — nothing to apply.", edit.Target)}, nil
+	}
+	if err := appendMemoryLine(path, existing, edit.Line); err != nil {
+		return command.Output{}, fmt.Errorf("write memory file: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Applied to %s:\n\n  + %s", edit.Target, edit.Line)}, nil
+}
+
+// appendMemoryLine appends line to the memory file at path, creating it if absent
+// and inserting a separating newline only when the existing content does not
+// already end with one, so the file stays well-formed Markdown.
+func appendMemoryLine(path string, existing []byte, line string) error {
+	var b strings.Builder
+	b.Write(existing)
+	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
+		b.WriteByte('\n')
+	}
+	b.WriteString(line)
+	b.WriteByte('\n')
+	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
 // cmdClean is the manual context editor (AS-028 /clean, PRD §7.12): the user
