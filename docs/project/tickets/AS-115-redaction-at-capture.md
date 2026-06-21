@@ -1,7 +1,7 @@
 ---
 id: AS-115
 title: "Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056)"
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-005, AS-016]
 area: compliance
@@ -44,12 +44,31 @@ rule metadata in the `ext` escape hatch (all D2-safe, additive-only).
 
 ## Acceptance criteria
 
-- [ ] High-confidence secrets are redacted at capture before reaching the log.
-- [ ] Redaction is recorded structurally (additive `redaction` derived kind +
-      `DerivedFrom`/`ExcludedBy`/`ext`); no breaking schema change.
-- [ ] Redacted blocks round-trip through projection; replay/`/insights` see the
-      redaction marker, not raw secrets.
-- [ ] Docs note redaction is best-effort minimization, not an erasure guarantee.
+- [x] High-confidence secrets are redacted at capture before reaching the log.
+      `eventlog.Log.SetRedactor` runs the scrub inside `Append`, before validate
+      and persist, so the raw secret never hits disk (`internal/redaction`).
+- [x] Redaction is recorded structurally (additive marker in the `ext` escape
+      hatch, `Block.Ext["redaction"] = {v,producer,rules,total}`); no breaking
+      schema change. See the design note in §2.2/§4 of the spike doc for why the
+      scrubbed block stays live and rides `ext` alone rather than persisting and
+      excluding a raw original (which would defeat "before reaching the log").
+- [x] Redacted blocks round-trip through projection; replay/`/insights` see the
+      redaction marker, not raw secrets
+      (`internal/redaction/projection_test.go`).
+- [x] Docs note redaction is best-effort minimization, not an erasure guarantee
+      (spike §2.2, and the package doc comment).
+
+## Implementation notes
+
+- `internal/redaction`: built-in high-confidence rules (PEM private keys, AWS
+  access keys, GitHub/Slack/Google tokens, Anthropic/OpenAI `sk-` keys,
+  `Authorization: Bearer`), plus user `redaction.extra_patterns`. Matches become
+  `[REDACTED:<rule>]` (JSON-safe so tool-argument bodies stay valid JSON).
+- Wired in both faces (`smith` interactive + `smith run` headless) via
+  `applyRedaction`, gated on `redaction.enabled` (off by default).
+- `eventlog` defines the tiny `Redactor` interface and the `SetRedactor` seam so
+  redaction is the single-chokepoint capture filter without the log depending on
+  `internal/redaction` (the package stays a `schema`-only leaf).
 
 ## Dependencies
 

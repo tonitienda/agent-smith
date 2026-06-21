@@ -29,6 +29,15 @@ import (
 	"github.com/tonitienda/agent-smith/schema"
 )
 
+// Redactor scrubs secrets out of a block's body before the block is persisted.
+// It is the redaction-at-capture seam (AS-115): a face wires one onto the log so
+// every Append is scrubbed at the single chokepoint, and the raw secret never
+// reaches disk (PRD D3). Redact returns the (possibly rewritten) block and
+// whether anything changed; internal/redaction provides the implementation.
+type Redactor interface {
+	Redact(schema.Block) (schema.Block, bool)
+}
+
 // Log is an in-memory, append-only event log of schema.Blocks, optionally
 // written through to a disk-backed JSONL file. It is safe for concurrent use:
 // appends are serialized and reads take a read lock.
@@ -37,6 +46,10 @@ type Log struct {
 	events  []schema.Block
 	byID    map[string]int // block ID -> index in events
 	nextSeq int
+
+	// redactor, when set, scrubs each appended block before it is validated and
+	// persisted. nil (the default) means no redaction.
+	redactor Redactor
 
 	// Disk backing (nil for an in-memory-only log).
 	file   *os.File
@@ -47,6 +60,17 @@ type Log struct {
 // Open for a disk-backed session.
 func New() *Log {
 	return &Log{byID: make(map[string]int)}
+}
+
+// SetRedactor installs r as the capture-time redaction filter: every subsequent
+// Append scrubs the block through r before it is validated or persisted, so a
+// secret is removed before it reaches disk (AS-115). Passing nil disables
+// redaction. It is safe to call concurrently with appends. Already-appended
+// events are untouched — redaction is best-effort at capture, not retroactive.
+func (l *Log) SetRedactor(r Redactor) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.redactor = r
 }
 
 // Open opens the disk-backed log at path, creating the file if it does not
@@ -148,6 +172,13 @@ func (l *Log) Append(b schema.Block) (schema.Block, error) {
 	}
 	if _, dup := l.byID[b.ID]; dup {
 		return schema.Block{}, fmt.Errorf("eventlog: block id %q already on the log", b.ID)
+	}
+
+	// Redact at capture, before Seq assignment, validation, and persist, so a
+	// scrubbed secret never reaches disk (AS-115). The block keeps its ID; only
+	// its body and Ext change.
+	if l.redactor != nil {
+		b, _ = l.redactor.Redact(b)
 	}
 
 	b.Seq = l.nextSeq

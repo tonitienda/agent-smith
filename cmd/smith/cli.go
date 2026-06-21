@@ -447,6 +447,9 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 		return fmt.Errorf("load config: %w", err)
 	}
 	hooks := loadHooks(cfg, c.Stderr)
+	// Capture-time redaction (AS-115): a headless run honors the same `redaction`
+	// opt-in an interactive session does, scrubbing secrets before the log.
+	applyRedaction(cfg, sess.Log, c.Stderr)
 
 	rtOpts := append([]tool.Option{tool.WithPermission(gate.decide)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
