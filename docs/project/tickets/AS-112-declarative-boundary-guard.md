@@ -25,6 +25,13 @@ Two guards:
 
 1. **Behavioral unit test:** loading *any* manifest via `LoadManifest` yields a
    sub-agent whose `Init/Observe/Teardown` produce no findings and zero spend.
+   **This guard is valid only while declarative plugins are entirely non-functional
+   (the v1 line).** When a framework-side model-execution path for declarative
+   plugins lands (running a plugin's prompt on the user's behalf), these sub-agents
+   *will* emit findings and incur spend — so this assertion must then be
+   re-parameterized (e.g. "no *arbitrary third-party code* runs; spend is bounded by
+   the budget cap") rather than "zero spend". The test comment must say so, so the
+   guard is updated deliberately, not deleted in confusion.
 2. **Architecture assertion (`internal/archtest`):** the declarative third-party
    path imports no `os/exec`, no `net/http`, no filesystem-write surface — there is
    no edge from a parsed third-party manifest to arbitrary execution or egress.

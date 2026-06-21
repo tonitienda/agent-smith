@@ -102,8 +102,14 @@ any consent-granted widening:
    granted (`read_own_span` is the middle ground).
 4. **Exclude provider/auth metadata** always — API keys, key-storage handles, raw auth
    headers never enter any slice for any plugin (first- or third-party). This is not a
-   grantable scope; it is a hard floor.
-5. **Apply AS-056 redaction** (when present) to whatever survives 1–4.
+   grantable scope; it is a hard floor. **Note this floor is defense-in-depth, not the
+   primary control:** credentials/auth metadata should never reach the *persisted event
+   log* in the first place — they are scrubbed at the capture layer (AS-056 redaction-at-
+   capture, and the key-storage path in AS-017 never puts raw keys in a block). If a secret
+   is in a block, that is a capture-layer bug to fix there; the slice floor exists so a
+   capture-layer miss does not also become a plugin-exfil channel.
+5. **Apply AS-056 redaction** at capture (see §2.3) so the blocks 1–4 operate over are
+   *already redacted*; the scope filter never sees raw secrets and is not the redaction step.
 
 First-party built-ins bypass 1–3 (trusted, in-tree) but **not** 4–5.
 
@@ -199,9 +205,14 @@ not v1), show a consent screen built **from the manifest**, no guesswork:
 - **What it can do:** "Suggests edits you must approve" / "Suggests notes." Never "edits
   files" (forbidden).
 - **Cost:** per-session budget cap.
-- **Update semantics:** a manifest update that *widens* scopes must **re-prompt** (scope
-  escalation = new consent); a narrowing or non-scope update applies silently. This mirrors
-  the additive-only ethos: more access is never granted without a fresh decision.
+- **Update semantics:** bind the stored consent to the **manifest's content hash**, not just
+  its scope set. A declarative plugin *is* its prompt, so a prompt (or any functional-field)
+  change is a behavior change even when scopes are unchanged — silently applying it is a
+  silent-hijack channel (an approved `security-reviewer` re-pointed at an exfiltration prompt
+  while keeping its already-granted `read_transcript`). Therefore: any update whose hash
+  differs **re-prompts**; a scope-*widening* update re-prompts loudly (escalation). Only an
+  identical-hash re-install applies without a prompt. This is stricter than "more access
+  needs a fresh decision" — *any* functional change does.
 
 Display, not enforcement: the screen is how a user makes the trust decision the §4.2
 residual risks require a human for.

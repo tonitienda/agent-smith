@@ -41,7 +41,10 @@ AS-059 §4.2 residual risks require a human for. It needs:
 
 - [ ] (After clarification) A consent screen renders manifest identity + scopes in
       plain language, flagging high-risk read scopes.
-- [ ] A manifest update that widens scopes re-prompts; a narrowing update does not.
+- [ ] Consent is bound to the manifest's content hash: any update whose hash differs
+      re-prompts (a scope-widening update re-prompts loudly); only an identical-hash
+      re-install applies without a prompt. A prompt-only change is a functional change
+      and re-prompts, since a declarative plugin *is* its prompt.
 
 ## Dependencies
 

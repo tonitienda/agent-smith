@@ -29,9 +29,10 @@ This ticket implements the scope vocabulary and the slice derivation:
    `read_transcript`/`propose_edit`).
 2. Derive a third-party sub-agent's teardown slice from its granted scopes per the
    AS-059 §3 default exclusions: start at metadata-only, widen per scope, always
-   strip provider/auth metadata (a hard floor, not a grantable scope), and apply
-   AS-056 redaction over whatever survives (when AS-056 lands — order: scope filter
-   over already-redacted blocks).
+   strip provider/auth metadata (a hard floor, not a grantable scope). Redaction is
+   **not** a step in this filter: AS-056 redacts at capture, so the blocks the scope
+   filter operates on are *already redacted* — the filter only selects/narrows, it
+   never sees or scrubs raw secrets.
 3. First-party built-ins bypass the subtractive default (trusted, in-tree) but not
    the auth-metadata floor or redaction.
 
