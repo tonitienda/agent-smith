@@ -355,6 +355,33 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdBudget,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "feature",
+		Summary:       "Enter Coding Mode with a feature prompt",
+		Args:          `"<prompt>"`,
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{`smith feature "add OAuth login"`},
+		Run:           ctl.cmdFeature,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "mode",
+		Summary:       "Enter or exit Coding Mode, or show its status",
+		Args:          "[coding | off]",
+		Mode:          command.Inline,
+		Scriptability: command.Both,
+		Examples:      []string{"smith mode", "smith mode coding", "smith mode off"},
+		Run:           ctl.cmdMode,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "phase",
+		Summary:       "Advance, rewind, or jump to a Coding Mode phase",
+		Args:          "[next | back | <name>]",
+		Mode:          command.Inline,
+		Scriptability: command.Both,
+		Examples:      []string{"smith phase", "smith phase next", "smith phase verify"},
+		Run:           ctl.cmdPhase,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "resume",
 		Summary:       "List recent sessions, or load one by ID",
 		Args:          "[id]",

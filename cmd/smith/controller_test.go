@@ -9,7 +9,9 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/mode"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
@@ -524,6 +526,81 @@ func blocksEqual(a, b []schema.Block) bool {
 
 // TestCmdBudget exercises the /budget command (AS-041): show when unset, set a
 // ceiling, reflect it on the log, and clear it with "off".
+// TestCmdFeatureModePhase exercises the Coding Mode shell (AS-072) end to end
+// through its commands: /feature sets the goal and enters at think, /phase moves
+// soft-ly through the phase list, and /mode off exits while phase history stays
+// on the log — all derived from events, never stored side-state (D3).
+func TestCmdFeatureModePhase(t *testing.T) {
+	ctl := newTestController(t)
+	ctx := context.Background()
+
+	// No mode yet.
+	out, err := ctl.cmdMode(ctx, nil)
+	if err != nil {
+		t.Fatalf("cmdMode show: %v", err)
+	}
+	if !strings.Contains(out.Text, "No coding mode active") {
+		t.Errorf("unset /mode = %q, want a 'No coding mode active' notice", out.Text)
+	}
+
+	// /feature sets the goal and enters at the first phase.
+	if _, err := ctl.cmdFeature(ctx, []string{"add", "OAuth", "login"}); err != nil {
+		t.Fatalf("cmdFeature: %v", err)
+	}
+	events := ctl.sess.Log.Events()
+	if g, ok := goal.Current(events); !ok || g.Objective != "add OAuth login" {
+		t.Errorf("goal after /feature = (%+v, %v), want 'add OAuth login'", g, ok)
+	}
+	cur, ok := mode.Current(events)
+	if !ok || cur.Mode != mode.Coding || cur.Phase != "think" {
+		t.Fatalf("mode after /feature = (%+v, %v), want coding/think", cur, ok)
+	}
+
+	// A second /feature does not silently replace; it asks the user to exit.
+	out, err = ctl.cmdFeature(ctx, []string{"something", "else"})
+	if err != nil {
+		t.Fatalf("second cmdFeature: %v", err)
+	}
+	if !strings.Contains(out.Text, "Already in") {
+		t.Errorf("second /feature = %q, want an 'Already in' notice", out.Text)
+	}
+
+	// /phase next advances; /phase <name> jumps; nothing gates.
+	if _, err := ctl.cmdPhase(ctx, []string{"next"}); err != nil {
+		t.Fatalf("cmdPhase next: %v", err)
+	}
+	if cur, _ := mode.Current(ctl.sess.Log.Events()); cur.Phase != "analyse" {
+		t.Errorf("phase after next = %q, want analyse", cur.Phase)
+	}
+	if _, err := ctl.cmdPhase(ctx, []string{"verify"}); err != nil {
+		t.Fatalf("cmdPhase verify: %v", err)
+	}
+	if cur, _ := mode.Current(ctl.sess.Log.Events()); cur.Phase != "verify" {
+		t.Errorf("phase after jump = %q, want verify", cur.Phase)
+	}
+
+	// An unknown phase is rejected (a typo never creates a junk phase).
+	if _, err := ctl.cmdPhase(ctx, []string{"ship"}); err == nil {
+		t.Error("cmdPhase accepted an unknown phase")
+	}
+
+	// /mode off exits; phase history survives.
+	if _, err := ctl.cmdMode(ctx, []string{"off"}); err != nil {
+		t.Fatalf("cmdMode off: %v", err)
+	}
+	if _, ok := mode.Current(ctl.sess.Log.Events()); ok {
+		t.Error("mode still active after /mode off")
+	}
+	if hist := mode.History(ctl.sess.Log.Events()); len(hist) != 1 || hist[0].Phase != "verify" {
+		t.Errorf("history after exit = %+v, want one instance ending at verify", hist)
+	}
+
+	// /phase with no active mode is an error, not a silent no-op.
+	if _, err := ctl.cmdPhase(ctx, []string{"next"}); err == nil {
+		t.Error("cmdPhase ran with no active mode")
+	}
+}
+
 func TestCmdBudget(t *testing.T) {
 	ctl := newTestController(t)
 

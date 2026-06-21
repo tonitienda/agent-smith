@@ -213,6 +213,74 @@ func NewBudget(producer string, limitUSD float64) schema.Block {
 	}
 }
 
+// KindModeEnter, KindPhaseChange, and KindModeExit are the Coding Mode (AS-072)
+// lifecycle events: a control trio recording that the session entered an
+// opinionated working mode, advanced through its phases, and exited again — so
+// "current phase" is a projection over the log (PRD D3, D-CODE-3), never mutable
+// side-state. They are non-content kinds carrying no content body beyond a label
+// on Block.Text; a phase-change and an exit reference their mode instance through
+// Provenance.DerivedFrom (the mode_enter block's ID is the instance ID).
+//
+// Like the other control kinds they live here rather than in the frozen
+// content-block schema (AS-003) because they are harness/log control events, not
+// content blocks; the schema tolerates non-content kinds (Block.Validate imposes
+// no body constraint on them) and the projection engine (AS-006) never renders
+// them into model-facing context. They are additive-only (PRD D2): a consumer
+// that does not recognize them ignores them.
+const (
+	KindModeEnter   schema.Kind = "mode_enter"
+	KindPhaseChange schema.Kind = "phase_change"
+	KindModeExit    schema.Kind = "mode_exit"
+)
+
+// NewModeEnter builds a mode-enter event for modeName (e.g. "coding"), attributed
+// to producer (e.g. "/mode"). The returned block's own ID is the mode instance ID
+// that later phase-change and exit events reference; its Seq and append timestamp
+// are assigned on append.
+func NewModeEnter(producer, modeName string) schema.Block {
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindModeEnter,
+		Role:       schema.RoleHarness,
+		Text:       &schema.TextBody{Text: modeName, Subtype: schema.TextSubtypeNormal},
+		Provenance: &schema.Provenance{Producer: producer},
+	}
+}
+
+// NewPhaseChange builds a phase-change event moving the mode instance (instanceID,
+// the mode_enter block's ID) to phase, attributed to producer (e.g. "/phase"). The
+// instance is named on Provenance.DerivedFrom so the current phase is a projection
+// over the log. The returned block has a fresh ID; its Seq and timestamp are
+// assigned on append.
+func NewPhaseChange(producer, instanceID, phase string) schema.Block {
+	return schema.Block{
+		ID:   schema.NewID(),
+		Kind: KindPhaseChange,
+		Role: schema.RoleHarness,
+		Text: &schema.TextBody{Text: phase, Subtype: schema.TextSubtypeNormal},
+		Provenance: &schema.Provenance{
+			Producer:    producer,
+			DerivedFrom: []string{instanceID},
+		},
+	}
+}
+
+// NewModeExit builds a mode-exit event ending the mode instance (instanceID, the
+// mode_enter block's ID), attributed to producer (e.g. "/mode"). The instance is
+// named on Provenance.DerivedFrom; phase history stays on the log. The returned
+// block has a fresh ID; its Seq and timestamp are assigned on append.
+func NewModeExit(producer, instanceID string) schema.Block {
+	return schema.Block{
+		ID:   schema.NewID(),
+		Kind: KindModeExit,
+		Role: schema.RoleHarness,
+		Provenance: &schema.Provenance{
+			Producer:    producer,
+			DerivedFrom: []string{instanceID},
+		},
+	}
+}
+
 // BudgetLimit returns the most recently set session ceiling on the log and
 // whether any budget event exists, scanning events in append order so the last
 // /budget wins. A budget event whose Text does not parse as a number is skipped

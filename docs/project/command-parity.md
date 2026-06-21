@@ -16,11 +16,14 @@ disagree. Interactive-only commands state a reason.
 | `/compact` | both |  |
 | `/context` | both |  |
 | `/cost` | both |  |
+| `/feature` | both |  |
 | `/goal` | both |  |
 | `/help` | both |  |
 | `/init` | both |  |
 | `/insights` | both |  |
+| `/mode` | both |  |
 | `/model` | both |  |
+| `/phase` | both |  |
 | `/resume` | both |  |
 | `/rewind` | both |  |
 | `/route` | both |  |
