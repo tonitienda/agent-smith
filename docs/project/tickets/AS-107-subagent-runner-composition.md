@@ -1,7 +1,7 @@
 ---
 id: AS-107
 title: "Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents)"
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-088, AS-048]
 area: subagents

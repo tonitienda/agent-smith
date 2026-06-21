@@ -92,9 +92,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
   detector** (AS-048) lives in `internal/factdetector` as a `subagent.SubAgent`
   built-in: it consumes `subagent` + `schema` only and stays free of `memory`/
   `skill` by injecting its save-target `Resolve` func and its dismissal `Ledger`
-  from the consumer (the loop wiring, AS-088). Like `subagent`/`skillcontract` it
-  ships substrate-first — registration and the `/insights` offer UX are consumer
-  steps, not this package's concern.
+  from the consumer. The **composition root** owns that consumer wiring (AS-107):
+  `cmd/smith`'s `buildSubAgents` registers the built-in factories on a
+  `subagent.Registry`, applies the `subagents.<name>` config overlay (C.3) via
+  `Registry.Load`, and hands the chat controller / headless run the registry plus
+  an insights `subagent.Store`; `buildEngine` then constructs a per-session
+  `subagent.Runner` and installs it with `loop.WithSubAgents` (AS-088 gave the loop
+  the capability; AS-107 builds and installs the Runner). The store is reachable
+  for the `/insights` seam (AS-045). Like `subagent`/`skillcontract` the analyzer
+  packages ship substrate-first — registration and the offer UX are consumer
+  steps, not their concern.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:

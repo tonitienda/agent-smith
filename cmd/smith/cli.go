@@ -21,6 +21,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
+	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -454,6 +455,15 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 			loop.WithBudgetReservation(reserve, false),
 		)
 	}
+	// Sub-agent lifecycle (AS-107): a headless run drives the same built-in passive
+	// analyzers (AS-048) an interactive session does, with the `subagents.<name>`
+	// config overlay. One Runner over the run's single session; the loop tears it
+	// down off the streaming path, so a one-shot run still surfaces findings.
+	subReg, subStore, err := buildSubAgents(cfg, c.Stderr)
+	if err != nil {
+		return fmt.Errorf("build sub-agents: %w", err)
+	}
+	engOpts = append(engOpts, loop.WithSubAgents(subagent.NewRunner(subReg, subStore, sess.ID)))
 	eng, err := loop.New(prov, sess.Log, rt, tools, model, engOpts...)
 	if err != nil {
 		return fmt.Errorf("build engine: %w", err)
