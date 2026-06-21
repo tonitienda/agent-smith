@@ -459,7 +459,10 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 	// analyzers (AS-048) an interactive session does, with the `subagents.<name>`
 	// config overlay. One Runner over the run's single session; the loop tears it
 	// down off the streaming path, so a one-shot run still surfaces findings.
-	subReg, subStore, err := buildSubAgents(cfg, c.Stderr)
+	// A headless run does not load the skill tool, so no fact can be skill-scoped;
+	// the resolver only needs the working-directory memory tree. The durable ledger
+	// is shared with interactive sessions of the same project (AS-108).
+	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(wd, nil), openFactLedger(store, c.Stderr), c.Stderr)
 	if err != nil {
 		return fmt.Errorf("build sub-agents: %w", err)
 	}
