@@ -1,7 +1,7 @@
 ---
 id: AS-056
 title: "Design spike: compliance archiving — immutability vs right-to-erasure"
-status: ready-to-implement
+status: done
 github_issue: 56
 depends_on: [AS-005]
 area: compliance
@@ -11,7 +11,9 @@ source: PRD.md §7.23, D8, §10 Q13
 
 # AS-056 · Design spike: compliance archiving (Q13)
 
-**Status: ready to implement** *(a research/design spike — the deliverable is a decision document, not code)*
+**Status: done** *(a research/design spike — the deliverable is a decision document, not code)*
+
+**Outcome:** [docs/design/compliance-archiving.md](../../design/compliance-archiving.md). The architecture tension is resolved by **layering** (erasure is an archive-lifecycle operation above the intra-session append-only invariant), with **no V1 block-schema change required** (the D2 decision). Recommended: redaction-at-capture (OSS, best-effort) + crypto-shredding at the archive layer (paid, authoritative erasure) + legal-hold. Q13 is narrowed to named legal questions for counsel before the paid archive ships. OSS piece spun out as **AS-115** (redaction-at-capture).
 
 ## Description
 
@@ -26,10 +28,10 @@ Spike scope — evaluate and recommend among (combinations of):
 
 ## Acceptance criteria
 
-- [ ] A design doc (`docs/design/compliance-archiving.md`) comparing the approaches against GDPR/HIPAA erasure scenarios, with a recommendation.
-- [ ] Explicit answer to whether schema additions are needed now (and a draft of them if so).
-- [ ] The open-core boundary (OSS vs paid) is drawn concretely.
-- [ ] Q13 in the PRD can be marked resolved, or narrowed to named legal questions for counsel.
+- [x] A design doc (`docs/design/compliance-archiving.md`) comparing the approaches against GDPR/HIPAA erasure scenarios, with a recommendation.
+- [x] Explicit answer to whether schema additions are needed now (and a draft of them if so). — **No V1 schema change required** (doc §4).
+- [x] The open-core boundary (OSS vs paid) is drawn concretely (doc §5).
+- [x] Q13 in the PRD can be marked resolved, or narrowed to named legal questions for counsel — narrowed (doc §7; PRD §10 Q13 updated).
 
 ## Dependencies
 

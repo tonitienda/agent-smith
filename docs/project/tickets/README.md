@@ -89,7 +89,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |
 | [AS-054](AS-054-async-runner.md) | Background/async runner | async | ready | 007, 041, 051 |
 | [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | ready | 005, 007, 020 |
-| [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | ready (spike) | 005 |
+| [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | done | 005 |
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | ready | 007, 020, 045 |
 | [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | ready | 032, 045, 050 |
 | [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | done | 044 |
@@ -141,6 +141,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | done | 044, 098 |
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 | [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | done | 074, 006 |
+| [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | ready | 005, 016 |
 
 ## Suggested build order
 
