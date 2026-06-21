@@ -1,7 +1,7 @@
 ---
 id: AS-074
 title: Coding Mode process skill pack (bundled, auto-enabled per phase)
-status: ready-to-implement
+status: done
 github_issue: 124
 depends_on: [AS-034, AS-072]
 area: coding-mode
@@ -11,7 +11,27 @@ source: coding-mode.prd.md (D-CODE-5.2, -6, -8)
 
 # AS-074 · Coding Mode process skill pack
 
-**Status: ready-to-implement**
+**Status: done**
+
+## Implementation notes
+
+- Bundled pack lives in `internal/codingskills` (`//go:embed skills`), parsed
+  through `skill.LoadFS` so a bundled skill is an ordinary `skill.Skill` — five
+  skills: `grill-gaps`, `find-side-effects` (analyse), `plan-review` (plan),
+  `verify-checklist` (verify), `reflect-notes` (reflect).
+- The phase→skill mapping is data on the phase definitions
+  (`mode.PhaseSkills`), keeping the lifecycle core string-only (no skill-content
+  dependency).
+- Auto-load: on each Coding Mode phase entry the controller appends the phase's
+  skill bodies as system text blocks (producer `coding-mode/skills`, attributed
+  to the skill, tagged with the phase), deduped per `(instance, phase, skill)`.
+  With the mode off, nothing is injected (zero cost). A project/user skill of the
+  same name shadows the bundled one; an empty-body override disables it (AS-075).
+- Grounding (D-CODE-8) is enforced as a machine-checkable predicate
+  `codingskills.IsGrounded`; tests assert each bundled skill demonstrates a
+  grounded finding and rejects generic advice.
+- **Follow-on (filed):** AS-114 — scope process-skill blocks to the active phase
+  in the projection so they don't persist in context after the phase ends.
 
 ## Description
 

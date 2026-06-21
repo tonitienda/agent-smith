@@ -45,6 +45,33 @@ func DefaultPhases() []string {
 	return []string{"think", "analyse", "plan", "implement", "verify", "refactor", "reflect"}
 }
 
+// phaseSkills declares which process skills (AS-074) belong to each phase. The
+// phase definitions own this mapping (coding-mode.prd.md D-CODE-5.2) — the names
+// are bundled, auto-enabled skills the face loads itself when the phase is active
+// (the bodies live in internal/codingskills; this layer stays string-only so the
+// lifecycle core depends on no skill content). It is data, not control flow, so a
+// project can shadow a named skill (AS-075) without touching the core, and the
+// list is extended additively (PRD D2). A phase absent here simply auto-loads no
+// skills.
+var phaseSkills = map[string][]string{
+	"analyse": {"grill-gaps", "find-side-effects"},
+	"plan":    {"plan-review"},
+	"verify":  {"verify-checklist"},
+	"reflect": {"reflect-notes"},
+}
+
+// PhaseSkills returns the names of the process skills auto-enabled for phase
+// (case-insensitive), or nil when the phase declares none. A fresh slice is
+// returned so a caller can never mutate the shared mapping in place.
+func PhaseSkills(phase string) []string {
+	for p, names := range phaseSkills {
+		if strings.EqualFold(p, phase) {
+			return append([]string(nil), names...)
+		}
+	}
+	return nil
+}
+
 // State is one Coding Mode instance derived from the log.
 type State struct {
 	// InstanceID is the mode_enter block's ID — the stable handle phase-change

@@ -17,6 +17,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
 	"github.com/tonitienda/agent-smith/internal/session"
+	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -598,6 +599,106 @@ func TestCmdFeatureModePhase(t *testing.T) {
 	// /phase with no active mode is an error, not a silent no-op.
 	if _, err := ctl.cmdPhase(ctx, []string{"next"}); err == nil {
 		t.Error("cmdPhase ran with no active mode")
+	}
+}
+
+// phaseSkillBlocks returns the auto-loaded process-skill blocks (AS-074) on the
+// controller's log, by attributed skill name.
+func phaseSkillBlocks(ctl *chatSession) []string {
+	var names []string
+	for _, b := range ctl.sess.Log.Events() {
+		if b.Provenance != nil && b.Provenance.Producer == phaseSkillProducer && b.Attribution != nil {
+			names = append(names, b.Attribution.Skill)
+		}
+	}
+	return names
+}
+
+// TestPhaseSkillsAutoLoadPerPhase covers AS-074: the bundled process skills are
+// auto-loaded per phase while Coding Mode is active, dedupe across re-entry, and
+// add nothing when the mode is off.
+func TestPhaseSkillsAutoLoadPerPhase(t *testing.T) {
+	ctl := newTestController(t)
+	ctx := context.Background()
+
+	// Zero cost when off: no mode, no process-skill blocks.
+	if got := phaseSkillBlocks(ctl); len(got) != 0 {
+		t.Fatalf("phase skills with no mode = %v, want none", got)
+	}
+
+	// Enter at "think", which declares no skills.
+	if _, err := ctl.cmdFeature(ctx, []string{"add", "OAuth"}); err != nil {
+		t.Fatalf("cmdFeature: %v", err)
+	}
+	if got := phaseSkillBlocks(ctl); len(got) != 0 {
+		t.Fatalf("phase skills at think = %v, want none", got)
+	}
+
+	// analyse auto-loads its two skills, into model-facing context.
+	if _, err := ctl.cmdPhase(ctx, []string{"analyse"}); err != nil {
+		t.Fatalf("cmdPhase analyse: %v", err)
+	}
+	if got := phaseSkillBlocks(ctl); len(got) != 2 {
+		t.Fatalf("phase skills at analyse = %v, want grill-gaps + find-side-effects", got)
+	}
+	live := projection.Project(ctl.sess.Log.Events(), projection.Options{}).Live()
+	var loadedBodies int
+	for _, b := range live {
+		if b.Provenance != nil && b.Provenance.Producer == phaseSkillProducer {
+			loadedBodies++
+		}
+	}
+	if loadedBodies != 2 {
+		t.Errorf("process-skill blocks in live context = %d, want 2", loadedBodies)
+	}
+
+	// Jump away and back: no duplicate injection for analyse.
+	if _, err := ctl.cmdPhase(ctx, []string{"plan"}); err != nil {
+		t.Fatalf("cmdPhase plan: %v", err)
+	}
+	if _, err := ctl.cmdPhase(ctx, []string{"analyse"}); err != nil {
+		t.Fatalf("cmdPhase analyse again: %v", err)
+	}
+	got := phaseSkillBlocks(ctl)
+	// analyse: 2 (not 4), plan: 1.
+	count := map[string]int{}
+	for _, n := range got {
+		count[n]++
+	}
+	if count["grill-gaps"] != 1 || count["find-side-effects"] != 1 || count["plan-review"] != 1 {
+		t.Errorf("auto-load counts = %v, want each skill loaded exactly once", count)
+	}
+}
+
+// TestPhaseSkillOverrideAndDisable covers AS-074's per-project swappability: a
+// user/project skill of the same name replaces the bundled one, and an empty body
+// disables it for the phase — without breaking the mode shell (AS-075).
+func TestPhaseSkillOverrideAndDisable(t *testing.T) {
+	ctl := newTestController(t)
+	ctl.skills = []skill.Skill{
+		{Name: "grill-gaps", Body: ""},                    // disable
+		{Name: "find-side-effects", Body: "PROJECT BODY"}, // replace
+	}
+	ctx := context.Background()
+
+	if _, err := ctl.cmdFeature(ctx, []string{"x"}); err != nil {
+		t.Fatalf("cmdFeature: %v", err)
+	}
+	if _, err := ctl.cmdPhase(ctx, []string{"analyse"}); err != nil {
+		t.Fatalf("cmdPhase analyse: %v", err)
+	}
+
+	var bodies = map[string]string{}
+	for _, b := range ctl.sess.Log.Events() {
+		if b.Provenance != nil && b.Provenance.Producer == phaseSkillProducer && b.Attribution != nil && b.Text != nil {
+			bodies[b.Attribution.Skill] = b.Text.Text
+		}
+	}
+	if _, disabled := bodies["grill-gaps"]; disabled {
+		t.Errorf("grill-gaps was disabled (empty body) but a block was loaded")
+	}
+	if bodies["find-side-effects"] != "PROJECT BODY" {
+		t.Errorf("find-side-effects body = %q, want the project override", bodies["find-side-effects"])
 	}
 }
 
