@@ -290,6 +290,24 @@ func TestOrdinaryConfigNotFlagged(t *testing.T) {
 	}
 }
 
+// Precision: an unrelated successful command (an `ls` mid-flail) must not resolve
+// a pending config key; only a related success (the failing command re-run after
+// the var is set) confirms the fix.
+func TestUnrelatedSuccessDoesNotResolveConfig(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "go run ./cmd/server", ""),
+		shellResultText("c1", "[exit code 1]\nfatal: DATABASE_URL is not set", true),
+		shellCall("c2", "ls -la", ""),
+		shellResult("c2", false),
+	}
+	d := New(nil, NewMemLedger())
+	for _, f := range d.Teardown(subagent.Scope{}, blocks).Findings {
+		if strings.Contains(f.Summary, "required config") {
+			t.Fatalf("unrelated success resolved config: %+v", f)
+		}
+	}
+}
+
 // AC: declining records the dismissal and the same fact is not re-suggested.
 func TestDismissedFactNotResuggested(t *testing.T) {
 	led := NewMemLedger()

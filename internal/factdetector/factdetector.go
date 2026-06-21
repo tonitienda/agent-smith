@@ -610,10 +610,11 @@ var envVarPatterns = []*regexp.Regexp{
 }
 
 // detectConfigKeys finds the config-key pattern: a shell run that fails while its
-// output names a missing env var (via envVarPatterns), then a later successful
-// shell run — the var was set in between, so it is the durable fact. Precision
-// (D7): only an allow-listed stderr signature pends a key, so ordinary config
-// reads are never flagged; a subsequent success is required to confirm the fix.
+// output names a missing env var (via envVarPatterns), then a later *related*
+// successful shell run — the var was set in between, so it is the durable fact.
+// Precision (D7): only an allow-listed stderr signature pends a key, so ordinary
+// config reads are never flagged; the resolving success must share a significant
+// token with the failed command, so an unrelated `ls` cannot confirm the fix.
 func detectConfigKeys(slice []schema.Block) []candidate {
 	results := pairResults(slice)
 	var out []candidate
@@ -634,17 +635,25 @@ func detectConfigKeys(slice []schema.Block) []candidate {
 			}
 			continue
 		}
-		// A success: any var named by a prior failure is now considered resolved.
+		// A success: a var named by a *related* prior failure (the same command
+		// re-run after the var was set) is now resolved. An unrelated success (an
+		// `ls`/`git status` mid-flail) must not orphan a pending key, so it stays
+		// in the queue for a later related success — mirroring detectCommands.
+		var remaining []miss
 		for _, m := range pending {
-			out = append(out, candidate{
-				Kind:        ConfigFact,
-				Value:       m.name,
-				Fingerprint: configFingerprint(m.name),
-				Skill:       skillOf(b),
-				Failed:      []string{m.cmd},
-			})
+			if shares(tokens(cmd), tokens(m.cmd)) {
+				out = append(out, candidate{
+					Kind:        ConfigFact,
+					Value:       m.name,
+					Fingerprint: configFingerprint(m.name),
+					Skill:       skillOf(b),
+					Failed:      []string{m.cmd},
+				})
+			} else {
+				remaining = append(remaining, m)
+			}
 		}
-		pending = nil
+		pending = remaining
 	}
 	return out
 }
