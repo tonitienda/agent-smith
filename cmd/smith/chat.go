@@ -97,6 +97,9 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	hooks := loadHooks(cfg, os.Stderr)
+	// Capture-time redaction (AS-115): off by default, scrubs high-confidence
+	// secrets before they reach the log when `redaction.enabled` is set.
+	applyRedaction(cfg, sess.Log, os.Stderr)
 
 	// Connect configured MCP servers (AS-036) and register their tools; a server
 	// that fails to connect is skipped, never fatal. Clients are closed at session

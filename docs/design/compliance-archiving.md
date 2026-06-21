@@ -120,6 +120,25 @@ for purely local use.
   reach the persisted log; AS-017 already keeps raw keys out of blocks, and the plugin
   slice floor (plugin-trust.md §3 item 4) is backstop, not primary control.
 
+**Implemented (AS-115, `internal/redaction`).** Off by default; opt in with
+`redaction.enabled` in the layered config (`redaction.extra_patterns` adds user regexes).
+A `*redaction.Redactor` is wired onto the session log via `eventlog.Log.SetRedactor`, so
+every `Append` is scrubbed at the single chokepoint **before validation and persist** — the
+raw secret never reaches disk. Built-in high-confidence rules cover PEM private keys, AWS
+access keys, GitHub/Slack/Google tokens, Anthropic/OpenAI `sk-` keys, and
+`Authorization: Bearer` credentials; matches are replaced with a self-describing
+`[REDACTED:<rule>]` placeholder.
+
+The redaction is recorded **structurally** but deviates from the §4 *draft* below: instead
+of appending the raw original and excluding it (which would defeat "before they enter the
+log" by persisting the secret), the scrubbed block keeps its natural kind, stays **live** in
+the projection, and carries the record in the existing `ext` escape hatch
+(`Block.Ext["redaction"] = { v, producer, rules:{name:count}, total }` — counts only, never
+the secret or its offsets). This satisfies the §4 constraint "no new top-level `Block`
+field / reuse the additive `ext` machinery" while keeping the headline guarantee real. A
+first-class `redaction` derived kind earns its place only if a consumer needs to scan for it
+(D2 preserves the right to add it later); the `ext` marker is enough today.
+
 ### 2.3 Legal-hold semantics (lifecycle — paid layer)
 
 Retention windows + hold flags that **compose with** erasure: a block/session under legal
@@ -171,15 +190,21 @@ legal-hold gates it** — covers each scenario without ever mutating an existing
    maximizes churn for zero payoff and contradicts YAGNI. The right-to-add is preserved by
    D2; the obligation-to-add now is not real.
 
-**Draft of what *would* be added, if and when redaction-at-capture lands (not now):**
+**Draft of what *would* be added (superseded by AS-115 — see §2.2):**
+
+Redaction-at-capture has since landed (AS-115) and confirmed the decision: **no schema
+change.** The draft below sketched an *excluded-original* recording; the implementation
+instead scrubs in place and rides the `ext` escape hatch alone, because persisting the raw
+original (to exclude it) would contradict "before they enter the log." The substrate already
+had the shape.
 
 ```
-// Additive, optional — illustrative only; do NOT add to /schema in this ticket.
-// A redaction is recorded as a derived block; no new Block envelope field needed.
-//   Kind:        "redaction"            // new additive derived kind
+// Additive, optional — the original sketch (NOT what shipped; see §2.2).
+//   Kind:        "redaction"            // a derived kind — only if a scanner needs it
 //   Provenance.DerivedFrom: [<original block id>]
 //   ExcludedBy:  set on the original block id (the raw body leaves the projection)
 //   ext["redaction"]: { "rule": "api_key", "ranges": [...], "method": "tokenized" }
+// What shipped: the scrubbed block stays live; ext["redaction"] = {v,producer,rules,total}.
 ```
 
 And, at the **archive layer only** (a separate paid-tier format, not `/schema`). Note the
