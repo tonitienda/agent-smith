@@ -248,6 +248,16 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdContext,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "insights",
+		Summary:       "Session retrospective: measured signals + suggestions",
+		Args:          "[apply <n>]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 2},
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith insights", "smith insights apply 1"},
+		Run:           ctl.cmdInsights,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "clean",
 		Summary:       "Remove segments from the context window",
 		Args:          "<handle>… | --apply | --undo | --cancel",

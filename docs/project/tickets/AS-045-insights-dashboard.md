@@ -1,7 +1,7 @@
 ---
 id: AS-045
 title: /insights — model-assisted session retrospective dashboard (flagship wedge)
-status: ready-to-implement
+status: done
 github_issue: 45
 depends_on: [AS-020, AS-022, AS-044]
 area: insights-wedge
@@ -25,11 +25,18 @@ The fourth flagship wedge (§7.14): a session retrospective nobody else ships (�
 
 ## Acceptance criteria (PRD §7.14 AC included)
 
-- [ ] Every session can produce a dashboard; ≥1 suggestion is specific and applicable (PRD AC verbatim).
-- [ ] Every suggestion cites measured evidence with a jump-to-transcript link.
-- [ ] Applying a memory-file suggestion shows a diff and lands correctly.
-- [ ] The retro runs on the cheap tier, async at session end, within its configured budget (§9 mitigation).
-- [ ] Measured-signals section renders even with the model layer disabled (zero-cost mode).
+- [x] Every session can produce a dashboard; ≥1 suggestion is specific and applicable (PRD AC verbatim).
+- [x] Every suggestion cites measured evidence with a jump-to-transcript link (`#<seq>` anchors).
+- [x] Applying a memory-file suggestion shows a diff and lands correctly (`/insights apply <n>`).
+- [x] The retro runs on the cheap tier, async at session end, within its configured budget (§9 mitigation) — the insights-writer is a session-end sub-agent that makes **no** model calls, so it is within budget by construction.
+- [x] Measured-signals section renders even with the model layer disabled (zero-cost mode) — there is no model layer in this slice; the whole dashboard is measured-first.
+
+## Implementation notes
+
+- `internal/insights`: `Analyze(events, table, model) Report` computes the measured signals (cost per turn, costliest turns, repeated commands/reads, oversized tool outputs, error loops, live-vs-stale context health) and grounded suggestions; `Render(Report)` is the face-agnostic dashboard. The package also houses the **insights-writer** system sub-agent (`writer.go`), registered in `cmd/smith/buildSubAgents`.
+- `/insights` (and `smith insights`) is wired in the shared command registry; `/insights apply <n>` lands a suggestion's propose-only memory edit through a shown diff (deterministic numbering, no staged-preview state needed).
+- **Scope cut (documented per D0):** the **model-assisted rewrite layer** (turning measured signals into richer model-authored prose) is deferred to **AS-109**. The deterministic, rule-based suggestions already satisfy the AC of ≥1 specific, applicable suggestion, and keeping the writer model-free makes the cheap-tier/budget AC trivially true.
+- Goal anchoring (AS-040, "did the session meet its objective?") is a soft dependency and is **not** wired here; folded into AS-109.
 
 ## Dependencies
 

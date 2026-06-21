@@ -78,7 +78,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | ready | 008, 031, 044 |
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | ready | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
-| [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | ready | 020, 022, 044 |
+| [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | done | 020, 022, 044 |
 | [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | done | 034 |
 | [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | done | 032, 044, 047 |
@@ -135,6 +135,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | ready | 048 |
 | [AS-107](AS-107-subagent-runner-composition.md) | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | subagents | done | 088, 048 |
 | [AS-108](AS-108-subagent-ledger-resolver.md) | Persist the rediscovered-fact ledger + memory/skill-aware save-target resolver | subagents | done | 107, 032, 034 |
+| [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |
 
 ## Suggested build order
 

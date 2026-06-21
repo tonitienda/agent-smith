@@ -102,6 +102,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
   for the `/insights` seam (AS-045). Like `subagent`/`skillcontract` the analyzer
   packages ship substrate-first — registration and the offer UX are consumer
   steps, not their concern.
+- **Session retrospective** (`/insights`, AS-045): `internal/insights` analyzes a
+  session's blocks into measured signals (cost, costliest turns, repeated reads /
+  commands, oversized tool outputs, error loops, live-vs-stale context health) and
+  grounded suggestions, with a face-agnostic `Render`. It consumes `cost`,
+  `projection`, `render`, and `schema` — pointing inward — and houses the
+  **insights-writer** `subagent.SubAgent` built-in (the C.3 `insights_writer`),
+  which records the suggestions as findings at session end with no model calls
+  (measured-first; the model-assisted rewrite layer is deferred to AS-109). The
+  same `Analyze` drives the `/insights` panel, which prices turns and lands a
+  suggestion's propose-only memory edit through a shown diff (`/insights apply`).
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
