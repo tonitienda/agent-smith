@@ -355,7 +355,7 @@ Organized as **P0 (MVP)**, **P1 (differentiators)**, **P2 (scale/production)**. 
 
 ## 10. Open Questions
 
-> Several are now resolved in the Decision Log (D-series) above — kept here for the trail. Still genuinely open: Q4 (`/clean` matching engine), Q5 (ACP vs. custom protocol), Q7 (discovery/evidence), Q12 (plugin trust depth), Q13 (immutability vs. erasure).
+> Several are now resolved in the Decision Log (D-series) above — kept here for the trail. Still genuinely open: Q4 (`/clean` matching engine), Q5 (ACP vs. custom protocol), Q7 (discovery/evidence), Q13 (immutability vs. erasure). Q12 (plugin trust depth) is **narrowed** by the AS-059 spike ([docs/design/plugin-trust.md](../design/plugin-trust.md)) — the permission-scope vocabulary, default context-slice exclusions, declarative-only enforcement + residual risks, and the WASM-if-ever code recommendation are decided; what remains is the D9-named v1 punt (prompt-injection defense via a plugin's own model calls) and marketplace distribution/signing (§7.26).
 
 1. **Provider scope** — *resolved:* drop PI as a competitor; Ollama and other local models are covered by the OpenAI-compatible provider layer (cheapest/private tier).
 2. **Wedge sequencing** — ship all five wedges together, or lead with one (I'd lead with **context composition + `/clean`** — most visceral demo, hardest for incumbents to copy quickly)?

@@ -92,7 +92,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | ready (spike) | 005 |
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | ready | 007, 020, 045 |
 | [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | ready | 032, 045, 050 |
-| [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | ready (spike) | 044 |
+| [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | done | 044 |
 | [AS-066](AS-066-command-registry-parity.md) | Shared command registry — slash ↔ subcommand parity | commands | done | 022, 065 |
 | [AS-068](AS-068-clean-interactive-selection.md) | `/clean` interactive multi-select + per-item archive restore | context-wedge | done | 028, 067 |
 | [AS-069](AS-069-headless-prompt-file-precedence.md) | `smith run -f <file>` shadowed by ambient stdin on a non-TTY | faces | done | 065 |
@@ -137,6 +137,9 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-108](AS-108-subagent-ledger-resolver.md) | Persist the rediscovered-fact ledger + memory/skill-aware save-target resolver | subagents | done | 107, 032, 034 |
 | [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |
 | [AS-110](AS-110-route-escalation-overrides.md) | Model routing escalation + per-session `/route` overrides (spun out of AS-042) | cost | ready | 042 |
+| [AS-111](AS-111-scoped-plugin-context-slices.md) | Scope-gated context slices for third-party sub-agents (spun out of AS-059) | security | ready | 044 |
+| [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | ready | 044, 098 |
+| [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 
 ## Suggested build order
 
@@ -154,11 +157,12 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 ## Needs clarification — decisions to make
 
-All previously listed `needs-clarification` tickets have been triaged against the
-current repo documentation and clarified where the documented direction was
-sufficient. As of this backlog update, there are no tickets left in
-`needs-clarification`; new ambiguous follow-on work should be captured by adding
-a fresh ticket with a focused Open questions section.
+Previously listed `needs-clarification` tickets were triaged against the current
+repo documentation and clarified where the documented direction was sufficient.
+The one open item is **AS-113** (plugin consent screen), which has nothing to hang
+a consent flow on until a plugin-install/marketplace path exists (§7.26, not yet
+ticketed) — see its Open questions section. New ambiguous follow-on work should be
+captured by adding a fresh ticket with a focused Open questions section.
 
 The clarified decisions are recorded in the individual ticket files rather than
 repeated here, so the ticket remains the source of truth for implementation.

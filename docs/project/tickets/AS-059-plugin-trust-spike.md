@@ -1,7 +1,7 @@
 ---
 id: AS-059
 title: "Design spike: third-party sub-agent plugin trust, permissions, and sandboxing"
-status: ready-to-implement
+status: done
 github_issue: 59
 depends_on: [AS-044]
 area: security
@@ -26,10 +26,10 @@ Spike scope:
 
 ## Acceptance criteria
 
-- [ ] Design doc (`docs/design/plugin-trust.md`) with a defined permission-scope vocabulary for C.5.
-- [ ] Default context-slice exclusions for third-party plugins specified.
-- [ ] The declarative-only boundary's enforcement mechanism and its documented residual risks written down (D0 discipline).
-- [ ] Q12 marked resolved or narrowed; concrete follow-up implementation tickets drafted.
+- [x] Design doc ([`docs/design/plugin-trust.md`](../../design/plugin-trust.md)) with a defined permission-scope vocabulary for C.5 (§2).
+- [x] Default context-slice exclusions for third-party plugins specified (§3).
+- [x] The declarative-only boundary's enforcement mechanism and its documented residual risks written down (§4, D0 discipline).
+- [x] Q12 narrowed (§7); concrete follow-up implementation tickets drafted (AS-111, AS-112, AS-113).
 
 ## Dependencies
 
