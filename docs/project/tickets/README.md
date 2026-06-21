@@ -75,7 +75,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-039](AS-039-init.md) | `/init` project scaffold | commands | done | 014, 022, 032 |
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
-| [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | ready | 008, 031, 044 |
+| [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | done | 008, 031, 044 |
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | ready | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | done | 020, 022, 044 |
@@ -136,6 +136,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-107](AS-107-subagent-runner-composition.md) | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | subagents | done | 088, 048 |
 | [AS-108](AS-108-subagent-ledger-resolver.md) | Persist the rediscovered-fact ledger + memory/skill-aware save-target resolver | subagents | done | 107, 032, 034 |
 | [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |
+| [AS-110](AS-110-route-escalation-overrides.md) | Model routing escalation + per-session `/route` overrides (spun out of AS-042) | cost | ready | 042 |
 
 ## Suggested build order
 

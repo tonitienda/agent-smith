@@ -15,6 +15,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/personality"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
@@ -132,6 +133,15 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	ctl.setAutoCompact(compactCfg.Auto, compactCfg.AutoThreshold)
+	// Model routing/tiering (AS-042): the tier→model policy that /compact
+	// summarization (and future tier-declaring features) resolve through, plus
+	// per-feature overrides. The typed view (AS-093) owns the `routing.*` paths;
+	// a malformed section degrades to the default policy with a warning (D2).
+	routingCfg, routingWarns := routing.ConfigFrom(cfg)
+	for _, w := range routingWarns {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+	}
+	ctl.setRouter(routingCfg)
 	// Wire the system sub-agents (AS-107): register the built-in passive analyzers
 	// (AS-048) with the `subagents.<name>` config overlay, and hand the controller
 	// the registry plus the insights store findings record into (the /insights seam,
@@ -246,6 +256,15 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Scriptability: command.Both,
 		Examples:      []string{"smith context show", "smith context show age"},
 		Run:           ctl.cmdContext,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "route",
+		Summary:       "Inspect the model routing/tiering policy",
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
+		Examples:      []string{"smith route", "smith route --output json"},
+		Run:           ctl.cmdRoute,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "insights",
