@@ -99,25 +99,28 @@ func TestLoadManifestDeclarative(t *testing.T) {
 // third-party code runs; spend is bounded by the budget cap" rather than deleting
 // it. Update it deliberately, do not drop it in confusion.
 func TestDeclarativeBoundaryNoOp(t *testing.T) {
-	manifests := []string{
-		`{"name":"minimal","kind":"analyzer"}`,
-		`{"name":"session","kind":"analyzer","schedule":"session_end","scope":"session","enabledByDefault":true,"emits":["note"]}`,
-		`{"name":"budgeted","kind":"analyzer","modelTier":"cheap","budgetUSD":5,"emits":["a","b"]}`,
-		`{"name":"permissive","kind":"analyzer","permissions":["read_transcript","propose_edit"]}`,
+	manifests := []struct {
+		name string
+		data string
+	}{
+		{"minimal", `{"name":"minimal","kind":"analyzer"}`},
+		{"session", `{"name":"session","kind":"analyzer","schedule":"session_end","scope":"session","enabledByDefault":true,"emits":["note"]}`},
+		{"budgeted", `{"name":"budgeted","kind":"analyzer","modelTier":"cheap","budgetUSD":5,"emits":["a","b"]}`},
+		{"permissive", `{"name":"permissive","kind":"analyzer","permissions":["read_transcript","propose_edit"]}`},
 	}
 	slice := []schema.Block{block("one"), block("two")}
-	for _, data := range manifests {
+	for _, tc := range manifests {
 		reg := NewRegistry()
-		if err := reg.LoadManifest([]byte(data)); err != nil {
-			t.Fatalf("load %s: %v", data, err)
+		if err := reg.LoadManifest([]byte(tc.data)); err != nil {
+			t.Fatalf("load %s: %v", tc.name, err)
 		}
-		m, _ := ParseManifest([]byte(data))
 		// Reach through the registry factory to the actual instance the Runner would
 		// drive — that is the value whose lifecycle must be inert.
-		sa := reg.entries[m.Name].factory()
+		sa := reg.entries[tc.name].factory()
 		if _, isDecl := sa.(declarative); !isDecl {
-			t.Fatalf("%s: loaded sub-agent is %T, not the declarative wrapper", m.Name, sa)
+			t.Fatalf("%s: loaded sub-agent is %T, not the declarative wrapper", tc.name, sa)
 		}
+		m := sa.Manifest()
 		scope := Scope{Kind: m.effectiveScope(), Session: "s1", Span: "1"}
 		sa.Init(scope)
 		for _, b := range slice {
@@ -125,7 +128,7 @@ func TestDeclarativeBoundaryNoOp(t *testing.T) {
 		}
 		got := sa.Teardown(scope, slice)
 		if len(got.Findings) != 0 || got.SpentUSD != 0 {
-			t.Fatalf("%s: declarative sub-agent was not inert: findings=%d spent=%.4f", m.Name, len(got.Findings), got.SpentUSD)
+			t.Fatalf("%s: declarative sub-agent was not inert: findings=%d spent=%.4f", tc.name, len(got.Findings), got.SpentUSD)
 		}
 	}
 }

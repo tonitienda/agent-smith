@@ -1,10 +1,7 @@
 package archtest
 
 import (
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -13,45 +10,31 @@ import (
 // declarative-only plugin boundary guard (AS-112, plugin-trust.md §4.3). A
 // third-party sub-agent ships as a manifest (data), parsed by internal/subagent's
 // ParseManifest/LoadManifest and wrapped in a passive `declarative` sub-agent. For
-// "data, never code" to hold, the package that parses and drives that manifest must
-// have no edge to arbitrary execution (os/exec) or network egress (net/http): there
-// must be no way for a parsed third-party manifest to grow a code-execution or
-// exfiltration path under a future refactor.
+// "data, never code" to hold, that package must have no path to arbitrary
+// execution (os/exec) or network egress (net/http): nothing the parsed manifest
+// flows through may grow a code-execution or exfiltration edge under a refactor.
 //
-// We assert the property on internal/subagent itself: the parse → wrap → drive path
-// lives entirely in that package, so if the package imports neither os/exec nor
-// net/http, no such edge can exist on the declarative path. The behavioral guard
-// (TestDeclarativeBoundaryNoOp in internal/subagent) covers the runtime half.
+// We assert it on the package's *full transitive* dependency set via `go list`, so
+// the guard cannot be bypassed by reaching os/exec or net/http through an
+// intermediate first-party package (the AST-import check this replaced only saw
+// direct imports). The behavioral guard (TestDeclarativeBoundaryNoOp in
+// internal/subagent) covers the runtime half.
 func TestDeclarativePluginBoundaryHasNoExecOrEgress(t *testing.T) {
-	root := moduleRoot(t)
-	const pkgDir = "internal/subagent"
+	const pkg = "github.com/tonitienda/agent-smith/internal/subagent"
 	forbidden := map[string]string{
 		"os/exec":  "the declarative plugin path must not reach arbitrary command execution",
 		"net/http": "the declarative plugin path must not reach network egress",
 	}
 
-	dir := filepath.Join(root, filepath.FromSlash(pkgDir))
-	entries, err := os.ReadDir(dir)
+	cmd := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", pkg)
+	cmd.Dir = moduleRoot(t)
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("read package dir %s: %v", pkgDir, err)
+		t.Fatalf("go list deps of %s: %v", pkg, err)
 	}
-	fset := token.NewFileSet()
-	for _, e := range entries {
-		name := e.Name()
-		// Non-test sources only: a test may import os/exec to build fixtures; the
-		// production boundary is what must stay clean.
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		file, parseErr := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ImportsOnly)
-		if parseErr != nil {
-			t.Fatalf("parse %s: %v", name, parseErr)
-		}
-		for _, imp := range file.Imports {
-			p := strings.Trim(imp.Path.Value, `"`)
-			if reason, bad := forbidden[p]; bad {
-				t.Errorf("%s/%s imports %q: %s (AS-112, D9). See docs/design/plugin-trust.md §4.3.", pkgDir, name, p, reason)
-			}
+	for _, dep := range strings.Fields(string(out)) {
+		if reason, bad := forbidden[dep]; bad {
+			t.Errorf("%s transitively depends on %q: %s (AS-112, D9). See docs/design/plugin-trust.md §4.3.", pkg, dep, reason)
 		}
 	}
 }
