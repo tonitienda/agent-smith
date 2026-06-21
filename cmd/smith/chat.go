@@ -132,6 +132,15 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 	ctl.setAutoCompact(compactCfg.Auto, compactCfg.AutoThreshold)
+	// Wire the system sub-agents (AS-107): register the built-in passive analyzers
+	// (AS-048) with the `subagents.<name>` config overlay, and hand the controller
+	// the registry plus the insights store findings record into (the /insights seam,
+	// AS-045). Default-on costs nothing when idle; a malformed entry warns, not fatal.
+	subReg, subStore, err := buildSubAgents(cfg, os.Stderr)
+	if err != nil {
+		return fmt.Errorf("build sub-agents: %w", err)
+	}
+	ctl.setSubAgents(subReg, subStore)
 	// Build the Matrix personality layer (AS-053) from config for this interactive
 	// face: themed status line + role names, on by default in the TUI, with
 	// /serious as the runtime kill switch. It is chrome-only and never touches turn

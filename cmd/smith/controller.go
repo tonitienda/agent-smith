@@ -29,6 +29,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/rewind"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
+	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/schema"
@@ -103,6 +104,17 @@ type chatSession struct {
 	// chrome-only and never touches turn behavior or output. nil leaves the face
 	// on its plain defaults.
 	pers *personality.Personality
+
+	// subagents is the sub-agent registry (AS-044/AS-107): built once at startup
+	// with the built-in system sub-agents registered and the `subagents.<name>`
+	// config overlay applied. buildEngine constructs a fresh per-session Runner
+	// over it; nil leaves the loop with no Runner installed (it then costs nothing).
+	subagents *subagent.Registry
+	// insights is the findings store the controller owns for the session's lifetime
+	// (the seam /insights, AS-045, reads). It is reused across engine rebuilds
+	// (/model, /clear, /resume) so findings accumulate rather than resetting with a
+	// new engine; each Runner the controller builds records into this same store.
+	insights subagent.Store
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -192,6 +204,16 @@ func (s *chatSession) setBudgetDefaults(defaultUSD, warnFraction float64, haltUn
 // on its plain defaults.
 func (s *chatSession) setPersonality(p *personality.Personality) {
 	s.pers = p
+}
+
+// setSubAgents installs the sub-agent registry and the insights store the
+// controller owns (AS-107). buildEngine then constructs a per-session Runner over
+// them and drives it via loop.WithSubAgents, so findings accumulate in the store
+// across engine rebuilds. A nil registry leaves sub-agents disabled (the loop's
+// Runner is then never installed), so a face that opts out pays nothing.
+func (s *chatSession) setSubAgents(reg *subagent.Registry, store subagent.Store) {
+	s.subagents = reg
+	s.insights = store
 }
 
 // workingLine yields the status-line text shown while a turn runs: the themed
@@ -286,6 +308,14 @@ func (s *chatSession) buildEngine(sess *session.Session, provName, model string)
 			return cost.EstimateTurnCostUSD(ctx, reserveModel, s.pricing)
 		}
 		opts = append(opts, loop.WithBudgetReservation(reserve, s.budgetHaltUnpriced))
+	}
+	// Sub-agent lifecycle (AS-107): a fresh Runner per engine, keyed to this
+	// session and recording into the controller-owned store, so the loop drives the
+	// built-in passive analyzers (AS-048) and their findings outlive an engine
+	// rebuild. No-op cost when nothing is enabled (the Runner's fan-out is empty).
+	if s.subagents != nil {
+		runner := subagent.NewRunner(s.subagents, s.insights, sess.ID)
+		opts = append(opts, loop.WithSubAgents(runner))
 	}
 	return loop.New(prov, sess.Log, rt, s.tools, model, opts...)
 }
