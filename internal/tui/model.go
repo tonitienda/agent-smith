@@ -553,7 +553,15 @@ func (m model) modeBar() string {
 	if gap < 0 {
 		gap = 0
 	}
-	return modeBarStyle.Render(left + strings.Repeat(" ", gap) + hint)
+	s := left + strings.Repeat(" ", gap) + hint
+	// Hard-cap to the terminal width: a tracker longer than a narrow terminal
+	// would otherwise wrap, and modeBarRows() reserves only one row, so the wrap
+	// would overflow the layout (Gemini review). The bar is plain text of width-1
+	// cells, so a rune slice is an exact column cut.
+	if r := []rune(s); len(r) > m.width && m.width >= 0 {
+		s = string(r[:m.width])
+	}
+	return modeBarStyle.Render(s)
 }
 
 // panelFooterRows is the height the inspect-panel footer keybar occupies: one

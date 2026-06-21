@@ -58,6 +58,17 @@ func TestModeBarHiddenWithoutMode(t *testing.T) {
 	}
 }
 
+// TestModeBarTruncatesToWidth guards against the bar wrapping on a narrow
+// terminal: modeBarRows() reserves one row, so the rendered line must never
+// exceed the terminal width (Gemini review on #235).
+func TestModeBarTruncatesToWidth(t *testing.T) {
+	m := newMetaModel(t, modeMeta())
+	m = update(t, m, tea.WindowSizeMsg{Width: 20, Height: 24})
+	if got := lipglossWidth(m.modeBar()); got > 20 {
+		t.Fatalf("mode bar width = %d, want <= 20:\n%q", got, m.modeBar())
+	}
+}
+
 // TestLeaderMOpensModePanel covers AC2: the leader chord ctrl+g then m opens the
 // richer mode panel (goal, tracker, phases) without typing the key, and the key
 // does not leak when no mode is active.
