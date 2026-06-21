@@ -89,6 +89,8 @@ func TestIsGrounded(t *testing.T) {
 		"Make sure to handle errors properly.",
 		"Be careful not to break existing behaviour.",
 		"This went well overall.",
+		"Consider following best practices, e.g. handle errors.",
+		"Ensure proper validation, i.e. check for nil.",
 	}
 	for _, s := range generic {
 		if IsGrounded(s) {

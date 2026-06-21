@@ -51,11 +51,11 @@ func Pack() ([]skill.Skill, error) {
 // these. The patterns are deliberately conservative so generic advice ("improve
 // error handling") fails while a real reference passes.
 var groundingSignals = []*regexp.Regexp{
-	regexp.MustCompile("`[^`]+`"),                   // a backticked code span
-	regexp.MustCompile(`\bAS-\d+\b`),                // a ticket reference
-	regexp.MustCompile(`[\w./-]+\.[A-Za-z][\w]*`),   // a file path with an extension (foo/bar.go)
-	regexp.MustCompile(`\b[A-Za-z_]\w*\([^)]*\)`),   // a function/method call: Foo(), pkg.Bar(x)
-	regexp.MustCompile(`(?:^|[\s(])[\w./-]+:\d+\b`), // a file:line span
+	regexp.MustCompile("`[^`]+`"),                     // a backticked code span
+	regexp.MustCompile(`\bAS-\d+\b`),                  // a ticket reference
+	regexp.MustCompile(`[\w./-]+\.[A-Za-z]{2,}[\w]*`), // a file path with an extension (foo/bar.go); {2,} so "e.g."/"i.e." are not mistaken for one
+	regexp.MustCompile(`\b[A-Za-z_]\w*\([^)]*\)`),     // a function/method call: Foo(), pkg.Bar(x)
+	regexp.MustCompile(`(?:^|[\s(])[\w./-]+:\d+\b`),   // a file:line span
 }
 
 // IsGrounded reports whether a finding cites something concrete — a file,

@@ -890,10 +890,9 @@ func (s *chatSession) loadedPhaseSkills(events []schema.Block, instanceID, phase
 		}
 		var p string
 		if raw, present := b.Ext[extPhaseSkillPhase]; present {
-			_ = json.Unmarshal(raw, &p)
-		}
-		if strings.EqualFold(p, phase) {
-			loaded[b.Attribution.Skill] = true
+			if err := json.Unmarshal(raw, &p); err == nil && strings.EqualFold(p, phase) {
+				loaded[b.Attribution.Skill] = true
+			}
 		}
 	}
 	return loaded

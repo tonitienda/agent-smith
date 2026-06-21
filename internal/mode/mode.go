@@ -64,10 +64,10 @@ var phaseSkills = map[string][]string{
 // (case-insensitive), or nil when the phase declares none. A fresh slice is
 // returned so a caller can never mutate the shared mapping in place.
 func PhaseSkills(phase string) []string {
-	for p, names := range phaseSkills {
-		if strings.EqualFold(p, phase) {
-			return append([]string(nil), names...)
-		}
+	// The map keys are canonical lowercase phase names, so a lowercased lookup is
+	// an O(1) case-insensitive match without scanning the map.
+	if names, ok := phaseSkills[strings.ToLower(phase)]; ok {
+		return append([]string(nil), names...)
 	}
 	return nil
 }
