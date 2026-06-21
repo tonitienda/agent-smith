@@ -76,6 +76,19 @@ type Meta struct {
 	// Goal is the active session objective (AS-040), shown persistently in the
 	// status line; empty when no goal is set, and simply omitted then.
 	Goal string
+	// Mode is the active Coding Mode name (AS-073), empty when not in a mode. Its
+	// presence is what turns on the pinned phase-tracker chrome below the status
+	// line, so entering the mode feels like crossing a threshold (D-CODE-4).
+	Mode string
+	// PhaseTracker is the pre-rendered one-line phase tracker (e.g.
+	// "think · [analyse] · plan · …"), shown pinned while Mode is set. It is
+	// rendered by the controller so the face never imports the mode package —
+	// the same decoupling MetaFunc and WithWorkingLine use.
+	PhaseTracker string
+	// ModePanel is the pre-rendered richer mode view (goal, tracker, phases
+	// visited) the inspect panel shows on the Ctrl+G m hotkey while Mode is set
+	// (AS-067 panel framework). Empty when not in a mode.
+	ModePanel string
 }
 
 // MetaFunc yields the current session identity for the status line. It is

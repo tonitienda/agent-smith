@@ -311,6 +311,16 @@ func (m model) handleLeaderKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.refresh()
 		return m, nil
 	}
+	// Ctrl+G then m opens the Coding Mode panel (AS-073): the richer goal/tracker/
+	// phases-visited view. It is built from the cached Meta render, not a command,
+	// so it is handled here like the t toggle. With no mode active there is nothing
+	// to show, so the chord is a no-op.
+	if msg.String() == "m" {
+		if m.meta.Mode != "" && m.meta.ModePanel != "" {
+			m.openPanel("mode", m.meta.ModePanel)
+		}
+		return m, nil
+	}
 	if name, ok := m.panelHotkeys[msg.String()]; ok {
 		return m.openPanelByName(name)
 	}

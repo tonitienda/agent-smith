@@ -236,3 +236,53 @@ func Render(events []schema.Block, phases []string) string {
 	}
 	return fmt.Sprintf("Mode: %s · phase: %s\n%s", cur.Mode, cur.Phase, Tracker(phases, cur.Phase))
 }
+
+// PhaseHistory returns the phases the instance has moved through, in append
+// order, derived purely from its phase-change events. Repeats are kept (a user
+// may jump back), so the trail reflects what actually happened. Blank phases
+// (e.g. an empty initial phase) are skipped.
+func PhaseHistory(events []schema.Block, instanceID string) []string {
+	enterIdx := -1
+	for i, b := range events {
+		if b.Kind == eventlog.KindModeEnter && b.ID == instanceID {
+			enterIdx = i
+			break
+		}
+	}
+	if enterIdx < 0 {
+		return nil
+	}
+	var out []string
+	for j := enterIdx + 1; j < len(events); j++ {
+		if events[j].Kind == eventlog.KindPhaseChange && refersTo(events[j], instanceID) {
+			if p := blockText(events[j]); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// Panel renders the richer, pinned mode view the TUI shows on demand (AS-073):
+// the mode, its goal, the phase tracker, and the trail of phases visited so far.
+// Like Render it is plain text — flavor and layout live in the face (D-CODE-4) —
+// so headless callers can reuse it verbatim. goal is the active session
+// objective (AS-040), passed in so this package does not reach into goal state;
+// empty is simply omitted. Phase-produced artifacts (AS-076) attach here once
+// that ticket records them on the log.
+func Panel(events []schema.Block, phases []string, goal string) string {
+	cur, ok := Current(events)
+	if !ok {
+		return `No coding mode active. Use /feature "<prompt>" or /mode coding to enter.`
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Mode: %s · phase: %s\n", cur.Mode, cur.Phase)
+	if g := strings.TrimSpace(goal); g != "" {
+		fmt.Fprintf(&b, "Goal: %s\n", g)
+	}
+	fmt.Fprintf(&b, "\nPhases:\n  %s\n", Tracker(phases, cur.Phase))
+	if hist := PhaseHistory(events, cur.InstanceID); len(hist) > 0 {
+		fmt.Fprintf(&b, "\nVisited:\n  %s\n", strings.Join(hist, " → "))
+	}
+	return b.String()
+}

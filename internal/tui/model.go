@@ -498,15 +498,15 @@ func (m *model) relayout() {
 	if !m.ready {
 		return
 	}
-	vpHeight := m.height - inputHeight - m.statusRows() - m.paletteHeight() - m.permRows()
+	vpHeight := m.height - inputHeight - m.statusRows() - m.modeBarRows() - m.paletteHeight() - m.permRows()
 	if vpHeight < 1 {
 		vpHeight = 1
 	}
 	m.viewport.Height = vpHeight
 
-	// The inspect panel keeps the pinned status line (when there's room) and a
-	// one-row footer keybar; the rest is the panel body.
-	panelHeight := m.height - m.statusRows() - m.panelFooterRows()
+	// The inspect panel keeps the pinned status line (when there's room), the
+	// pinned mode bar, and a one-row footer keybar; the rest is the panel body.
+	panelHeight := m.height - m.statusRows() - m.modeBarRows() - m.panelFooterRows()
 	if panelHeight < 1 {
 		panelHeight = 1
 	}
@@ -522,6 +522,46 @@ func (m model) statusRows() int {
 		return 0
 	}
 	return statusHeight
+}
+
+// modeBarRows is the height the pinned phase-tracker bar occupies: one row while
+// a Coding Mode is active (AS-073), zero otherwise. It rides with the status line
+// — when the terminal is too short to keep the status line (statusRows()==0), the
+// tracker drops too — so a tiny window degrades to a usable prompt (D-TUI-11).
+func (m model) modeBarRows() int {
+	if m.meta.Mode == "" || m.statusRows() == 0 {
+		return 0
+	}
+	return statusHeight
+}
+
+// modeBar renders the pinned phase tracker shown while a Coding Mode is active:
+// the mode name and the highlighted phase tracker on the left, a hint to open the
+// richer panel on the right. The tracker text is pre-rendered by the controller
+// (Meta.PhaseTracker), so the face stays free of the mode package. The hint drops
+// first when the row is too narrow to fit both.
+func (m model) modeBar() string {
+	left := m.meta.Mode
+	if m.meta.PhaseTracker != "" {
+		left = m.meta.Mode + "  " + m.meta.PhaseTracker
+	}
+	hint := "Ctrl+G m"
+	gap := m.width - lipglossWidth(left) - lipglossWidth(hint)
+	if gap < 1 {
+		hint, gap = "", m.width-lipglossWidth(left)
+	}
+	if gap < 0 {
+		gap = 0
+	}
+	s := left + strings.Repeat(" ", gap) + hint
+	// Hard-cap to the terminal width: a tracker longer than a narrow terminal
+	// would otherwise wrap, and modeBarRows() reserves only one row, so the wrap
+	// would overflow the layout (Gemini review). The bar is plain text of width-1
+	// cells, so a rune slice is an exact column cut.
+	if r := []rune(s); len(r) > m.width && m.width >= 0 {
+		s = string(r[:m.width])
+	}
+	return modeBarStyle.Render(s)
 }
 
 // panelFooterRows is the height the inspect-panel footer keybar occupies: one
@@ -585,6 +625,9 @@ func (m model) View() string {
 		if m.statusRows() > 0 {
 			sections = append(sections, m.statusLine())
 		}
+		if m.modeBarRows() > 0 {
+			sections = append(sections, m.modeBar())
+		}
 		sections = append(sections, m.pickerView())
 		if m.panelFooterRows() > 0 {
 			sections = append(sections, m.pickerFooter())
@@ -597,6 +640,9 @@ func (m model) View() string {
 		sections := make([]string, 0, 3)
 		if m.statusRows() > 0 {
 			sections = append(sections, m.statusLine())
+		}
+		if m.modeBarRows() > 0 {
+			sections = append(sections, m.modeBar())
 		}
 		sections = append(sections, m.selectorView())
 		if m.panelFooterRows() > 0 {
@@ -611,6 +657,9 @@ func (m model) View() string {
 		sections := make([]string, 0, 3)
 		if m.statusRows() > 0 {
 			sections = append(sections, m.statusLine())
+		}
+		if m.modeBarRows() > 0 {
+			sections = append(sections, m.modeBar())
 		}
 		sections = append(sections, m.panel.View())
 		if m.panelFooterRows() > 0 {
@@ -628,6 +677,9 @@ func (m model) View() string {
 	// dropped when the window is too short to reserve room for it (D-TUI-11).
 	if m.permActive() && !m.perm.prompt.Destructive && m.permRows() > 0 {
 		sections = append(sections, m.permCardView())
+	}
+	if m.modeBarRows() > 0 {
+		sections = append(sections, m.modeBar())
 	}
 	if m.statusRows() > 0 {
 		sections = append(sections, m.statusLine())
