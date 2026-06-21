@@ -35,11 +35,14 @@ const Producer = "/mode"
 // mechanics.
 const Coding = "coding"
 
-// DefaultPhases is the baked-in house method (D-CODE-5.1): the default phase
-// order and stance. It is data, not control flow, so AS-074/AS-075 can reorder,
-// skip, or extend it without touching the lifecycle core.
-var DefaultPhases = []string{
-	"think", "analyse", "plan", "implement", "verify", "refactor", "reflect",
+// DefaultPhases returns the baked-in house method (D-CODE-5.1): the default
+// phase order and stance. It is data, not control flow, so AS-074/AS-075 can
+// reorder, skip, or extend it without touching the lifecycle core. A fresh slice
+// is returned on each call so the default can never be mutated in place by a
+// caller — overrides are passed explicitly (every phase-aware function takes a
+// phases argument), never by editing a shared global.
+func DefaultPhases() []string {
+	return []string{"think", "analyse", "plan", "implement", "verify", "refactor", "reflect"}
 }
 
 // State is one Coding Mode instance derived from the log.
@@ -224,10 +227,12 @@ func Tracker(phases []string, current string) string {
 }
 
 // Render formats the active mode for `/mode` (and `/phase`) with no arguments.
-func Render(events []schema.Block) string {
+// phases is the active mode's phase list (the tracker row), passed in rather than
+// assumed so a future generic mode renders its own phases, not coding's.
+func Render(events []schema.Block, phases []string) string {
 	cur, ok := Current(events)
 	if !ok {
 		return `No coding mode active. Use /feature "<prompt>" or /mode coding to enter.`
 	}
-	return fmt.Sprintf("Mode: %s · phase: %s\n%s", cur.Mode, cur.Phase, Tracker(DefaultPhases, cur.Phase))
+	return fmt.Sprintf("Mode: %s · phase: %s\n%s", cur.Mode, cur.Phase, Tracker(phases, cur.Phase))
 }

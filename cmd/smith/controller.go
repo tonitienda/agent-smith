@@ -658,7 +658,7 @@ func (s *chatSession) cmdFeature(_ context.Context, args []string) (command.Outp
 	if err := s.enterMode(); err != nil {
 		return command.Output{}, err
 	}
-	return command.Output{Text: fmt.Sprintf("Entered coding mode · goal: %s\n%s", prompt, mode.Render(s.sess.Log.Events()))}, nil
+	return command.Output{Text: fmt.Sprintf("Entered coding mode · goal: %s\n%s", prompt, mode.Render(s.sess.Log.Events(), mode.DefaultPhases()))}, nil
 }
 
 // cmdMode enters or exits Coding Mode, or shows its status (AS-072 /mode). The
@@ -674,7 +674,7 @@ func (s *chatSession) cmdMode(_ context.Context, args []string) (command.Output,
 	events := s.sess.Log.Events()
 
 	if len(args) == 0 {
-		return command.Output{Text: mode.Render(events)}, nil
+		return command.Output{Text: mode.Render(events, mode.DefaultPhases())}, nil
 	}
 
 	switch arg := strings.ToLower(strings.TrimSpace(strings.Join(args, " "))); arg {
@@ -694,7 +694,7 @@ func (s *chatSession) cmdMode(_ context.Context, args []string) (command.Output,
 		if err := s.enterMode(); err != nil {
 			return command.Output{}, err
 		}
-		return command.Output{Text: "Entered coding mode.\n" + mode.Render(s.sess.Log.Events())}, nil
+		return command.Output{Text: "Entered coding mode.\n" + mode.Render(s.sess.Log.Events(), mode.DefaultPhases())}, nil
 	default:
 		return command.Output{}, fmt.Errorf("unknown mode %q; use `coding` or `off`", arg)
 	}
@@ -717,29 +717,30 @@ func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output
 	if !ok {
 		return command.Output{}, fmt.Errorf("no coding mode active; start one with /feature or /mode coding")
 	}
+	phases := mode.DefaultPhases()
 	if len(args) == 0 {
-		return command.Output{Text: mode.Render(events)}, nil
+		return command.Output{Text: mode.Render(events, phases)}, nil
 	}
 
 	arg := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
 	var target string
 	switch arg {
 	case "next":
-		t, ok := mode.NextPhase(mode.DefaultPhases, cur.Phase)
+		t, ok := mode.NextPhase(phases, cur.Phase)
 		if !ok {
 			return command.Output{Text: fmt.Sprintf("Already at the last phase (%s).", cur.Phase)}, nil
 		}
 		target = t
 	case "back", "prev", "previous":
-		t, ok := mode.PrevPhase(mode.DefaultPhases, cur.Phase)
+		t, ok := mode.PrevPhase(phases, cur.Phase)
 		if !ok {
 			return command.Output{Text: fmt.Sprintf("Already at the first phase (%s).", cur.Phase)}, nil
 		}
 		target = t
 	default:
-		t, ok := mode.CanonicalPhase(mode.DefaultPhases, arg)
+		t, ok := mode.CanonicalPhase(phases, arg)
 		if !ok {
-			return command.Output{}, fmt.Errorf("unknown phase %q; phases: %s", arg, strings.Join(mode.DefaultPhases, ", "))
+			return command.Output{}, fmt.Errorf("unknown phase %q; phases: %s", arg, strings.Join(phases, ", "))
 		}
 		target = t
 	}
@@ -747,13 +748,13 @@ func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output
 	if _, err := s.sess.Log.Append(mode.SetPhase(cur.InstanceID, target)); err != nil {
 		return command.Output{}, fmt.Errorf("record phase change: %w", err)
 	}
-	return command.Output{Text: fmt.Sprintf("Phase → %s\n%s", target, mode.Tracker(mode.DefaultPhases, target))}, nil
+	return command.Output{Text: fmt.Sprintf("Phase → %s\n%s", target, mode.Tracker(phases, target))}, nil
 }
 
 // enterMode appends the coding-mode entry events (mode_enter + initial
 // phase-change). Callers hold s.mu and have already checked no mode is active.
 func (s *chatSession) enterMode() error {
-	for _, b := range mode.Enter(mode.Coding, mode.DefaultPhases) {
+	for _, b := range mode.Enter(mode.Coding, mode.DefaultPhases()) {
 		if _, err := s.sess.Log.Append(b); err != nil {
 			return fmt.Errorf("enter coding mode: %w", err)
 		}

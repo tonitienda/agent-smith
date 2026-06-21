@@ -22,7 +22,7 @@ func mustAppend(t *testing.T, l *eventlog.Log, b schema.Block) schema.Block {
 func enter(t *testing.T, l *eventlog.Log) string {
 	t.Helper()
 	var id string
-	for _, b := range Enter(Coding, DefaultPhases) {
+	for _, b := range Enter(Coding, DefaultPhases()) {
 		stored := mustAppend(t, l, b)
 		if stored.Kind == eventlog.KindModeEnter {
 			id = stored.ID
@@ -45,8 +45,8 @@ func TestEnterStartsAtFirstPhase(t *testing.T) {
 	if cur.Mode != Coding {
 		t.Errorf("Mode = %q, want %q", cur.Mode, Coding)
 	}
-	if cur.Phase != DefaultPhases[0] {
-		t.Errorf("Phase = %q, want %q", cur.Phase, DefaultPhases[0])
+	if cur.Phase != DefaultPhases()[0] {
+		t.Errorf("Phase = %q, want %q", cur.Phase, DefaultPhases()[0])
 	}
 	if !cur.Active {
 		t.Error("Active = false, want true")
@@ -124,26 +124,26 @@ func TestReenterAfterExit(t *testing.T) {
 }
 
 func TestPhaseNavigation(t *testing.T) {
-	if got, ok := NextPhase(DefaultPhases, "think"); !ok || got != "analyse" {
+	if got, ok := NextPhase(DefaultPhases(), "think"); !ok || got != "analyse" {
 		t.Errorf("NextPhase(think) = %q,%v, want analyse,true", got, ok)
 	}
-	if _, ok := NextPhase(DefaultPhases, "reflect"); ok {
+	if _, ok := NextPhase(DefaultPhases(), "reflect"); ok {
 		t.Error("NextPhase at last phase should report false")
 	}
-	if got, ok := PrevPhase(DefaultPhases, "analyse"); !ok || got != "think" {
+	if got, ok := PrevPhase(DefaultPhases(), "analyse"); !ok || got != "think" {
 		t.Errorf("PrevPhase(analyse) = %q,%v, want think,true", got, ok)
 	}
-	if _, ok := PrevPhase(DefaultPhases, "think"); ok {
+	if _, ok := PrevPhase(DefaultPhases(), "think"); ok {
 		t.Error("PrevPhase at first phase should report false")
 	}
 }
 
 func TestCanonicalPhaseCaseInsensitive(t *testing.T) {
-	got, ok := CanonicalPhase(DefaultPhases, "VERIFY")
+	got, ok := CanonicalPhase(DefaultPhases(), "VERIFY")
 	if !ok || got != "verify" {
 		t.Errorf("CanonicalPhase(VERIFY) = %q,%v, want verify,true", got, ok)
 	}
-	if _, ok := CanonicalPhase(DefaultPhases, "ship"); ok {
+	if _, ok := CanonicalPhase(DefaultPhases(), "ship"); ok {
 		t.Error("CanonicalPhase should reject an unknown phase")
 	}
 }
