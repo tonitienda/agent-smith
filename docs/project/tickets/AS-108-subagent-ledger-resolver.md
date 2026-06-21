@@ -1,7 +1,7 @@
 ---
 id: AS-108
 title: "Persist the rediscovered-fact ledger and wire a memory/skill-aware save-target resolver"
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-107, AS-032, AS-034]
 area: subagents
@@ -39,23 +39,31 @@ This ticket replaces them with the real implementations:
   cross-session rollup (AS-050); until that lands a small on-disk file under the
   session store is acceptable.
 
-## Open questions
+## Resolved decisions
 
-- Where does the persisted ledger live before AS-050 — a dedicated file under
-  `.smith/`, or fold it into the insights `Store` once that gains a durable
-  backing (AS-045/AS-057)?
-- The resolver needs the active-skill context at teardown time; AS-048 records it
-  on block `Attribution.Skill`. Confirm the composition root can reach the memory
-  tree for the deepest-file rule without re-scanning per finding.
+- **Ledger location:** a dedicated `fact-ledger.json` under the project's session
+  area (`<store root>/sessions/<project-hash>/fact-ledger.json`), so dismissals
+  and the precision tally are shared across every session of that project
+  (interactive and headless). Folding it into the insights `Store` waits on that
+  store gaining a durable backing (AS-045/AS-057); the file shape is small and
+  additive so the migration is a reader change, not a break.
+- **Resolver inputs:** the composition root already loads the skill snapshot and
+  knows `wd`, so `saveTargetResolver(wd, skills)` builds a name→`SKILL.md` map once
+  and runs `memory.Discover` per finding (cheap, stat-only). No per-finding
+  re-scan of the skill tree; the active skill comes from `Attribution.Skill` via
+  the detector's `Resolve(skill, files)` call. Headless runs pass no skills (no
+  skill tool is loaded there) so facts there resolve on the memory tree alone.
 
 ## Acceptance criteria
 
-- [ ] A discovered fact inside a skill scope proposes saving to that skill's
+- [x] A discovered fact inside a skill scope proposes saving to that skill's
       memory/contract; outside one, to the deepest applicable memory file; with
-      the project-root fallback preserved.
-- [ ] A dismissed fact is not re-offered in a fresh session (ledger survives a
+      the project-root fallback preserved. (`saveTargetResolver`,
+      `TestSaveTargetResolver` / `TestSaveTargetResolverFallback`.)
+- [x] A dismissed fact is not re-offered in a fresh session (ledger survives a
       process restart), with a test over two scripted sessions.
-- [ ] `internal/factdetector` still imports neither `memory` nor `skill` — the
+      (`factdetector.FileLedger`, `TestFileLedgerSurvivesRestart`.)
+- [x] `internal/factdetector` still imports neither `memory` nor `skill` — the
       resolver and ledger are injected from the composition root.
 
 ## Dependencies
