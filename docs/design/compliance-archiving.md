@@ -71,13 +71,33 @@ granularity is **per-session, with optional per-subject sub-keys**:
   that subject's key; the rest of the session stays readable. Higher key-management burden;
   only offered to customers who need it.
 
-**Key hierarchy.** Per-archive KMS root (customer's KMS in BYO-bucket — *no key material we
-hold*, which also keeps us out of the controller seat) → per-session/per-subject data keys
-wrapped by the root → key destruction = delete the wrapped data key from the manifest. This
-is BYO-KMS envelope encryption; nothing exotic.
+**Key hierarchy — and where keys must *not* live.** Per-archive KMS root (customer's KMS in
+BYO-bucket — *no key material we hold*, which also keeps us out of the controller seat) →
+per-session/per-subject data keys. This is BYO-KMS envelope encryption; nothing exotic.
 
-**Where it lives:** the **archive/export format**, not the block. See §4 — this is the
-decision that keeps the V1 schema clean.
+The subtlety that makes crypto-shredding actually work with WORM: **the destroyable key
+material must live in a *mutable* store, never inside the WORM-locked manifest.** If the
+wrapped data keys were embedded in the hash-chained, Object-Lock'd manifest, they would be
+physically undeletable — and "destroy the key" becomes impossible, defeating the whole
+mechanism. So the design splits the artifacts by mutability:
+
+- **Immutable (WORM/Object-Lock):** the ciphertext blocks + the hash-chain + the signed
+  *content* manifest. Tamper-evident, retained, never mutated. Contains **no destroyable
+  key material** — at most opaque key *identifiers* (which leak nothing once the key is
+  gone).
+- **Mutable (a key registry / KMS, *outside* WORM):** the per-session/per-subject data keys
+  themselves. Either (a) wrapped data keys in a mutable key-registry table (a DB / KV store
+  the customer controls), or (b) **first-class, individually deletable KMS keys** (one KMS
+  key per session/subject), with no shared-root deletion that would nuke unrelated archives.
+  Erasure = delete that one registry row, or destroy that one KMS key. The WORM ciphertext
+  stays in place and becomes permanently unreadable.
+
+Either (a) or (b) is acceptable; (b) is cleanest where the customer's KMS supports enough
+keys, (a) where it does not. A single shared root must **never** be the erasure unit — its
+destruction would erase every archive under it, not the target subject.
+
+**Where it lives:** the **archive/export format + a sibling mutable key registry**, *not*
+the block. See §4 — this is the decision that keeps the V1 schema clean.
 
 ### 2.2 Redaction-at-capture (data minimization — OSS, best-effort)
 
@@ -115,7 +135,7 @@ lifecycle job — again **outside** the per-block schema.
 | Scenario | GDPR Art. 17 / HIPAA expectation | Mechanism here |
 |---|---|---|
 | User deletes their own local session | Subject = controller; their data, their disk | `rm <session>.jsonl` (AS-007). No conflict; D3 is intra-session, not anti-delete. |
-| Customer must erase subject X from a retained compliance archive | Erase X's personal data while retaining the rest of the immutable audit trail | Destroy X's per-subject (or per-session) data key → ciphertext is permanently unreadable; WORM retention + tamper-evident manifest stay intact. |
+| Customer must erase subject X from a retained compliance archive | Erase X's personal data while retaining the rest of the immutable audit trail | Destroy X's per-subject (or per-session) data key **in the mutable key registry / KMS** (§2.1) → the WORM ciphertext is permanently unreadable; WORM retention + tamper-evident content manifest stay intact (they hold ciphertext + key *ids*, never the keys). |
 | Regulator/litigation hold blocks an erasure that is otherwise due | Retention duty overrides erasure (Art. 17(3)(b/e)) | Legal-hold flag on the session suspends key destruction until the hold lifts. |
 | "Right to erasure" but the data is in an Object-Lock/WORM bucket the customer can't delete from | Immutable storage cannot physically delete | Crypto-shredding is *the* answer: you never delete the object, you destroy the key. The WORM object becomes meaningless ciphertext. |
 | Secret accidentally captured into a local log | Minimize blast radius | Redaction-at-capture catches the common cases at append time; what it misses is a capture-layer bug to fix at capture, and is crypto-shredded along with its session in the archive. |
@@ -162,16 +182,24 @@ legal-hold gates it** — covers each scenario without ever mutating an existing
 //   ext["redaction"]: { "rule": "api_key", "ranges": [...], "method": "tokenized" }
 ```
 
-And, at the **archive layer only** (a separate paid-tier format, not `/schema`):
+And, at the **archive layer only** (a separate paid-tier format, not `/schema`). Note the
+mutability split from §2.1 — the destroyable keys are **not** in the WORM manifest:
 
 ```
-ArchiveManifest {
-  KeyWrapping: per-session/per-subject wrapped data keys (BYO-KMS root)
+// WORM / Object-Lock (immutable, retained) — NO destroyable key material:
+ContentManifest {
   HashChain:   prev-hash per event (tamper-evidence)
   Signature:   signed manifest
-  Holds:       [{ subjectOrSession, retainUntil, reason }]
-  Tombstones:  [{ keyId, destroyedAt }]   // erasure = key destroyed, ciphertext kept
+  KeyIds:      [ opaque key id per session/subject ]   // identifiers only, not keys
 }
+Ciphertext:    encrypted blocks (immutable)
+
+// Mutable, OUTSIDE WORM (the erasure surface):
+KeyRegistry {                                          // a registry table, or first-class KMS keys
+  [ keyId -> wrapped data key | KMS key handle ]       // delete a row / destroy a KMS key = erase
+}
+Holds:         [{ subjectOrSession, retainUntil, reason }]   // legal-hold gates the deletion
+Tombstones:    [{ keyId, destroyedAt }]                // erasure = key destroyed, ciphertext kept
 ```
 
 So the only V1-freeze action is the **decision itself**: *no schema change required now.*
@@ -209,7 +237,9 @@ a controller relationship actually exists (§1 shape B).
    operation one layer up. They never touch the same bytes at the same layer.
 2. **Authoritative erasure = crypto-shredding at the archive layer** (per-session default,
    per-subject optional), **BYO-KMS** so we hold no key material and stay out of the
-   controller seat for BYO-bucket customers.
+   controller seat for BYO-bucket customers. Keep destroyable keys in a **mutable key
+   registry / first-class KMS keys outside WORM** (§2.1) — never embedded in the WORM-locked
+   manifest, or erasure becomes physically impossible.
 3. **Redaction-at-capture as OSS data minimization**, explicitly documented as best-effort
    defense-in-depth, never the erasure guarantee.
 4. **Legal-hold composes with erasure** at the archive layer.
