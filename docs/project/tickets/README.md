@@ -138,7 +138,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |
 | [AS-110](AS-110-route-escalation-overrides.md) | Model routing escalation + per-session `/route` overrides (spun out of AS-042) | cost | ready | 042 |
 | [AS-111](AS-111-scoped-plugin-context-slices.md) | Scope-gated context slices for third-party sub-agents (spun out of AS-059) | security | ready | 044 |
-| [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | ready | 044, 098 |
+| [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | done | 044, 098 |
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 
 ## Suggested build order
