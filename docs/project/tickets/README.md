@@ -18,6 +18,13 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
   - `depends_on` — ticket IDs that should land (or at least be designed) first.
   - `area`, `priority`, `source` — grouping, PRD tier, and the PRD sections the ticket comes from.
 - To find tickets: `grep -l "status: needs-clarification" tickets/` etc.
+- GitHub issues are mirrors, not the source of truth. `cmd/ticket-sync` updates
+  already-linked issues after merge, and the scheduled sync creates or links
+  still-unlinked tickets. Before creating a new GitHub issue it searches for an
+  existing issue whose title starts with the ticket ID (for example
+  `[AS-123] ...`) so a failed write-back/push does not duplicate the ticket on
+  the next scheduled run. Tickets with `status: done` are closed with GitHub's
+  `completed` state reason when synced.
 
 ## Index — V1 (AS-001 … AS-030)
 

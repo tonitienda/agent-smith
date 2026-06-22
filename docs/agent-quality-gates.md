@@ -17,6 +17,13 @@ The script intentionally delegates to Make targets so CI, Claude, Codex, GrokBui
 
 `make lint` installs and runs the exact `golangci-lint` version pinned in the Makefile under `.cache/tools/` (currently `v2.12.2`). It does not fall back to an arbitrary globally installed binary, so local runs and CI use the same linter version and the same Go toolchain selected for the repository.
 
+Go's built-in static checker is `go vet`, which this repository runs separately
+as `make vet`. The Go toolchain does not provide a broader built-in lint command
+that covers style, maintainability, security, and multi-linter policy. For that
+layer, `make lint` uses the pinned `golangci-lint` aggregator so humans, agents,
+and CI all run the same versioned checks instead of whatever happens to be
+installed globally.
+
 ## Harness command contract
 
 The harness defines four named entry points, each a thin script under `scripts/harness/`. Agents pick the smallest one that covers what they changed. Every script prints each command before running it, preserves the underlying exit code, and writes a concise (git-ignored) summary under `.cache/harness/`. Run them from the repository root.

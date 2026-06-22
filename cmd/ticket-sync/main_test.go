@@ -131,6 +131,70 @@ func TestSkipUnlinkedLeavesUnlinkedTicketAlone(t *testing.T) {
 	}
 }
 
+func TestSyncTicketReusesExistingIssueBeforeCreating(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AS-999-example.md")
+	if err := os.WriteFile(path, []byte("---\nid: AS-999\ngithub_issue: null\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tc := &ticket{
+		path:     path,
+		id:       "AS-999",
+		title:    "Example",
+		status:   "done",
+		area:     "foundation",
+		priority: "P0",
+		body:     "# AS-999 · Example\n",
+	}
+
+	var calls []string
+	restore := stubGHAPI(t, func(endpoint, method string, input []byte) ([]byte, error) {
+		calls = append(calls, method+" "+endpoint)
+		switch {
+		case method == "GET" && strings.HasPrefix(endpoint, "search/issues?"):
+			return []byte(`{"items":[{"number":321,"title":"[AS-999] Example"}]}`), nil
+		case method == "PATCH" && endpoint == "repos/owner/repo/issues/321":
+			got := unmarshalPayload(t, input)
+			if got["state_reason"] != "completed" {
+				t.Fatalf("state_reason = %v, want completed", got["state_reason"])
+			}
+			return []byte(`{}`), nil
+		default:
+			t.Fatalf("unexpected gh call: %s %s", method, endpoint)
+			return nil, nil
+		}
+	})
+	defer restore()
+
+	if err := syncTicket("owner/repo", tc, syncOptions{}); err != nil {
+		t.Fatalf("syncTicket returned error: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "github_issue: 321") {
+		t.Fatalf("ticket file was not linked to existing issue: %s", raw)
+	}
+	if got, want := strings.Join(calls, "\n"), "GET search/issues?q=AS-999+in%3Atitle+repo%3Aowner%2Frepo+type%3Aissue\nPATCH repos/owner/repo/issues/321"; got != want {
+		t.Fatalf("calls =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestFindExistingIssueIgnoresLooseTitleMatches(t *testing.T) {
+	restore := stubGHAPI(t, func(endpoint, method string, input []byte) ([]byte, error) {
+		return []byte(`{"items":[{"number":1,"title":"AS-999 loose mention"},{"number":2,"title":"[AS-999] Example"}]}`), nil
+	})
+	defer restore()
+
+	got, err := findExistingIssue("owner/repo", &ticket{id: "AS-999"})
+	if err != nil {
+		t.Fatalf("findExistingIssue returned error: %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("issue = %d, want 2", got)
+	}
+}
+
 func TestIsLinked(t *testing.T) {
 	cases := map[string]bool{
 		"---\nid: AS-1\ngithub_issue: 42\n---\n":   true,
@@ -192,5 +256,14 @@ func assertNoState(t *testing.T, got map[string]any) {
 	}
 	if _, ok := got["state_reason"]; ok {
 		t.Fatalf("state_reason was present: %v", got["state_reason"])
+	}
+}
+
+func stubGHAPI(t *testing.T, fn func(endpoint, method string, input []byte) ([]byte, error)) func() {
+	t.Helper()
+	old := ghAPI
+	ghAPI = fn
+	return func() {
+		ghAPI = old
 	}
 }
