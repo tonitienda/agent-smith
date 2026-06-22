@@ -23,6 +23,8 @@ const (
 )
 
 // allTiers lists the tiers in a fixed order for rendering and reverse lookup.
+// The order is also the escalation ladder (cheap → standard → strong) NextTier
+// walks.
 var allTiers = []Tier{Cheap, Standard, Strong}
 
 // validTier reports whether name is a known tier.
@@ -33,6 +35,27 @@ func validTier(t Tier) bool {
 	default:
 		return false
 	}
+}
+
+// ParseTier validates and normalizes a user-supplied tier name (e.g. from
+// `/route <feature> <tier>`), reporting whether it names a known tier. It is the
+// single parse point so the command surfaces and config share one notion of a
+// valid tier.
+func ParseTier(name string) (Tier, bool) {
+	t := Tier(name)
+	return t, validTier(t)
+}
+
+// NextTier returns the next stronger tier on the cheap → standard → strong
+// ladder, or (_, false) when t is already the strongest (or unknown). It is the
+// escalation step Escalate walks.
+func NextTier(t Tier) (Tier, bool) {
+	for i, cur := range allTiers {
+		if cur == t && i+1 < len(allTiers) {
+			return allTiers[i+1], true
+		}
+	}
+	return "", false
 }
 
 // Policy maps each tier to a concrete model id per provider vendor, plus optional
@@ -95,6 +118,52 @@ func (p Policy) TierOf(model string) (Tier, bool) {
 		}
 	}
 	return "", false
+}
+
+// Clone returns a deep copy of the policy: the nested tier→vendor→model maps and
+// the feature override map are duplicated, not shared. Policy values copy by
+// reference (the maps are reference types), so a per-session override layer must
+// Clone before mutating or it would silently rewrite the durable config-owned
+// policy every face shares (AS-110; Gemini review on #216).
+func (p Policy) Clone() Policy {
+	c := Policy{}
+	if p.tiers != nil {
+		c.tiers = make(map[Tier]map[string]string, len(p.tiers))
+		for t, vendors := range p.tiers {
+			cv := make(map[string]string, len(vendors))
+			for v, m := range vendors {
+				cv[v] = m
+			}
+			c.tiers[t] = cv
+		}
+	}
+	if p.features != nil {
+		c.features = make(map[string]Tier, len(p.features))
+		for f, t := range p.features {
+			c.features[f] = t
+		}
+	}
+	return c
+}
+
+// WithFeatureTier returns a copy of the policy with feature pinned to tier — the
+// per-session `/route <feature> <tier>` override path (AS-110). It Clones first,
+// so the durable config policy the receiver came from is never mutated; layering
+// a second override over the result accumulates because each call copies the
+// previous overrides.
+func (p Policy) WithFeatureTier(feature string, tier Tier) Policy {
+	c := p.Clone()
+	c.setFeature(feature, tier)
+	return c
+}
+
+// WithVendorModel returns a copy of the policy with tier→vendor mapped to model —
+// the per-session `/route <tier> <vendor> <model>` override path (AS-110). Like
+// WithFeatureTier it Clones first so the shared config policy stays untouched.
+func (p Policy) WithVendorModel(tier Tier, vendor, model string) Policy {
+	c := p.Clone()
+	c.set(tier, vendor, model)
+	return c
 }
 
 // set records a tier→vendor→model mapping, lazily allocating the nested maps. It

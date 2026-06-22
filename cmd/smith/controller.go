@@ -132,8 +132,15 @@ type chatSession struct {
 	// router is the model routing/tiering policy (AS-042): tier-declaring work
 	// (/compact summarization) resolves its concrete model through it instead of
 	// hardcoding ids. Defaults to routing.Default() so a face that never calls
-	// setRouter keeps the previous hardcoded cheap-tier behavior.
+	// setRouter keeps the previous hardcoded cheap-tier behavior. `/route <feature>
+	// <tier>` / `/route <tier> <vendor> <model>` layer transient per-session
+	// overrides on top (AS-110) — copied, never mutating baseRouter.
 	router routing.Policy
+	// baseRouter is the durable config-derived policy (AS-110): the value /route
+	// overrides layer onto and that a session swap (/clear, /resume) resets router
+	// back to, so per-session overrides never outlive the session that set them and
+	// the config policy stays untouched.
+	baseRouter routing.Policy
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -204,25 +211,27 @@ type chatSession struct {
 // start so turn progress is wired before the first turn runs.
 func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string, skills []skill.Skill, hooks *hook.Set) *chatSession {
 	return &chatSession{
-		store:     store,
-		tools:     tools,
-		pricing:   pricing,
-		providers: providers,
-		sess:      sess,
-		provName:  provName,
-		model:     model,
-		project:   filepath.Base(wd),
-		wd:        wd,
-		skills:    skills,
-		hooks:     hooks,
-		router:    routing.Default(),
+		store:      store,
+		tools:      tools,
+		pricing:    pricing,
+		providers:  providers,
+		sess:       sess,
+		provName:   provName,
+		model:      model,
+		project:    filepath.Base(wd),
+		wd:         wd,
+		skills:     skills,
+		hooks:      hooks,
+		router:     routing.Default(),
+		baseRouter: routing.Default(),
 	}
 }
 
 // setRouter installs the model routing/tiering policy (AS-042), read from layered
 // config at startup via routing.ConfigFrom (AS-093). A face that does not call it
-// keeps routing.Default() — the previous hardcoded cheap-tier behavior.
-func (s *chatSession) setRouter(p routing.Policy) { s.router = p }
+// keeps routing.Default() — the previous hardcoded cheap-tier behavior. It seeds
+// both the effective router and the baseRouter a session swap resets to (AS-110).
+func (s *chatSession) setRouter(p routing.Policy) { s.router, s.baseRouter = p, p }
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -1029,13 +1038,20 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	return command.Output{Text: composition.Render(comp)}, nil
 }
 
-// cmdRoute renders the /route inspector (AS-042, PRD §7.15): the active model
-// routing/tiering policy (each tier's concrete model per vendor and the
-// per-feature overrides) plus the tier that served each recent call, mapped from
-// the same cost accounting /cost reads. It is read-only — config owns the policy
-// in V1; a per-session override and auto-escalation are tracked as follow-on
-// (AS-110) — so the panel opens instantly with no model calls.
-func (s *chatSession) cmdRoute(_ context.Context, _ []string) (command.Output, error) {
+// cmdRoute inspects the model routing/tiering policy (AS-042, PRD §7.15) and, with
+// arguments, sets a transient per-session override on top of it (AS-110):
+//
+//	/route                         → render the active policy + recent calls
+//	/route <feature> <tier>        → pin a feature to a tier for this session
+//	/route <tier> <vendor> <model> → remap a tier's model for a vendor this session
+//
+// Overrides are copied onto baseRouter (never mutating the shared config policy)
+// and reset on /clear and /resume. Inspection stays read-only and model-call-free,
+// so the panel opens instantly. Auto-escalation visibility is tracked in AS-116.
+func (s *chatSession) cmdRoute(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 {
+		return s.routeOverride(args)
+	}
 	summary := cost.Summarize(s.events(), s.pricing)
 	turns := summary.Turns
 	const maxRecent = 5
@@ -1047,6 +1063,42 @@ func (s *chatSession) cmdRoute(_ context.Context, _ []string) (command.Output, e
 		recent = append(recent, routing.Call{Index: t.Index, Model: t.Model})
 	}
 	return command.Output{Text: routing.Render(s.router, recent)}, nil
+}
+
+// routeOverride applies a transient per-session routing override and renders the
+// updated policy (AS-110). Arity disambiguates the two forms: two args are
+// `<feature> <tier>` (pin a feature to a tier), three are `<tier> <vendor> <model>`
+// (remap a tier's model for a vendor). Each override is layered onto the current
+// router via the copy-on-write With* helpers, so the shared config policy is never
+// mutated; /clear and /resume reset s.router back to baseRouter.
+func (s *chatSession) routeOverride(args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var note string
+	switch len(args) {
+	case 2:
+		feature := args[0]
+		tier, ok := routing.ParseTier(args[1])
+		if !ok {
+			return command.Output{}, fmt.Errorf("unknown tier %q (cheap|standard|strong)", args[1])
+		}
+		s.router = s.router.WithFeatureTier(feature, tier)
+		note = fmt.Sprintf("Pinned %q to the %s tier for this session.", feature, tier)
+	case 3:
+		tier, ok := routing.ParseTier(args[0])
+		if !ok {
+			return command.Output{}, fmt.Errorf("unknown tier %q (cheap|standard|strong)", args[0])
+		}
+		vendor, model := args[1], args[2]
+		if vendor == "" || model == "" {
+			return command.Output{}, fmt.Errorf("vendor and model must be non-empty")
+		}
+		s.router = s.router.WithVendorModel(tier, vendor, model)
+		note = fmt.Sprintf("Mapped the %s tier to %s=%s for this session.", tier, vendor, model)
+	default:
+		return command.Output{}, fmt.Errorf("usage: route <feature> <tier> | route <tier> <vendor> <model>")
+	}
+	return command.Output{Text: note + " (resets on /clear or /resume)\n\n" + routing.Render(s.router, nil)}, nil
 }
 
 // cmdInsights renders the /insights session retrospective (AS-045, PRD §7.14): a
@@ -1974,6 +2026,9 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	}
 	prev := s.sess
 	s.sess, s.engine = fresh, eng
+	// Drop any per-session /route overrides: they are transient and must not leak
+	// into the fresh session (AS-110 AC). The durable config policy is unchanged.
+	s.router = s.baseRouter
 	// Safe to close the previous log: the busy guard means no turn is writing it
 	// when a swap runs, so its file descriptor isn't leaked across /clear.
 	_ = prev.Log.Close()
@@ -2090,6 +2145,9 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 	}
 	prev := s.sess
 	s.sess, s.provName, s.model, s.engine = opened, provName, model, eng
+	// Drop per-session /route overrides on a session swap (AS-110 AC): overrides
+	// belong to the session that set them, not the one being resumed.
+	s.router = s.baseRouter
 	// Close the previously-active log; the busy guard means no turn is writing it.
 	_ = prev.Log.Close()
 	return command.Output{
