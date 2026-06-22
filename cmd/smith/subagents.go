@@ -12,6 +12,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
+	"github.com/tonitienda/agent-smith/internal/skillanalyzer"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 )
 
@@ -27,7 +28,7 @@ import (
 // resolver (memory/skill-aware, keeping internal/factdetector free of those
 // imports) and the durable ledger so a dismissed fact stays dismissed across
 // sessions and the precision tally survives a restart.
-func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger factdetector.Ledger, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
+func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger factdetector.Ledger, skills []skill.Skill, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
 	reg := subagent.NewRegistry()
 	if err := reg.Register(factdetector.Factory(resolve, ledger)); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
@@ -36,6 +37,13 @@ func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger fac
 	// suggestions as findings. Like the fact detector it makes no model calls, so it
 	// is free when idle and within budget when enabled.
 	if err := reg.Register(insights.Factory()); err != nil {
+		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
+	}
+	// skill-expectation-analyzer (AS-049): grades each session's skill activations
+	// against their load-time contracts. Deterministic (no model calls) and opt-in —
+	// experimental until session volume exists (D7), so it ships disabled by default
+	// and is enabled via the `subagents` config overlay.
+	if err := reg.Register(skillanalyzer.Factory(analyzerCatalog(skills))); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
 	}
 	// Guard the typed-nil here rather than relying on Load's nil check: a nil
@@ -52,6 +60,23 @@ func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger fac
 		}
 	}
 	return reg, subagent.NewMemStore(), nil
+}
+
+// analyzerCatalog adapts the session's discovered skills into the
+// skill-expectation-analyzer's catalog (AS-049), carrying each skill's raw
+// frontmatter so the analyzer can parse the declared C.1 contract or infer one
+// from the description — keeping internal/skillanalyzer free of the skill loader.
+func analyzerCatalog(skills []skill.Skill) []skillanalyzer.Skill {
+	out := make([]skillanalyzer.Skill, len(skills))
+	for i, s := range skills {
+		out[i] = skillanalyzer.Skill{
+			Name:        s.Name,
+			Description: s.Description,
+			Frontmatter: s.Frontmatter,
+			Source:      s.Source,
+		}
+	}
+	return out
 }
 
 // factLedgerName is the per-project durable ledger file, kept alongside the

@@ -1,7 +1,7 @@
 ---
 id: AS-049
 title: skill-expectation-analyzer — predict-then-measure skill grading (experimental)
-status: ready-to-implement
+status: done
 github_issue: 49
 depends_on: [AS-044, AS-047, AS-048]
 area: living-skills

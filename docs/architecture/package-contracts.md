@@ -102,7 +102,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
   detector** (AS-048) lives in `internal/factdetector` as a `subagent.SubAgent`
   built-in: it consumes `subagent` + `schema` only and stays free of `memory`/
   `skill` by injecting its save-target `Resolve` func and its dismissal `Ledger`
-  from the consumer. The **composition root** owns that consumer wiring (AS-107):
+  from the consumer. The **skill-expectation analyzer** (AS-049) lives in
+  `internal/skillanalyzer` as a `subagent.SubAgent` built-in: it consumes
+  `subagent` + `skillcontract` + `schema` (+ `eventlog` for the skill-load marker)
+  and stays free of `skill` by taking its catalog as plain `skillanalyzer.Skill`
+  values the composition root adapts. It freezes each skill's contract at load
+  (declared via `skillcontract.ParseContract`, else inferred from the description),
+  then at session end grades each activation against it (verdict / score /
+  classification / remedy + concrete diff, Appendix C.2) with no model calls —
+  deterministic, opt-in (`EnabledByDefault` false, D7 demotes it until session
+  volume exists). The **composition root** owns that consumer wiring (AS-107):
   `cmd/smith`'s `buildSubAgents` registers the built-in factories on a
   `subagent.Registry`, applies the `subagents.<name>` config overlay (C.3) via
   `Registry.Load`, and hands the chat controller / headless run the registry plus
