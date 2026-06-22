@@ -1,7 +1,7 @@
 ---
 id: AS-043
 title: /tidy — context reorganization without lossy summarization (flagship wedge)
-status: ready-to-implement
+status: done
 github_issue: 43
 depends_on: [AS-006, AS-027, AS-028]
 area: context-wedge
@@ -33,6 +33,27 @@ Clear parts: dedupe of identical file reads (keep latest, exclude older — pure
 - [ ] A fidelity diff is shown before apply; originals remain in the archive (§9 mitigation).
 - [ ] Duplicate file reads are deduped to the latest version.
 - [ ] Output segments are labeled well enough that a follow-up `/clean` can target them.
+
+## Delivered (V1)
+
+`internal/tidy` ships the mechanical, zero-provider-token core the description
+scopes as the "clear part": **dedupe of identical file reads**. For every file
+read more than once into the live window it keeps the latest read and drops the
+earlier ones as a single appended `KindExclusion` event (`/tidy` producer), so
+the reclaim is previewable, reversible (`/tidy --undo`), and the surviving reads
+stay ordinary file-read segments a follow-up `/clean` can still target. The
+preview is the §9 **fidelity diff** (before/after segment+token inventory, the
+kept vs dropped read per file, the token delta, and a recency warning when a
+dropped read is very fresh). Because dedup only removes older identical reads of
+a path whose latest read is retained, every live fact survives by construction —
+satisfying the verbatim AC (materially smaller, preserves all live facts,
+reversible) for the duplicate-read case. Wired as the `/tidy` slash command
+(both faces) following the `/clean` preview→apply/undo/cancel lifecycle.
+
+Dead-end collapse and working-memory promotion (the heuristic and
+shared-AS-048-memory-path halves of §7.13) are tracked as follow-on work in
+**AS-117** so they land as a deliberate, separately-reviewed change rather than a
+second silent removal path (D0 — no silent punts).
 
 ## Dependencies
 

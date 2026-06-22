@@ -77,7 +77,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-040](AS-040-goal.md) | `/goal` session objective | commands | done | 006, 022 |
 | [AS-041](AS-041-budget-guardrails.md) | Budget guardrails + `/budget` | cost | done | 020, 022, 031 |
 | [AS-042](AS-042-model-routing.md) | Model routing/tiering + `/route` | cost | done | 008, 031, 044 |
-| [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | ready | 006, 027, 028 |
+| [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | done | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | done | 020, 022, 044 |
 | [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
@@ -145,6 +145,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | done | 005, 016 |
 | [AS-116](AS-116-json-root-help-output.md) | Root help ignores `--output json` | faces | ready | 065, 070 |
 | [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | done | 110 |
+| [AS-117](AS-117-tidy-dead-end-and-working-memory.md) | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | context-wedge | needs-clarification | 043, 048 |
 
 ## Suggested build order
 
@@ -164,12 +165,13 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 Previously listed `needs-clarification` tickets were triaged against the current
 repo documentation and clarified where the documented direction was sufficient.
-The one open item is **AS-113** (plugin consent screen), which has nothing to hang
-a consent flow on until a plugin-install/marketplace path exists (§7.26, not yet
-ticketed) — see its Open questions section. New bug follow-ons such as **AS-116**
-should stay `ready-to-implement` unless they truly need a product decision. New
-ambiguous follow-on work should be captured by adding a fresh ticket with a
-focused Open questions section.
+Two open items remain: **AS-113** (plugin consent screen), which has nothing to
+hang a consent flow on until a plugin-install/marketplace path exists (§7.26, not
+yet ticketed), and **AS-117** (`/tidy` dead-end collapse + working-memory
+promotion), whose surfaces need pinning before building — see each ticket's Open
+questions section. New bug follow-ons should stay `ready-to-implement` unless
+they truly need a product decision. New ambiguous follow-on work should be
+captured by adding a fresh ticket with a focused Open questions section.
 
 The clarified decisions are recorded in the individual ticket files rather than
 repeated here, so the ticket remains the source of truth for implementation.

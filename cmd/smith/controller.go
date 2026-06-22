@@ -35,6 +35,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/subagent"
+	"github.com/tonitienda/agent-smith/internal/tidy"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/schema"
@@ -155,6 +156,13 @@ type chatSession struct {
 	// blocks from the wrong log.
 	pendingClean    *clean.Plan
 	pendingCleanFor *session.Session
+
+	// pendingTidy holds the previewed /tidy dedup plan awaiting confirmation
+	// (/tidy --apply) or discard (/tidy --cancel), keyed to the session it was
+	// previewed against so a /clear or /resume between preview and apply
+	// invalidates it rather than deduping the wrong log (mirrors pendingClean).
+	pendingTidy    *tidy.Plan
+	pendingTidyFor *session.Session
 
 	// pendingRewind holds the previewed /rewind plan awaiting confirmation
 	// (/rewind --apply) or discard (/rewind --cancel), keyed to the session it was
@@ -1545,6 +1553,103 @@ func (s *chatSession) cleanCancel() (command.Output, error) {
 	}
 	s.pendingClean, s.pendingCleanFor = nil, nil
 	return command.Output{Text: "Discarded the staged /clean preview. Nothing changed."}, nil
+}
+
+// cmdTidy is the context reorganizer (AS-043 /tidy, PRD §7.13): the V1 mechanical
+// half dedupes identical file reads — keeping the latest read of each path and
+// dropping the earlier ones — without lossy summarization. The reclaim is an
+// appended exclusion event, so history is never mutated (D3); the preview is a
+// fidelity diff and /tidy --undo restores the most recent dedup exactly.
+//
+//   - /tidy           preview the dedup (mutates nothing) and stage it
+//   - /tidy --apply   confirm the staged preview, appending the exclusion
+//   - /tidy --undo    restore the most recent dedup
+//   - /tidy --cancel  discard the staged preview
+func (s *chatSession) cmdTidy(ctx context.Context, _ []string) (command.Output, error) {
+	switch f := command.FlagsFrom(ctx); {
+	case f.Bool("apply"):
+		return s.tidyApply()
+	case f.Bool("undo"):
+		return s.tidyUndo()
+	case f.Bool("cancel"):
+		return s.tidyCancel()
+	}
+	return s.tidyPreview()
+}
+
+// tidyPreview stages a dedup: it projects the live window, builds the plan, and
+// stores it pending confirmation. Nothing is appended to the log.
+func (s *chatSession) tidyPreview() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
+	plan := tidy.Preview(proj, s.pricing, s.model, time.Now())
+	if plan.Empty() {
+		s.pendingTidy, s.pendingTidyFor = nil, nil
+		return command.Output{Text: tidy.RenderPreview(plan)}, nil
+	}
+	s.pendingTidy, s.pendingTidyFor = &plan, s.sess
+	return command.Output{Text: tidy.RenderPreview(plan)}, nil
+}
+
+// tidyApply confirms the staged preview, appending the exclusion event that
+// drops the older reads from the projection. The plan is discarded once applied.
+func (s *chatSession) tidyApply() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingTidy == nil {
+		return command.Output{Text: "Nothing staged. Run /tidy to preview a dedup first."}, nil
+	}
+	if s.pendingTidyFor != s.sess {
+		s.pendingTidy, s.pendingTidyFor = nil, nil
+		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /tidy again."}, nil
+	}
+	plan := *s.pendingTidy
+	event, ok := tidy.Apply(plan)
+	if !ok {
+		s.pendingTidy, s.pendingTidyFor = nil, nil
+		return command.Output{Text: "Nothing to apply."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record exclusion: %w", err)
+	}
+	s.pendingTidy, s.pendingTidyFor = nil, nil
+	return command.Output{Text: fmt.Sprintf("Deduped %s, reclaiming %d tokens. Restore with /tidy --undo.",
+		pluralReads(plan.DroppedCount()), plan.Tokens)}, nil
+}
+
+// tidyUndo restores the most recent /tidy dedup by appending a counter-exclusion.
+// The log is never rewritten, so the restoration is exact.
+func (s *chatSession) tidyUndo() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, removed, ok := tidy.Undo(s.sess.Log.Events())
+	if !ok {
+		return command.Output{Text: "No /tidy dedup to undo in this session."}, nil
+	}
+	if _, err := s.sess.Log.Append(event); err != nil {
+		return command.Output{}, fmt.Errorf("record undo: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Restored %s to the window.", pluralReads(removed))}, nil
+}
+
+// tidyCancel discards a staged preview without touching the log.
+func (s *chatSession) tidyCancel() (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pendingTidy == nil {
+		return command.Output{Text: "Nothing staged to cancel."}, nil
+	}
+	s.pendingTidy, s.pendingTidyFor = nil, nil
+	return command.Output{Text: "Discarded the staged /tidy preview. Nothing changed."}, nil
+}
+
+// pluralReads labels a file-read count for the tidy confirm/undo lines.
+func pluralReads(n int) string {
+	if n == 1 {
+		return "1 read"
+	}
+	return strconv.Itoa(n) + " reads"
 }
 
 // pluralSegments labels a segment count for the confirm/undo lines.
