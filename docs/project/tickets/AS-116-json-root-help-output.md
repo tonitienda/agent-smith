@@ -2,6 +2,7 @@
 id: AS-116
 title: "Root help ignores --output json"
 status: ready-to-implement
+type: bug
 github_issue: null
 depends_on: [AS-065, AS-070]
 area: faces
@@ -12,8 +13,6 @@ source: Manual smoke pass for docs/projects/manual-test-campaign.md on 2026-06-2
 # AS-116 · Root help ignores `--output json`
 
 **Status: ready to implement**
-
-Labels: bug
 
 ## Description
 

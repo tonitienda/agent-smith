@@ -10,7 +10,7 @@ This campaign is the human smoke/regression pass to run after a burst of ticket 
 2. Use a disposable project directory unless a scenario says otherwise.
 3. Prefer a test user config directory so manual state does not leak into your real Smith setup, for example: `export XDG_CONFIG_HOME=$(mktemp -d)` and `export HOME=$(mktemp -d)`.
 4. Record the result for each scenario as **Pass**, **Fail**, **Blocked**, or **Not implemented**.
-5. When a completed-ticket scenario fails, create a new `docs/project/tickets/AS-NNN-*.md` ticket with `status: ready-to-implement`, `area` matching the failing feature, and the label signal `bug` in the ticket body or labels section. Update `docs/project/tickets/README.md` and this campaign in the same change.
+5. When a completed-ticket scenario fails, create a new `docs/project/tickets/AS-NNN-*.md` ticket with `status: ready-to-implement`, `type: bug`, and `area` matching the failing feature. Update `docs/project/tickets/README.md` and this campaign in the same change.
 6. Before committing or handing off campaign updates, run `./scripts/agent-quality-gate.sh` as required by the repository harness contract.
 
 ## Status legend
@@ -288,7 +288,7 @@ The following lightweight checks were attempted while creating this campaign:
 | --- | --- | --- |
 | `timeout 60 make build` | Pass | The binary built successfully after the initial long-running build was allowed to complete. |
 | Ticket status extraction from `docs/project/tickets/AS-*.md` | Pass | Used to generate the coverage matrix above. |
-| `./smith --help --output json` plus `python3 -m json.tool` | Fail | Root help emitted plain text instead of JSON; tracked as AS-116 with label `bug`. |
+| `./smith --help --output json` plus `python3 -m json.tool` | Fail | Root help emitted plain text instead of JSON; tracked as AS-116 with `type: bug`. |
 
 
 AS-116 was created from this smoke pass because root JSON help did not behave as documented. No other completed feature was proven to fail during the limited local pass.

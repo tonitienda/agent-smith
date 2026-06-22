@@ -52,6 +52,7 @@ type ticket struct {
 	id       string
 	title    string
 	status   string
+	kind     string
 	area     string
 	priority string
 	issue    int // 0 = not created yet
@@ -267,6 +268,8 @@ func parseTicket(path string) (*ticket, error) {
 			t.title = strings.Trim(val, `"`)
 		case "status":
 			t.status = val
+		case "type":
+			t.kind = val
 		case "area":
 			t.area = val
 		case "priority":
@@ -294,6 +297,9 @@ func labels(t *ticket) []string {
 	}
 	if t.area != "" {
 		ls = append(ls, "area:"+t.area)
+	}
+	if t.kind != "" {
+		ls = append(ls, "type:"+t.kind)
 	}
 	if t.priority != "" {
 		ls = append(ls, t.priority)
@@ -362,7 +368,7 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 		if t.status == "done" {
 			action += " and close it"
 		}
-		_, err := fmt.Printf("%s: would %s  [%s · %s · %s]\n", t.id, action, t.status, t.priority, t.area)
+		_, err := fmt.Printf("%s: would %s  [%s · %s · %s · %s]\n", t.id, action, t.status, t.kind, t.priority, t.area)
 		return err
 	}
 
