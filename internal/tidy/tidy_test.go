@@ -183,12 +183,14 @@ func TestUndoNothingToUndo(t *testing.T) {
 // live-fact warning rather than being removed silently.
 func TestRecentDropWarns(t *testing.T) {
 	events := []schema.Block{
-		fileRead("old", "main.go", 400, 1), // 1 min old: within the recent window
+		fileRead("old1", "main.go", 400, 1), // two older reads, both within the recent window
+		fileRead("old2", "main.go", 400, 1),
 		fileRead("new", "main.go", 400, 0),
 	}
 	plan := preview(events)
-	if len(plan.Warnings) == 0 {
-		t.Fatal("expected a recency warning for the dropped very-recent read")
+	// Exactly one warning per path, however many dropped reads are fresh.
+	if len(plan.Warnings) != 1 {
+		t.Fatalf("warnings = %d (%v), want exactly 1 per path", len(plan.Warnings), plan.Warnings)
 	}
 	if !strings.Contains(plan.Warnings[0], "main.go") {
 		t.Errorf("warning = %q, want it to name the file", plan.Warnings[0])

@@ -142,13 +142,15 @@ func Preview(proj *projection.Projection, table *cost.Table, model string, now t
 		sort.SliceStable(segs, func(i, j int) bool { return segs[i].Seq < segs[j].Seq })
 		keep := segs[len(segs)-1]
 		g := Group{Path: d.Path, Keep: itemOf(keep)}
+		warned := false // one recency warning per path, however many old reads are fresh
 		for _, s := range segs[:len(segs)-1] {
 			g.Drop = append(g.Drop, itemOf(s))
 			g.Tokens += s.Tokens
 			g.CostUSD += s.CostUSD
-			if s.Age >= 0 && s.Age < recentAge {
+			if !warned && s.Age >= 0 && s.Age < recentAge {
 				plan.Warnings = append(plan.Warnings,
 					fmt.Sprintf("an older read of %s is very recent — the current thread may still depend on it", d.Path))
+				warned = true
 			}
 		}
 		plan.Groups = append(plan.Groups, g)
