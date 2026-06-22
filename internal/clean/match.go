@@ -69,14 +69,22 @@ func Match(proj *projection.Projection, query string) (ids []string, why map[str
 		if !b.Live {
 			continue // /clean operates on the live window only
 		}
-		hay := haystack(b.Block)
-		if hay == "" {
+		toks := haystackTokens(b.Block)
+		if len(toks) == 0 {
 			continue
 		}
+		// Match each term against whole-word tokens, not raw substrings: a term
+		// hits a token it is a prefix of. This keeps light tense/plural tolerance
+		// ("bug"→"bugs", "fix"→"fixed") while refusing mid-word false positives
+		// ("id" must not match "provide") — the conservative under-selection the
+		// matcher is specified to prefer.
 		var hit []string
 		for _, t := range terms {
-			if strings.Contains(hay, t) {
-				hit = append(hit, t)
+			for _, tok := range toks {
+				if strings.HasPrefix(tok, t) {
+					hit = append(hit, t)
+					break
+				}
 			}
 		}
 		if len(hit) == 0 {
@@ -102,11 +110,19 @@ func Match(proj *projection.Projection, query string) (ids []string, why map[str
 	return ids, why
 }
 
-// haystack is the lowercased searchable text for a block: its own content plus
-// the deterministic topic tags around it (AS-027). Raw file-read bodies are
-// deliberately excluded — a read of an unrelated file that merely mentions a
-// term would otherwise drag in (conservative under-selection, AC) — but the
-// read's path/module still matters and rides in via its tag.
+// haystackTokens is the lowercased word tokens of a block's searchable text:
+// its own content plus the deterministic topic tags around it (AS-027). Raw
+// file-read bodies are deliberately excluded — a read of an unrelated file that
+// merely mentions a term would otherwise drag in (conservative under-selection,
+// AC) — but the read's path/module still matters and rides in via its tag.
+// Tokenizing here (rather than substring-scanning the raw text) is what lets the
+// matcher respect word boundaries.
+func haystackTokens(b schema.Block) []string {
+	return tokenize(haystack(b))
+}
+
+// haystack concatenates a block's searchable text into one lowercased string,
+// later tokenized by haystackTokens.
 func haystack(b schema.Block) string {
 	var sb strings.Builder
 	write := func(s string) {
@@ -153,12 +169,9 @@ func haystack(b schema.Block) string {
 // tokens dropped, de-duplicated, query order preserved. "the content related to
 // the bug we fixed" ⇒ ["bug", "fixed"].
 func queryTerms(query string) []string {
-	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
-	})
 	seen := map[string]bool{}
 	var out []string
-	for _, f := range fields {
+	for _, f := range tokenize(query) {
 		if len(f) < 2 || stopwords[f] || seen[f] {
 			continue
 		}
@@ -166,6 +179,16 @@ func queryTerms(query string) []string {
 		out = append(out, f)
 	}
 	return out
+}
+
+// tokenize lowercases s and splits it into word tokens on any non-alphanumeric
+// rune — the single tokenizer both the query terms and the block haystack share,
+// so they segment words identically (the precondition for word-boundary
+// matching).
+func tokenize(s string) []string {
+	return strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsNumber(r)
+	})
 }
 
 // stopwords are the common filler words a topic query carries that should not

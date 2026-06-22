@@ -42,12 +42,15 @@ The matching engine is **explicitly an open question in the PRD (§10 Q4)** and 
 ## Implementation notes (done)
 
 - Matcher lives in `internal/clean/match.go`: `Match(proj, query)` scores each
-  **live** block by how many distinct, significant query terms it contains, over
-  a haystack of the block's own text (conversation/reasoning/tool args/tool
-  output) plus its AS-027 tags (file module, tool, skill/MCP, command, coarse
-  type). Raw file-read bodies are excluded to avoid over-matching. Terms are
-  normalized (lowercased, split on non-alphanumerics, stop-words and 1-char
-  tokens dropped, de-duplicated). Deterministic, no embeddings, no provider call.
+  **live** block by how many distinct, significant query terms it hits, over a
+  haystack of the block's own text (conversation/reasoning/tool args/tool output)
+  plus its AS-027 tags (file module, tool, skill/MCP, command, coarse type). Raw
+  file-read bodies are excluded to avoid over-matching. Both the query and the
+  haystack are tokenized by the same splitter (lowercased, split on
+  non-alphanumerics, stop-words and 1-char tokens dropped, de-duplicated); a term
+  matches a **whole-word token it is a prefix of** — keeping light plural/tense
+  tolerance (`bug`→`bugs`) while refusing mid-word false positives (`id` must not
+  match `provide`). Deterministic, no embeddings, no provider call.
 - `PreviewMatch` reuses the AS-028 `Preview`, so the topic path inherits atomic
   tool-call/result pairing, the same token/$ accounting, recency warnings, and
   the exclusion/undo mechanics. Each directly matched item carries `Item.Why`

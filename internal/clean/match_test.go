@@ -105,6 +105,29 @@ func TestMatchByFileModuleAndTool(t *testing.T) {
 	}
 }
 
+// TestMatchWordBoundary: matching is on whole-word tokens, not raw substrings —
+// a short term must not match mid-word (the over-selection Gemini flagged), but
+// a term that is a prefix of a token still matches (plural/tense tolerance).
+func TestMatchWordBoundary(t *testing.T) {
+	events := []schema.Block{
+		msg("blk_provide", schema.RoleAssistant, "we provide a decided guide", 20),
+		msg("blk_id", schema.RoleAssistant, "the id field changed", 19),
+		msg("blk_bugs", schema.RoleAssistant, "several bugs remained", 18),
+	}
+	// "id" must not bleed into provide/decided/guide…
+	if ids := matchIDs(events, "id"); has(ids, "blk_provide") {
+		t.Errorf(`"id" matched mid-word in blk_provide: %v`, ids)
+	}
+	// …but it does match the standalone "id" token.
+	if ids := matchIDs(events, "id"); !has(ids, "blk_id") {
+		t.Errorf(`"id" should match the standalone id token, got %v`, ids)
+	}
+	// A term is a prefix of a token: "bug" still reaches "bugs".
+	if ids := matchIDs(events, "bug"); !has(ids, "blk_bugs") {
+		t.Errorf(`"bug" should prefix-match "bugs", got %v`, ids)
+	}
+}
+
 // TestMatchAllStopwordsSelectsNothing: a query with no significant terms must
 // match nothing rather than everything (conservative under-selection, AC).
 func TestMatchAllStopwordsSelectsNothing(t *testing.T) {
