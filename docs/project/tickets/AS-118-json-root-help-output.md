@@ -1,7 +1,7 @@
 ---
-id: AS-116
+id: AS-118
 title: "Root help ignores --output json"
-status: ready-to-implement
+status: done
 type: bug
 github_issue: null
 depends_on: [AS-065, AS-070]
@@ -10,9 +10,9 @@ priority: P2
 source: Manual smoke pass for docs/projects/manual-test-campaign.md on 2026-06-22
 ---
 
-# AS-116 · Root help ignores `--output json`
+# AS-118 · Root help ignores `--output json`
 
-**Status: ready to implement**
+**Status: done** *(renumbered to AS-118 — both AS-116 and AS-117 were already taken by other tickets)*
 
 ## Description
 
@@ -31,12 +31,12 @@ AS-070's command-specific JSON help acceptance criteria.
 
 ## Acceptance criteria
 
-- [ ] `smith --help --output json` emits valid JSON and exits successfully.
-- [ ] The JSON includes the root command summary, global flags, and child command
-      metadata needed to discover the command tree.
-- [ ] Text help remains unchanged for `smith --help`.
-- [ ] Leaf command JSON help remains valid and keeps command-specific flags.
-- [ ] Tests cover root JSON help and at least one leaf command JSON help.
+- [x] `smith --help --output json` emits valid JSON and exits successfully.
+- [x] The JSON includes the root command summary, global flags, and child command
+      metadata needed to discover the command tree (groups expose their verbs via `sub`).
+- [x] Text help remains unchanged for `smith --help`.
+- [x] Leaf command JSON help remains valid and keeps command-specific flags.
+- [x] Tests cover root JSON help (`TestRootHelpJSON`) and leaf command JSON help (`TestCommandHelpJSON`).
 
 ## Dependencies
 

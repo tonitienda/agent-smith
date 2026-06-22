@@ -161,6 +161,20 @@ func (a *App) Run(args []string) int {
 		write(a.Stdout, a.Version+"\n")
 		return ExitOK
 	case head == "--help" || head == "-h":
+		// Honor --output on the root help the same way leaf help does (D-CLI-10):
+		// `smith --help --output json` must emit machine-readable help (AS-116).
+		globals, err := a.parseHelpGlobals(args[1:])
+		if err != nil {
+			write(a.Stderr, fmt.Sprintf("%s: %v\n\n%s", a.Name, err, a.rootHelp()))
+			return ExitUsage
+		}
+		if globals.Output == OutputJSON || globals.Output == OutputStreamJSON {
+			if err := a.writeRootHelpJSON(); err != nil {
+				write(a.Stderr, fmt.Sprintf("%s: %v\n", a.Name, err))
+				return ExitFail
+			}
+			return ExitOK
+		}
 		write(a.Stdout, a.rootHelp())
 		return ExitOK
 	case strings.HasPrefix(head, "-"):
@@ -174,6 +188,19 @@ func (a *App) Run(args []string) int {
 		}
 		return a.exit(a.dispatch(cmd, args[1:], head))
 	}
+}
+
+// parseHelpGlobals resolves the global flags trailing a bare `--help` so the root
+// help can honor --output/--color without a command context. Only the globals are
+// registered; positionals are ignored.
+func (a *App) parseHelpGlobals(args []string) (Globals, error) {
+	fs := flag.NewFlagSet(a.Name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	gv := registerGlobals(fs)
+	if err := fs.Parse(command.PermuteFlags(fs, args)); err != nil {
+		return Globals{}, err
+	}
+	return a.resolveGlobals(gv)
 }
 
 // dispatch routes into a noun group or runs a leaf command. path is the

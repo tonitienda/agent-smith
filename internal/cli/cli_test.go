@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"strings"
 	"testing"
@@ -108,6 +109,58 @@ func TestVersionAndHelp(t *testing.T) {
 			t.Errorf("--help missing %q:\n%s", want, out.String())
 		}
 	}
+}
+
+func TestRootHelpJSON(t *testing.T) {
+	app, out, _, _ := newTestApp(true, true)
+	if code := app.Run([]string{"--help", "--output", "json"}); code != ExitOK {
+		t.Fatalf("--help --output json exit = %d", code)
+	}
+	// AC: valid JSON, not the plain banner.
+	if strings.Contains(out.String(), "test harness\n\nUsage:") {
+		t.Errorf("root JSON help emitted plain text:\n%s", out.String())
+	}
+	var entry rootHelpEntry
+	if err := json.Unmarshal(out.Bytes(), &entry); err != nil {
+		t.Fatalf("root help is not valid JSON: %v\n%s", err, out.String())
+	}
+	if entry.Name != "smith" || entry.Summary != "test harness" {
+		t.Errorf("root summary missing: %+v", entry)
+	}
+	// Global flags and the command tree (including a group's verbs) are discoverable.
+	if !hasFlag(entry.GlobalFlags, "output") {
+		t.Errorf("global flags missing --output: %+v", entry.GlobalFlags)
+	}
+	var session *helpEntry
+	for i := range entry.Commands {
+		if entry.Commands[i].Name == "session" {
+			session = &entry.Commands[i]
+		}
+	}
+	if session == nil {
+		t.Fatalf("command tree missing 'session': %+v", entry.Commands)
+	}
+	if len(session.Sub) != 2 || session.Sub[0].Name != "session list" {
+		t.Errorf("group verbs not exposed: %+v", session.Sub)
+	}
+
+	// Text help is unchanged when --output is absent.
+	app, out, _, _ = newTestApp(true, true)
+	if code := app.Run([]string{"--help"}); code != ExitOK {
+		t.Fatalf("--help exit = %d", code)
+	}
+	if !strings.HasPrefix(out.String(), "test harness") {
+		t.Errorf("text help changed:\n%s", out.String())
+	}
+}
+
+func hasFlag(flags []flagEntry, name string) bool {
+	for _, f := range flags {
+		if f.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestUnknownCommandSuggests(t *testing.T) {

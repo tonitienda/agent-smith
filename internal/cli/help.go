@@ -75,6 +75,21 @@ type helpEntry struct {
 	// Flags lists the command-specific flags (globals are documented once, on the
 	// root help — they're not repeated per command, AS-070).
 	Flags []flagEntry `json:"flags,omitempty"`
+	// Sub carries a noun group's verbs so `--help --output json` exposes the whole
+	// command tree; empty for leaf commands (additive, D2).
+	Sub []helpEntry `json:"sub,omitempty"`
+}
+
+// rootHelpEntry is what `smith --help --output json` dumps: the root summary, the
+// global flags, and the command tree, so tooling discovers the same surface the
+// text help shows (AS-116). Fields are additive (D2).
+type rootHelpEntry struct {
+	Name        string      `json:"name"`
+	Summary     string      `json:"summary,omitempty"`
+	Usage       string      `json:"usage"`
+	Version     string      `json:"version,omitempty"`
+	GlobalFlags []flagEntry `json:"globalFlags"`
+	Commands    []helpEntry `json:"commands"`
 }
 
 // flagEntry is one command-specific flag in `--help --output json`. Name is the
@@ -87,6 +102,12 @@ type flagEntry struct {
 
 // writeCommandHelpJSON emits the command's registry entry as JSON to stdout.
 func (a *App) writeCommandHelpJSON(cmd *Command, path string) error {
+	return writeJSON(a.Stdout, commandHelpEntry(cmd, path), "  ")
+}
+
+// commandHelpEntry builds the JSON help entry for a command, recursing into a
+// noun group's verbs so the whole tree is described from one node.
+func commandHelpEntry(cmd *Command, path string) helpEntry {
 	entry := helpEntry{
 		Name:          strings.TrimSpace(path),
 		Summary:       cmd.Summary,
@@ -100,7 +121,42 @@ func (a *App) writeCommandHelpJSON(cmd *Command, path string) error {
 		_, usage := flag.UnquoteUsage(f)
 		entry.Flags = append(entry.Flags, flagEntry{Name: f.Name, Usage: usage, Default: f.DefValue})
 	}
+	for _, sub := range cmd.Sub {
+		entry.Sub = append(entry.Sub, commandHelpEntry(sub, path+" "+sub.Name))
+	}
+	return entry
+}
+
+// writeRootHelpJSON emits the root help as JSON: tagline, usage, global flags, and
+// the command tree, so `smith --help --output json` is machine-readable (AS-116).
+func (a *App) writeRootHelpJSON() error {
+	entry := rootHelpEntry{
+		Name:        a.Name,
+		Summary:     a.Tagline,
+		Usage:       a.Name + " [command] [flags]",
+		Version:     a.Version,
+		GlobalFlags: globalFlagEntries(),
+	}
+	for _, c := range a.Commands {
+		entry.Commands = append(entry.Commands, commandHelpEntry(c, c.Name))
+	}
 	return writeJSON(a.Stdout, entry, "  ")
+}
+
+// globalFlagEntries lists the shared flags for the root JSON help, skipping the
+// single-rune aliases (-q/-v/-h) since they duplicate their long forms.
+func globalFlagEntries() []flagEntry {
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	registerGlobals(fs)
+	var out []flagEntry
+	fs.VisitAll(func(f *flag.Flag) {
+		if len([]rune(f.Name)) == 1 {
+			return
+		}
+		_, usage := flag.UnquoteUsage(f)
+		out = append(out, flagEntry{Name: f.Name, Usage: usage, Default: f.DefValue})
+	})
+	return out
 }
 
 // commandFlags collects a leaf's command-specific flags by registering them on a
