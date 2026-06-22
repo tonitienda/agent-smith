@@ -118,7 +118,10 @@ func (s *Store) Rollup() Report {
 		if gi.Count != gj.Count {
 			return gi.Count > gj.Count
 		}
-		return sig(gi.Kind, gi.Summary) < sig(gj.Kind, gj.Summary)
+		if gi.Kind != gj.Kind {
+			return gi.Kind < gj.Kind
+		}
+		return gi.Summary < gj.Summary
 	})
 
 	n := 0

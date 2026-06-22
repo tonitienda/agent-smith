@@ -88,6 +88,27 @@ func TestCmdSkillsApply(t *testing.T) {
 	}
 }
 
+// TestCmdSkillsApplyRejectsTraversal asserts a remedy whose target escapes the
+// working directory with a `../` traversal is refused rather than writing outside
+// the project (defense in depth against a tampered findings log).
+func TestCmdSkillsApplyRejectsTraversal(t *testing.T) {
+	ctl := newTestController(t)
+	rollupWithFindings(t, ctl,
+		"Rediscovered working command: make test", "../escape.md", "+ `make test`",
+		"s1", "s2", "s3")
+
+	out, err := ctl.cmdSkills(context.Background(), []string{"apply", "1"})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !strings.Contains(out.Text, "escapes the working directory") {
+		t.Errorf("traversal target not refused:\n%s", out.Text)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(ctl.wd), "escape.md")); !os.IsNotExist(err) {
+		t.Errorf("traversal write was not prevented")
+	}
+}
+
 // TestCmdSkillsNoStore asserts /skills degrades gracefully when no durable store
 // was wired (a face that opted out) rather than panicking.
 func TestCmdSkillsNoStore(t *testing.T) {

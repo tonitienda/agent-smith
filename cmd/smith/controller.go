@@ -1312,9 +1312,9 @@ func (s *chatSession) skillsApply(args []string) (command.Output, error) {
 	if target == "" {
 		return command.Output{Text: fmt.Sprintf("Remedy #%d names no target file — nothing to apply.", n)}, nil
 	}
-	path := target
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(wd, path)
+	path, ok := resolveApplyTarget(wd, target)
+	if !ok {
+		return command.Output{Text: fmt.Sprintf("Refusing to apply: target %q escapes the working directory.", target)}, nil
 	}
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -1333,6 +1333,25 @@ func (s *chatSession) skillsApply(args []string) (command.Output, error) {
 		return command.Output{}, fmt.Errorf("resolve finding: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Applied to %s and marked resolved:\n\n  %s", target, p.Diff)}, nil
+}
+
+// resolveApplyTarget resolves a remedy's target file to an absolute path and
+// reports whether it is safe to write. A relative target is joined under the
+// working directory and rejected if it escapes it (a `../` traversal in a
+// tampered findings log must not write outside the project) — defense in depth,
+// since targets come from our own analyzers. An absolute target is accepted as
+// cleaned: a remedy may legitimately point at a user/project skill's SKILL.md,
+// which lives outside the working directory (the skill dirs).
+func resolveApplyTarget(wd, target string) (string, bool) {
+	if filepath.IsAbs(target) {
+		return filepath.Clean(target), true
+	}
+	path := filepath.Join(wd, target)
+	rel, err := filepath.Rel(wd, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return path, true
 }
 
 // cmdClean is the manual context editor (AS-028 /clean, PRD §7.12): the user
