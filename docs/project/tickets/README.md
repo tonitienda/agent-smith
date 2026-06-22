@@ -14,6 +14,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
   - `id` — stable ticket ID (`AS-NNN`), used in `depends_on` references.
   - `status` — `ready-to-implement` | `needs-clarification` | `done` (later: `in-progress`).
   - `github_issue` — `null` until the GitHub issue is created; then the issue number. Keep it in sync.
+  - `type` — optional ticket kind such as `bug`; when present, `ticket-sync` applies it as a `type:<value>` GitHub label. Use `type: bug` for defects found during manual or automated test passes.
   - `depends_on` — ticket IDs that should land (or at least be designed) first.
   - `area`, `priority`, `source` — grouping, PRD tier, and the PRD sections the ticket comes from.
 - To find tickets: `grep -l "status: needs-clarification" tickets/` etc.
@@ -142,6 +143,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 | [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | done | 074, 006 |
 | [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | done | 005, 016 |
+| [AS-116](AS-116-json-root-help-output.md) | Root help ignores `--output json` | faces | ready | 065, 070 |
 | [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | done | 110 |
 
 ## Suggested build order
@@ -164,8 +166,10 @@ Previously listed `needs-clarification` tickets were triaged against the current
 repo documentation and clarified where the documented direction was sufficient.
 The one open item is **AS-113** (plugin consent screen), which has nothing to hang
 a consent flow on until a plugin-install/marketplace path exists (§7.26, not yet
-ticketed) — see its Open questions section. New ambiguous follow-on work should be
-captured by adding a fresh ticket with a focused Open questions section.
+ticketed) — see its Open questions section. New bug follow-ons such as **AS-116**
+should stay `ready-to-implement` unless they truly need a product decision. New
+ambiguous follow-on work should be captured by adding a fresh ticket with a
+focused Open questions section.
 
 The clarified decisions are recorded in the individual ticket files rather than
 repeated here, so the ticket remains the source of truth for implementation.
@@ -184,6 +188,6 @@ go run ./cmd/ticket-sync -dry-run        # show what would happen
 - `github_issue: null` → an issue is created and its number is written back into the frontmatter (commit that change).
 - `github_issue: <n>` → issue `#n` is updated from the file.
 - `status: done` → the synced GitHub issue is closed after its title/body/labels are updated.
-- Labels applied: `status`, `area:<area>`, `priority` (created on the repo if missing).
+- Labels applied: `status`, `area:<area>`, optional `type:<type>`, and `priority` (created on the repo if missing).
 - Auth via the `gh` CLI (`gh auth login`). Repo resolution: `-repo owner/name` flag → `TICKET_SYNC_REPO` env var → the current git remote.
 - After a pull request is merged, the **Sync merged tickets** GitHub Actions workflow finds ticket files changed by that PR and runs `go run ./cmd/ticket-sync -require-existing` against them. This keeps related issues current and closes `done` tickets, while failing on `github_issue: null` so new tickets are linked before merge instead of creating uncommitted issue-number changes in CI.

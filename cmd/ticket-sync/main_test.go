@@ -63,6 +63,42 @@ func TestUpdatePayloadLeavesNonDoneIssueStateUntouched(t *testing.T) {
 	assertNoState(t, got)
 }
 
+func TestPayloadIncludesTypeLabel(t *testing.T) {
+	tc := &ticket{
+		id:       "AS-999",
+		title:    "Example",
+		status:   "ready-to-implement",
+		kind:     "bug",
+		area:     "faces",
+		priority: "P2",
+	}
+
+	raw, err := payload(tc, payloadOptions{})
+	if err != nil {
+		t.Fatalf("payload returned error: %v", err)
+	}
+
+	got := unmarshalPayload(t, raw)
+	labels, ok := got["labels"].([]any)
+	if !ok {
+		t.Fatalf("labels = %T, want []any", got["labels"])
+	}
+	want := map[string]bool{
+		"ready-to-implement": true,
+		"area:faces":         true,
+		"type:bug":           true,
+		"P2":                 true,
+	}
+	for _, label := range labels {
+		if s, ok := label.(string); ok {
+			delete(want, s)
+		}
+	}
+	if len(want) > 0 {
+		t.Fatalf("labels missing %v from %v", want, labels)
+	}
+}
+
 func TestClosePayloadClosesIssueAsCompleted(t *testing.T) {
 	raw, err := closePayload()
 	if err != nil {
@@ -110,6 +146,33 @@ func TestIsLinked(t *testing.T) {
 		if got := isLinked(path); got != want {
 			t.Fatalf("isLinked(%q) = %v, want %v", content, got, want)
 		}
+	}
+}
+
+func TestParseTicketReadsType(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AS-999-example.md")
+	content := `---
+id: AS-999
+title: "Example"
+status: ready-to-implement
+type: bug
+github_issue: null
+area: faces
+priority: P2
+---
+
+# Body
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ticket, err := parseTicket(path)
+	if err != nil {
+		t.Fatalf("parseTicket returned error: %v", err)
+	}
+	if ticket.kind != "bug" {
+		t.Fatalf("kind = %q, want bug", ticket.kind)
 	}
 }
 
