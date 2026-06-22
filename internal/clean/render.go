@@ -25,7 +25,7 @@ func RenderPreview(p Plan) string {
 	tw, row := render.Tab(&b, 0)
 	row("  Handle\tType\tOrigin\tTokens\tNote\t\n")
 	for _, it := range p.Items {
-		note := ""
+		note := it.Why // why a topic query matched this segment (AS-029)
 		if it.Paired {
 			note = "paired (tool call/result)"
 		}

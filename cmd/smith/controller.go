@@ -1155,6 +1155,7 @@ func appendMemoryLine(path string, existing []byte, line string) error {
 // restores the most recent removal exactly.
 //
 //   - /clean <handle>…  preview the removal (mutates nothing) and stage it
+//   - /clean "<topic>"  preview removing segments a topic query matches (AS-029)
 //   - /clean --apply     confirm the staged preview, appending the exclusion
 //   - /clean --undo      restore the most recent removal
 //   - /clean --cancel    discard the staged preview
@@ -1290,11 +1291,22 @@ func (s *chatSession) cleanSelectRestore(value string) string {
 
 // cleanPreview stages a removal: it projects the live window, builds the plan,
 // and stores it pending confirmation. Nothing is appended to the log.
+//
+// args are tried first as block handles (the AS-028 path). When none resolve,
+// they are taken as a natural-language topic query and matched with the AS-029
+// engine — so `/clean "the bug we fixed"` selects the related segments while an
+// exact handle stays exact. Either way nothing auto-removes: the staged preview
+// awaits /clean --apply (AC: preview before apply, nothing lost).
 func (s *chatSession) cleanPreview(handles []string) (command.Output, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
 	plan := clean.Preview(proj, s.pricing, s.model, time.Now(), handles)
+	if plan.Empty() {
+		if q := strings.TrimSpace(strings.Join(handles, " ")); q != "" {
+			plan = clean.PreviewMatch(proj, s.pricing, s.model, time.Now(), q)
+		}
+	}
 	if plan.Empty() {
 		s.pendingClean, s.pendingCleanFor = nil, nil
 		return command.Output{Text: clean.RenderPreview(plan)}, nil
@@ -1467,6 +1479,8 @@ const cleanUsage = `/clean removes segments from the model's context window.
   /clean             open the interactive selector (TUI): pick segments to remove
                      and restore excluded ones, with a live reclaim preview
   /clean <handle>…   preview removing the named segments (handles come from /context)
+  /clean "<topic>"   preview removing segments matching a topic, e.g.
+                     /clean "the bug we fixed" — matches are explained, nothing auto-removes
   /clean --apply     confirm the previewed removal
   /clean --undo      restore the most recent removal
   /clean --cancel    discard the preview

@@ -225,6 +225,36 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 	}
 }
 
+// TestCleanTopicMatchPreviewApply covers the AS-029 wiring: a quoted topic
+// query that resolves no handle falls back to the matcher, stages an explained
+// preview, and --apply removes exactly the matched segments (the headline demo).
+func TestCleanTopicMatchPreviewApply(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserTextID(t, ctl, "blk_bugfix000", strings.Repeat("we fixed the auth bug ", 8))
+	appendUserTextID(t, ctl, "blk_feature00", strings.Repeat("add the csv export feature ", 8))
+
+	out, err := runClean(t, ctl, "the bug we fixed")
+	if err != nil {
+		t.Fatalf("/clean topic preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Preview") || !strings.Contains(out.Text, "matched") {
+		t.Errorf("topic preview should explain the match:\n%s", out.Text)
+	}
+	if ctl.pendingClean == nil {
+		t.Fatal("topic preview did not stage a pending plan")
+	}
+
+	if _, err := runClean(t, ctl, "--apply"); err != nil {
+		t.Fatalf("/clean --apply: %v", err)
+	}
+	if liveContains(t, ctl, "blk_bugfix000") {
+		t.Error("matched bug segment still live after apply")
+	}
+	if !liveContains(t, ctl, "blk_feature00") {
+		t.Error("unrelated feature segment dropped by topic /clean")
+	}
+}
+
 // TestCleanCancelAndInvalidation covers the staging guards: --cancel discards a
 // preview, and a session swap (/clear) invalidates a staged plan so --apply can
 // never remove blocks from the wrong log.

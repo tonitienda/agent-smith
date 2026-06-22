@@ -282,7 +282,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	mustRegisterCommand(reg, command.Command{
 		Name:          "clean",
 		Summary:       "Remove segments from the context window",
-		Args:          "<handle>… | --apply | --undo | --cancel",
+		Args:          "<handle>… | \"<topic>\" | --apply | --undo | --cancel",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {
