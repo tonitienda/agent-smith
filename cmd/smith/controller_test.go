@@ -273,6 +273,90 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 	}
 }
 
+// appendFileReadID appends a file_read block for path with the given content, so
+// a tidy test can stage duplicate reads of one file.
+func appendFileReadID(t *testing.T, ctl *chatSession, id, path, content string) {
+	t.Helper()
+	_, err := ctl.sess.Log.Append(schema.Block{
+		ID:       id,
+		Kind:     schema.KindFileRead,
+		Role:     schema.RoleTool,
+		FileRead: &schema.FileReadBody{Path: path, Content: content},
+	})
+	if err != nil {
+		t.Fatalf("append file read: %v", err)
+	}
+}
+
+// runTidy dispatches /tidy exactly as a face does, parsing its flags first.
+func runTidy(t *testing.T, ctl *chatSession, args ...string) (command.Output, error) {
+	t.Helper()
+	return runChatCommand(t, ctl, "tidy", args...)
+}
+
+// TestTidyPreviewApplyUndo covers the /tidy wiring (AS-043): a preview stages the
+// dedup without touching the log, --apply drops the older read via an appended
+// exclusion (keeping the latest), and --undo restores it exactly.
+func TestTidyPreviewApplyUndo(t *testing.T) {
+	ctl := newTestController(t)
+	appendFileReadID(t, ctl, "blk_oldread00", "main.go", strings.Repeat("old content ", 40))
+	appendUserTextID(t, ctl, "blk_between000", "some work in between")
+	appendFileReadID(t, ctl, "blk_newread00", "main.go", strings.Repeat("new content ", 40))
+
+	before := ctl.sess.Log.Len()
+	out, err := runTidy(t, ctl)
+	if err != nil {
+		t.Fatalf("/tidy preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Preview") || !strings.Contains(out.Text, "reclaim") {
+		t.Errorf("preview missing its fidelity-diff summary:\n%s", out.Text)
+	}
+	if ctl.sess.Log.Len() != before {
+		t.Fatal("/tidy preview must not append to the log")
+	}
+	if ctl.pendingTidy == nil {
+		t.Fatal("/tidy preview did not stage a pending plan")
+	}
+
+	if _, err := runTidy(t, ctl, "--apply"); err != nil {
+		t.Fatalf("/tidy --apply: %v", err)
+	}
+	if liveContains(t, ctl, "blk_oldread00") {
+		t.Error("older read still live after /tidy --apply")
+	}
+	if !liveContains(t, ctl, "blk_newread00") {
+		t.Error("latest read dropped by /tidy --apply")
+	}
+	if ctl.pendingTidy != nil {
+		t.Error("pending plan not cleared after apply")
+	}
+
+	if _, err := runTidy(t, ctl, "--undo"); err != nil {
+		t.Fatalf("/tidy --undo: %v", err)
+	}
+	if !liveContains(t, ctl, "blk_oldread00") {
+		t.Error("older read not restored after /tidy --undo")
+	}
+}
+
+// TestTidyNothingToDo covers the no-duplicate path: with no repeated read the
+// preview stages nothing and says so.
+func TestTidyNothingToDo(t *testing.T) {
+	ctl := newTestController(t)
+	appendFileReadID(t, ctl, "blk_onlyread0", "main.go", strings.Repeat("content ", 40))
+
+	out, err := runTidy(t, ctl)
+	if err != nil {
+		t.Fatalf("/tidy preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Nothing to tidy") {
+		t.Errorf("expected a 'Nothing to tidy' message:\n%s", out.Text)
+	}
+	if ctl.pendingTidy != nil {
+		t.Error("/tidy staged a plan when there was nothing to dedupe")
+	}
+}
+
 // TestCleanTopicMatchPreviewApply covers the AS-029 wiring: a quoted topic
 // query that resolves no handle falls back to the matcher, stages an explained
 // preview, and --apply removes exactly the matched segments (the headline demo).

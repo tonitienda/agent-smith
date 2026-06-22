@@ -294,6 +294,21 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run: ctl.cmdClean,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "tidy",
+		Summary:       "Dedupe repeated file reads in the context window",
+		Args:          "[--apply | --undo | --cancel]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith tidy", "smith tidy --apply"},
+		Flags: func(fs *flag.FlagSet) {
+			fs.Bool("apply", false, "confirm the staged dedup")
+			fs.Bool("undo", false, "restore the most recent dedup")
+			fs.Bool("cancel", false, "discard the staged preview")
+		},
+		Run: ctl.cmdTidy,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "rewind",
 		Summary:       "Rewind the conversation to an earlier turn or mark",
 		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
