@@ -1903,6 +1903,14 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// The lock was dropped for the (slow) summarization, so a concurrent /clear or
+	// /resume may have swapped s.sess. The block carries the old session's source
+	// IDs, so appending it to a different session would corrupt that log; abandon
+	// the compaction instead, mirroring the staged-preview "session changed" guard.
+	if s.sess.ID != sessID {
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: "The session changed during compaction; the compaction was abandoned. Run /compact again."}, nil
+	}
 	if _, err := s.sess.Log.Append(block); err != nil {
 		return command.Output{}, fmt.Errorf("record compaction: %w", err)
 	}
