@@ -13,6 +13,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/skillanalyzer"
+	"github.com/tonitienda/agent-smith/internal/skillrollup"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 )
 
@@ -28,7 +29,7 @@ import (
 // resolver (memory/skill-aware, keeping internal/factdetector free of those
 // imports) and the durable ledger so a dismissed fact stays dismissed across
 // sessions and the precision tally survives a restart.
-func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger factdetector.Ledger, skills []skill.Skill, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
+func buildSubAgents(cfg *config.Config, store *session.Store, resolve factdetector.Resolve, ledger factdetector.Ledger, skills []skill.Skill, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
 	reg := subagent.NewRegistry()
 	if err := reg.Register(factdetector.Factory(resolve, ledger)); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
@@ -59,7 +60,29 @@ func buildSubAgents(cfg *config.Config, resolve factdetector.Resolve, ledger fac
 			_, _ = fmt.Fprintf(stderr, "warning: %s\n", w)
 		}
 	}
-	return reg, subagent.NewMemStore(), nil
+	return reg, openRollupStore(store, stderr), nil
+}
+
+// skillFindingsName is the per-project durable findings log (AS-050), kept
+// alongside the project's sessions and the fact ledger so the cross-session
+// /skills rollup compounds across every session of that project.
+const skillFindingsName = "skill-findings.jsonl"
+
+// openRollupStore loads the project's durable findings store (AS-050) from the
+// session store. A load failure degrades to an in-memory store with a warning
+// rather than aborting the session — a session that can't read past findings is
+// worse than one whose rollup starts empty.
+func openRollupStore(store *session.Store, stderr io.Writer) *skillrollup.Store {
+	if store == nil {
+		return skillrollup.NewMem()
+	}
+	path := filepath.Join(store.ProjectSessionsDir(), skillFindingsName)
+	s, err := skillrollup.Open(path)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "warning: skill findings unavailable, using in-memory: %v\n", err)
+		return skillrollup.NewMem()
+	}
+	return s
 }
 
 // analyzerCatalog adapts the session's discovered skills into the

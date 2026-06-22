@@ -1,7 +1,7 @@
 ---
 id: AS-050
 title: /skills — per-session findings + cross-session rollup
-status: ready-to-implement
+status: done
 github_issue: 50
 depends_on: [AS-007, AS-022, AS-049]
 area: living-skills

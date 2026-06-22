@@ -23,7 +23,7 @@ func repeatedCommandSession(t *testing.T, ctl *chatSession, command string) {
 // TestBuildSubAgentsRegistersInsightsWriter asserts the insights-writer ships as a
 // built-in, defaults on, and costs nothing to leave enabled (AS-045 / §7.19).
 func TestBuildSubAgentsRegistersInsightsWriter(t *testing.T) {
-	reg, _, err := buildSubAgents(nil, nil, nil, nil, nil)
+	reg, _, err := buildSubAgents(nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildSubAgents: %v", err)
 	}
