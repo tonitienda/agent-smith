@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -179,6 +180,53 @@ func runChatCommand(t *testing.T, ctl *chatSession, name string, args ...string)
 		return command.Output{}, err
 	}
 	return c.Run(ctx, rest)
+}
+
+// TestRouteOverrideAndReset covers the per-session /route override path (AS-110):
+// `/route <feature> <tier>` and `/route <tier> <vendor> <model>` set transient
+// overrides on the session's policy without touching the durable config policy,
+// and a session swap (/clear) resets them.
+func TestRouteOverrideAndReset(t *testing.T) {
+	ctl := newTestController(t)
+
+	if _, err := runChatCommand(t, ctl, "route", "compact", "standard"); err != nil {
+		t.Fatalf("route feature override: %v", err)
+	}
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Standard {
+		t.Errorf("after override, compact tier = %q, want standard", got)
+	}
+	// The durable base policy must stay on the default (no feature overrides).
+	if got := ctl.baseRouter.FeatureTier("compact", routing.Cheap); got != routing.Cheap {
+		t.Errorf("base policy mutated by override: compact = %q, want cheap", got)
+	}
+
+	if _, err := runChatCommand(t, ctl, "route", "cheap", "anthropic", "claude-custom"); err != nil {
+		t.Fatalf("route vendor override: %v", err)
+	}
+	if got := ctl.router.Resolve(routing.Cheap, "anthropic", "fallback"); got != "claude-custom" {
+		t.Errorf("after override, cheap anthropic = %q, want claude-custom", got)
+	}
+	// Earlier feature override still present (overrides accumulate within a session).
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Standard {
+		t.Errorf("vendor override dropped the feature override: compact = %q, want standard", got)
+	}
+
+	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Cheap {
+		t.Errorf("override survived /clear: compact = %q, want reset to cheap", got)
+	}
+	if got := ctl.router.Resolve(routing.Cheap, "anthropic", "fallback"); got != "claude-haiku-4-5" {
+		t.Errorf("override survived /clear: cheap anthropic = %q, want default", got)
+	}
+}
+
+func TestRouteOverrideRejectsUnknownTier(t *testing.T) {
+	ctl := newTestController(t)
+	if _, err := runChatCommand(t, ctl, "route", "compact", "turbo"); err == nil {
+		t.Error("route compact turbo = nil error, want unknown-tier rejection")
+	}
 }
 
 // TestCleanPreviewApplyUndo covers the /clean wiring (AS-028): a preview stages

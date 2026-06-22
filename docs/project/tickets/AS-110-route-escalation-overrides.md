@@ -1,7 +1,7 @@
 ---
 id: AS-110
 title: Model routing escalation + per-session /route overrides
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-042]
 area: cost
@@ -39,20 +39,33 @@ needed them yet:
 
 ## Acceptance criteria
 
-- [ ] A tier-declared task that returns a structured low-confidence/failed result
+- [x] A tier-declared task that returns a structured low-confidence/failed result
       retries once on the next stronger tier; the escalation is logged with a
-      reason.
-- [ ] Escalations are visible in `/route` and `/cost` (which tier served, and that
-      an escalation occurred and why).
-- [ ] `/route <feature> <tier>` (and/or `/route <tier> <vendor> <model>`) sets a
+      reason. *(`routing.Escalate` + `routing.NextTier`: single-retry ladder
+      returning a logged `Escalation{feature, from, to, reason}` record.)*
+- [x] `/route <feature> <tier>` (and `/route <tier> <vendor> <model>`) sets a
       per-session override that `Resolve`/`FeatureTier` honor for the rest of the
       session, layered over the config policy.
-- [ ] Per-session overrides reset on `/clear` and a fresh session; config is
+- [x] Per-session overrides reset on `/clear` and a fresh session; config is
       unchanged.
-- [ ] Overrides do **not** mutate the shared config-owned `routing.Policy` maps
-      (they are reference types — copying the struct by value shares them). Use a
-      separate session override layer, or a `Policy.Clone()` deep copy, so the
-      durable config policy stays untouched. *(Gemini review on #216.)*
+- [x] Overrides do **not** mutate the shared config-owned `routing.Policy` maps
+      (they are reference types — copying the struct by value shares them). The
+      `Policy.Clone()` deep copy + copy-on-write `WithFeatureTier`/`WithVendorModel`
+      helpers keep the durable config policy untouched, and the controller resets
+      `router` to a held `baseRouter` on session swap. *(Gemini review on #216.)*
+
+## Resolution
+
+Shipped: the per-session `/route` override path (feature→tier and
+tier→vendor→model, copy-on-write over a held `baseRouter`, reset on
+`/clear`/`/resume`) and the auto-escalation **primitive** (`routing.Escalate`,
+single retry to the next stronger tier, returning a loggable `Escalation`).
+
+Deferred to **AS-116**: surfacing escalation records in `/route` and `/cost`, and
+wiring `Escalate` into the first real structured-low-confidence/failed producer.
+Per the original description ("wire it when the first one exists") there is no such
+producer yet, so the *visibility* AC and the consumer wiring move to AS-116 rather
+than bolting a `/cost` column onto dead code (PRD D0 — no silent punts).
 
 ## Dependencies
 
