@@ -111,16 +111,18 @@ func TestInferredContractRecordedAndImmutable(t *testing.T) {
 	if before.ExpectedOutcome.Summary != "deep multi-source research report" {
 		t.Errorf("inferred summary = %q, want the description", before.ExpectedOutcome.Summary)
 	}
-	if len(before.ExpectedOutcome.ShouldNotRediscover) == 0 {
-		t.Error("inferred contract should seed should_not_rediscover from the description")
+	// An inferred contract seeds no should_not_rediscover facts: a one-line
+	// description names no specific fact, so grading a skill down for using its own
+	// description words would be a false positive.
+	if len(before.ExpectedOutcome.ShouldNotRediscover) != 0 {
+		t.Errorf("inferred contract must seed no should_not_rediscover, got %v", before.ExpectedOutcome.ShouldNotRediscover)
 	}
 
 	// Running an evaluation must not mutate the frozen contract (fixed at load
 	// time, not hindsight).
 	a.Evaluate([]schema.Block{skillCall("research", 1)}, "sess-2")
 	after := a.Contracts()["research"]
-	if before.ExpectedOutcome.Summary != after.ExpectedOutcome.Summary ||
-		len(before.ExpectedOutcome.ShouldNotRediscover) != len(after.ExpectedOutcome.ShouldNotRediscover) {
+	if before.ExpectedOutcome.Summary != after.ExpectedOutcome.Summary {
 		t.Error("contract changed after evaluation; must be immutable")
 	}
 }
@@ -208,6 +210,21 @@ func TestNoOpFriction(t *testing.T) {
 	}
 	if g.Remedy != Prune {
 		t.Errorf("remedy = %q, want %q", g.Remedy, Prune)
+	}
+}
+
+// A skill with only an inferred contract that echoes its own description words
+// while working must not be graded as a content gap (the false-positive class
+// Gemini flagged): an inferred contract seeds no should_not_rediscover facts.
+func TestInferredContractNoFalseContentGap(t *testing.T) {
+	a := New([]Skill{{Name: "migrate", Description: "run database migrations"}})
+	slice := []schema.Block{
+		skillCall("migrate", 1),
+		skillResult("migrate", "running the database migrations now", 2),
+	}
+	g := gradeFor(t, a.Evaluate(slice, "sess-7"), "migrate")
+	if g.Verdict != Helped {
+		t.Fatalf("verdict = %q, want %q (inferred contract must not flag content gap)", g.Verdict, Helped)
 	}
 }
 

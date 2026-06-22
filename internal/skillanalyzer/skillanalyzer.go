@@ -155,18 +155,17 @@ func New(catalog []Skill) *Analyzer {
 }
 
 // inferContract synthesizes a contract from a skill's stated purpose (Q8): the
-// description becomes the expected-outcome summary, and its significant terms seed
-// should-not-rediscover so a session that rediscovers what the skill claims to
-// cover reads as a content gap. No effort budget is invented — an inferred
-// contract carries only what the description honestly states (D0: no fabricated
-// expectations).
+// description becomes the expected-outcome summary only. It deliberately seeds no
+// should-not-rediscover facts — a one-line description names no specific fact the
+// skill encodes, and treating its individual words as facts would flag a skill as
+// underperforming the moment it uses any word from its own description (a severe
+// false positive). content_gap grading therefore fires only for a skill that
+// *declares* explicit should_not_rediscover facts (D0/D7: no fabricated
+// expectations, precision over recall). No effort budget is invented either.
 func inferContract(s Skill) skillcontract.Contract {
 	return skillcontract.Contract{
-		Declared: false,
-		ExpectedOutcome: skillcontract.ExpectedOutcome{
-			Summary:             strings.TrimSpace(s.Description),
-			ShouldNotRediscover: significantTerms(s.Description),
-		},
+		Declared:        false,
+		ExpectedOutcome: skillcontract.ExpectedOutcome{Summary: strings.TrimSpace(s.Description)},
 	}
 }
 
@@ -248,8 +247,8 @@ func (a *Analyzer) Evaluate(slice []schema.Block, session string) []Grade {
 	}
 	spans := tracker.Finish()
 
-	footprint := footprints(slice) // per-skill attributed text + anchors
-	sessionText := strings.ToLower(allText(slice))
+	footprint := footprints(slice)            // per-skill attributed text + anchors
+	sessionTokens := tokenSet(allText(slice)) // computed once for the should_have_loaded scan
 
 	// Aggregate spans per skill so a skill used twice yields one clean grade.
 	agg := map[string]skillcontract.Actuals{}
@@ -281,7 +280,7 @@ func (a *Analyzer) Evaluate(slice []schema.Block, session string) []Grade {
 		if activated[st.skill.Name] {
 			continue
 		}
-		if seq, ok := matchedButIdle(st.skill, sessionText, slice); ok {
+		if seq, ok := matchedButIdle(st.skill, sessionTokens, slice); ok {
 			out = append(out, missedLoad(st.skill, seq, session))
 		}
 	}
@@ -353,10 +352,12 @@ func missedLoad(s Skill, seq int, session string) Grade {
 	}
 }
 
-// rediscovered returns the contract's should-not-rediscover entries whose
-// significant terms surface in the skill's own produced text — a grounded
-// content-gap signal: the skill claims to encode the fact, yet it was re-derived
-// while the skill was active.
+// rediscovered returns the contract's should-not-rediscover entries that surface
+// in the skill's own produced text — a grounded content-gap signal: the skill
+// claims to encode the fact, yet it was re-derived while the skill was active. A
+// phrase counts as rediscovered only when most of its significant terms appear
+// (matchPhrase), so a single coincidental common word ("make", "command") cannot
+// trigger a false content gap.
 func rediscovered(c skillcontract.Contract, text string) []string {
 	if text == "" {
 		return nil
@@ -364,11 +365,33 @@ func rediscovered(c skillcontract.Contract, text string) []string {
 	have := tokenSet(text)
 	var out []string
 	for _, phrase := range c.ExpectedOutcome.ShouldNotRediscover {
-		if sharesToken(significantTerms(phrase), have) {
+		if matchPhrase(phrase, have) {
 			out = append(out, phrase)
 		}
 	}
 	return out
+}
+
+// rediscoverThreshold is the fraction of a fact phrase's significant terms that
+// must appear in the text to call it rediscovered — high enough that one shared
+// common word does not fire, low enough that a fact stated in different words
+// ("ran make ship to deploy" vs "the deploy command is make ship") still matches.
+const rediscoverThreshold = 0.75
+
+// matchPhrase reports whether at least rediscoverThreshold of a phrase's
+// significant terms are present in have.
+func matchPhrase(phrase string, have map[string]bool) bool {
+	terms := significantTerms(phrase)
+	if len(terms) == 0 {
+		return false
+	}
+	matched := 0
+	for _, t := range terms {
+		if have[t] {
+			matched++
+		}
+	}
+	return float64(matched)/float64(len(terms)) >= rediscoverThreshold
 }
 
 // overBudget reports whether actuals blew the declared effort budget by more than
@@ -383,13 +406,14 @@ func overBudget(c skillcontract.Contract, act skillcontract.Actuals) (bool, int)
 }
 
 // matchedButIdle reports whether the session's work matched a skill's stated
-// purpose (a significant term of its name appears in session text), returning the
-// first block sequence where the match shows so the grade carries a jump-to link.
-// It keys on name terms (not the looser description) to keep should_have_loaded to
-// the high-precision bar D7 demands.
-func matchedButIdle(s Skill, sessionText string, slice []schema.Block) (int, bool) {
+// purpose (a significant term of its name appears in the pre-computed session
+// token set), returning the first block sequence where the match shows so the
+// grade carries a jump-to link. It keys on name terms (not the looser
+// description) to keep should_have_loaded to the high-precision bar D7 demands.
+// The session token set is computed once by the caller, not per skill.
+func matchedButIdle(s Skill, sessionTokens map[string]bool, slice []schema.Block) (int, bool) {
 	terms := significantTerms(s.Name)
-	if len(terms) == 0 || !sharesToken(terms, tokenSet(sessionText)) {
+	if len(terms) == 0 || !sharesToken(terms, sessionTokens) {
 		return 0, false
 	}
 	for _, b := range slice {
@@ -533,16 +557,27 @@ func allText(slice []schema.Block) string {
 	return sb.String()
 }
 
+// stopwords are common words that carry no identifying signal, dropped so a
+// shared term is a meaningful link rather than filler. Length alone cannot exclude
+// them ("the", "command" survive the >= 3 rule), and a stray match on one would
+// pollute both the rediscovery threshold and the should_have_loaded scan.
+var stopwords = map[string]bool{
+	"the": true, "and": true, "for": true, "with": true, "that": true,
+	"this": true, "are": true, "was": true, "has": true, "have": true,
+	"its": true, "into": true, "from": true, "via": true, "use": true,
+	"using": true, "run": true, "command": true, "commands": true,
+}
+
 // significantTerms splits a phrase into lowercased alphanumeric tokens of length
-// >= 3 (dropping noise like "the", "a", "go", "md"), so a shared term is a
-// meaningful link rather than punctuation or filler.
+// >= 3 that are not stopwords, so a shared term is a meaningful identifier rather
+// than punctuation or filler.
 func significantTerms(s string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, w := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
 		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
 	}) {
-		if len(w) >= 3 && !seen[w] {
+		if len(w) >= 3 && !stopwords[w] && !seen[w] {
 			seen[w] = true
 			out = append(out, w)
 		}
