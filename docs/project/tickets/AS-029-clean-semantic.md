@@ -1,7 +1,7 @@
 ---
 id: AS-029
 title: /clean "<topic>" — natural-language semantic matching
-status: ready-to-implement
+status: done
 github_issue: 29
 depends_on: [AS-028, AS-027]
 area: context-wedge
@@ -38,3 +38,25 @@ The matching engine is **explicitly an open question in the PRD (§10 Q4)** and 
 
 - AS-028 (removal mechanics) — hard.
 - AS-027 (topic labels) — soft; depends on the engine decision.
+
+## Implementation notes (done)
+
+- Matcher lives in `internal/clean/match.go`: `Match(proj, query)` scores each
+  **live** block by how many distinct, significant query terms it contains, over
+  a haystack of the block's own text (conversation/reasoning/tool args/tool
+  output) plus its AS-027 tags (file module, tool, skill/MCP, command, coarse
+  type). Raw file-read bodies are excluded to avoid over-matching. Terms are
+  normalized (lowercased, split on non-alphanumerics, stop-words and 1-char
+  tokens dropped, de-duplicated). Deterministic, no embeddings, no provider call.
+- `PreviewMatch` reuses the AS-028 `Preview`, so the topic path inherits atomic
+  tool-call/result pairing, the same token/$ accounting, recency warnings, and
+  the exclusion/undo mechanics. Each directly matched item carries `Item.Why`
+  (the terms it hit), surfaced in the preview's Note column so the selection is
+  explainable and correctable; nothing auto-removes.
+- Wiring: `/clean <args>` tries handle resolution first; when nothing resolves it
+  falls back to a topic query over the joined args, so `/clean "the bug we fixed"`
+  works while an exact handle stays exact (`cmd/smith/controller.go`).
+- Tests: `internal/clean/match_test.go` (demo scenario, explanations, ranking,
+  tag/file/tool matching, stop-word-only no-op, excluded-skip, pairing/pricing,
+  empty-match surfacing) and `TestCleanTopicMatchPreviewApply` in
+  `cmd/smith/controller_test.go` (the end-to-end preview→apply path).

@@ -56,6 +56,10 @@ type Item struct {
 	// Paired is true when the block was pulled into the plan to keep a
 	// tool-call/result pair atomic, not selected directly (AS-028 guardrail).
 	Paired bool
+	// Why explains why a topic query (AS-029) selected this item — the terms it
+	// matched — so the preview is trustable and correctable (AC). Empty for the
+	// handle path and for paired items pulled in only to keep a tool pair atomic.
+	Why string
 }
 
 // Plan is the previewed effect of a selection. Building one mutates nothing; it
