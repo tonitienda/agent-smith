@@ -34,6 +34,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
+	"github.com/tonitienda/agent-smith/internal/skillrollup"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tidy"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -129,6 +130,12 @@ type chatSession struct {
 	// (/model, /clear, /resume) so findings accumulate rather than resetting with a
 	// new engine; each Runner the controller builds records into this same store.
 	insights subagent.Store
+	// rollup is the durable, cross-session findings store (AS-050) the /skills
+	// report reads. It is the same object as insights when a session store is
+	// present (a *skillrollup.Store satisfies subagent.Store), captured here under
+	// its concrete type so /skills can call Rollup/Resolve; nil when the face wired
+	// a plain in-memory store, which leaves /skills on its session-only view.
+	rollup *skillrollup.Store
 
 	// router is the model routing/tiering policy (AS-042): tier-declaring work
 	// (/compact summarization) resolves its concrete model through it instead of
@@ -266,6 +273,11 @@ func (s *chatSession) setPersonality(p *personality.Personality) {
 func (s *chatSession) setSubAgents(reg *subagent.Registry, store subagent.Store) {
 	s.subagents = reg
 	s.insights = store
+	// Capture the concrete rollup store when one was wired, so /skills can read the
+	// cross-session aggregation and resolve applied remedies (AS-050).
+	if r, ok := store.(*skillrollup.Store); ok {
+		s.rollup = r
+	}
 }
 
 // workingLine yields the status-line text shown while a turn runs: the themed
@@ -1235,6 +1247,92 @@ func appendMemoryLine(path string, existing []byte, line string) error {
 	b.WriteString(line)
 	b.WriteByte('\n')
 	return os.WriteFile(path, []byte(b.String()), 0o644)
+}
+
+// cmdSkills renders the /skills report (AS-050, PRD §7.20): the current session's
+// findings plus the cross-session rollup of living-skill signals — the
+// rediscovered facts (AS-048) and skill grades (AS-049) the analyzers reported,
+// aggregated per project so a fact rediscovered across 3+ sessions is escalated.
+// `/skills apply <n>` lands the numbered pending remedy through a shown diff and
+// marks the finding resolved. The numbering is stable because the rollup is
+// deterministic. With no durable store wired (a face that opted out), it renders
+// the session-only view.
+func (s *chatSession) cmdSkills(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 {
+		if args[0] != "apply" {
+			return command.Output{Text: "Usage: /skills [apply <n>]"}, nil
+		}
+		return s.skillsApply(args[1:])
+	}
+	s.mu.Lock()
+	session := s.sess.ID
+	store := s.insights
+	rollup := s.rollup
+	s.mu.Unlock()
+
+	var perSession []subagent.Finding
+	if store != nil {
+		perSession = store.Findings(session)
+	}
+	var rep skillrollup.Report
+	if rollup != nil {
+		rep = rollup.Rollup()
+	}
+	return command.Output{Text: skillrollup.Render(rep, perSession, session)}, nil
+}
+
+// skillsApply lands the pending remedy at the given 1-based index: the rollup is
+// recomputed (deterministic, so the index is stable), its proposed line is
+// appended to the target file under the working directory, and the finding is
+// resolved so it stops pending across sessions. A duplicate line is reported
+// rather than re-appended — the propose-only edit becomes a confirmed write only
+// here, never from the sub-agent (D9, C.5).
+func (s *chatSession) skillsApply(args []string) (command.Output, error) {
+	if len(args) != 1 {
+		return command.Output{Text: "Usage: /skills apply <n>"}, nil
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n < 1 {
+		return command.Output{Text: fmt.Sprintf("Not a remedy number: %q", args[0])}, nil
+	}
+	s.mu.Lock()
+	rollup := s.rollup
+	wd := s.wd
+	s.mu.Unlock()
+	if rollup == nil {
+		return command.Output{Text: "No cross-session findings store — nothing to apply."}, nil
+	}
+
+	rep := rollup.Rollup()
+	if n > len(rep.Pending) {
+		return command.Output{Text: fmt.Sprintf("No remedy #%d (the report lists %d).", n, len(rep.Pending))}, nil
+	}
+	p := rep.Pending[n-1]
+	target := p.Target
+	if target == "" {
+		return command.Output{Text: fmt.Sprintf("Remedy #%d names no target file — nothing to apply.", n)}, nil
+	}
+	path := target
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(wd, path)
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return command.Output{}, fmt.Errorf("read skill/memory file: %w", err)
+	}
+	if containsLine(existing, p.Diff) {
+		if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+			return command.Output{}, fmt.Errorf("resolve finding: %w", err)
+		}
+		return command.Output{Text: fmt.Sprintf("Already in %s — marked resolved.", target)}, nil
+	}
+	if err := appendMemoryLine(path, existing, p.Diff); err != nil {
+		return command.Output{}, fmt.Errorf("write skill/memory file: %w", err)
+	}
+	if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+		return command.Output{}, fmt.Errorf("resolve finding: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Applied to %s and marked resolved:\n\n  %s", target, p.Diff)}, nil
 }
 
 // cmdClean is the manual context editor (AS-028 /clean, PRD §7.12): the user

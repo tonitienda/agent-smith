@@ -45,6 +45,7 @@ func commands() []*cli.Command {
 		registryLeaf(reg, "cost", "cost", nil),
 		registryLeaf(reg, "route", "route", nil),
 		registryLeaf(reg, "insights", "insights", allArgs),
+		registryLeaf(reg, "skills", "skills", allArgs),
 		configCommand(),
 		serveCommand(),
 		tuiCommand(),
@@ -476,7 +477,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 	// A headless run does not load the skill tool, so no fact can be skill-scoped;
 	// the resolver only needs the working-directory memory tree. The durable ledger
 	// is shared with interactive sessions of the same project (AS-108).
-	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(wd, nil), openFactLedger(store, c.Stderr), nil, c.Stderr)
+	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, nil), openFactLedger(store, c.Stderr), nil, c.Stderr)
 	if err != nil {
 		return fmt.Errorf("build sub-agents: %w", err)
 	}

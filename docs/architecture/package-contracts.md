@@ -120,7 +120,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
   the capability; AS-107 builds and installs the Runner). The store is reachable
   for the `/insights` seam (AS-045). Like `subagent`/`skillcontract` the analyzer
   packages ship substrate-first — registration and the offer UX are consumer
-  steps, not their concern.
+  steps, not their concern. The store the composition root hands in is the
+  **durable cross-session rollup** (AS-050) when a session store is present:
+  `internal/skillrollup` implements `subagent.Store`, mirroring every recorded
+  finding to a per-project JSONL log alongside the session store (next to the fact
+  ledger) and reading it back as an aggregated `Rollup` — a fact rediscovered in
+  `EscalateSessions`+ distinct sessions is escalated, and a `/skills apply`'d
+  remedy is resolved by an appended tombstone. The log is additive-only (D2):
+  `Record` carries optional json-tagged fields and unknown fields are ignored on
+  load. It consumes `subagent` + `render` only and points inward; the in-memory
+  `subagent.MemStore` remains the fallback when no session store is wired.
 - **Coding Mode process skills** (AS-074): the bundled, per-phase skill pack lives
   in `internal/codingskills` — an `//go:embed`-ed set of `SKILL.md` files parsed
   through `skill.LoadFS` into ordinary `skill.Skill` values (it depends only on
@@ -142,6 +151,15 @@ The enforced contracts (guard test) are the corners most prone to drift:
   (measured-first; the model-assisted rewrite layer is deferred to AS-109). The
   same `Analyze` drives the `/insights` panel, which prices turns and lands a
   suggestion's propose-only memory edit through a shown diff (`/insights apply`).
+- **Living-skills report** (`/skills`, AS-050): `internal/skillrollup` is the
+  surfacing layer for the living-skills findings — the rediscovered facts (AS-048)
+  and skill grades (AS-049) the analyzers report. It renders the current session's
+  findings (the per-session view) plus the cross-session rollup, escalating a fact
+  that recurs across `EscalateSessions`+ sessions, and lands a pending remedy's
+  propose-only diff through `/skills apply <n>`, marking it resolved. Like
+  `/insights` it is deterministic and face-agnostic (one `Render` for the TUI panel
+  and headless `smith skills`); the confirmed write happens only at the command, never
+  from a sub-agent (D9, C.5).
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:

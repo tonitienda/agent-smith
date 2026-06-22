@@ -84,7 +84,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | done | 034 |
 | [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | done | 032, 044, 047 |
 | [AS-049](AS-049-skill-expectation-analyzer.md) | skill-expectation-analyzer (experimental) | living-skills | done | 044, 047, 048 |
-| [AS-050](AS-050-skills-report.md) | `/skills` report + cross-session rollup | living-skills | ready | 007, 022, 049 |
+| [AS-050](AS-050-skills-report.md) | `/skills` report + cross-session rollup | living-skills | done | 007, 022, 049 |
 | [AS-051](AS-051-headless-cli.md) | Headless CLI mode | faces | done | 018, 031 |
 | [AS-052](AS-052-acp-server.md) | ACP server | faces | ready | 018, 051 |
 | [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |

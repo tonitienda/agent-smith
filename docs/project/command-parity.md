@@ -28,5 +28,6 @@ disagree. Interactive-only commands state a reason.
 | `/rewind` | both |  |
 | `/route` | both |  |
 | `/serious` | interactive-only | mutes/restores interactive chrome flavor; non-interactive faces are already clean |
+| `/skills` | both |  |
 | `/tidy` | both |  |
 | `/version` | both |  |
