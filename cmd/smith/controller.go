@@ -1062,7 +1062,14 @@ func (s *chatSession) cmdRoute(_ context.Context, args []string) (command.Output
 	for _, t := range turns {
 		recent = append(recent, routing.Call{Index: t.Index, Model: t.Model})
 	}
-	return command.Output{Text: routing.Render(s.router, recent)}, nil
+	// Snapshot the policy under the lock: a concurrent /route override or session
+	// swap (/clear, /resume) reassigns s.router, so reading the struct field
+	// unguarded is a data race. The maps are copy-on-write, so the snapshot stays
+	// valid after the lock is dropped.
+	s.mu.Lock()
+	router := s.router
+	s.mu.Unlock()
+	return command.Output{Text: routing.Render(router, recent)}, nil
 }
 
 // routeOverride applies a transient per-session routing override and renders the
