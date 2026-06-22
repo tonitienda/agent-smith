@@ -13,7 +13,7 @@ func TestRenderShowsTiersFeaturesAndRecentCalls(t *testing.T) {
 	out := Render(p, []Call{
 		{Index: 1, Model: "claude-haiku-4-5"}, // cheap tier
 		{Index: 2, Model: "claude-opus-4-8"},  // unmapped -> main
-	})
+	}, nil)
 
 	for _, want := range []string{
 		"cheap", "claude-haiku-4-5", "gpt-4o-mini",
@@ -32,7 +32,7 @@ func TestRenderShowsTiersFeaturesAndRecentCalls(t *testing.T) {
 }
 
 func TestRenderEmptyTierAndNoOverrides(t *testing.T) {
-	out := Render(Default(), nil)
+	out := Render(Default(), nil, nil)
 	if !strings.Contains(out, "falls back to the active model") {
 		t.Errorf("strong/standard tiers should note fallback\n%s", out)
 	}
@@ -41,5 +41,22 @@ func TestRenderEmptyTierAndNoOverrides(t *testing.T) {
 	}
 	if strings.Contains(out, "Recent calls") {
 		t.Errorf("no recent calls should omit the section\n%s", out)
+	}
+	if strings.Contains(out, "Escalations") {
+		t.Errorf("no escalations should omit the section\n%s", out)
+	}
+}
+
+func TestRenderShowsEscalations(t *testing.T) {
+	out := Render(Default(), nil, []Escalation{
+		{Feature: "compact", From: Cheap, To: Standard, Reason: "the summarizer returned an empty summary"},
+	})
+	for _, want := range []string{
+		"Escalations", "compact", "cheap", "standard",
+		"the summarizer returned an empty summary",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("escalation render missing %q\n---\n%s", want, out)
+		}
 	}
 }

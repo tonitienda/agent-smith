@@ -132,8 +132,15 @@ type chatSession struct {
 	// router is the model routing/tiering policy (AS-042): tier-declaring work
 	// (/compact summarization) resolves its concrete model through it instead of
 	// hardcoding ids. Defaults to routing.Default() so a face that never calls
-	// setRouter keeps the previous hardcoded cheap-tier behavior.
+	// setRouter keeps the previous hardcoded cheap-tier behavior. `/route <feature>
+	// <tier>` / `/route <tier> <vendor> <model>` layer transient per-session
+	// overrides on top (AS-110) — copied, never mutating baseRouter.
 	router routing.Policy
+	// baseRouter is the durable config-derived policy (AS-110): the value /route
+	// overrides layer onto and that a session swap (/clear, /resume) resets router
+	// back to, so per-session overrides never outlive the session that set them and
+	// the config policy stays untouched.
+	baseRouter routing.Policy
 
 	mu       sync.Mutex
 	sess     *session.Session
@@ -204,25 +211,27 @@ type chatSession struct {
 // start so turn progress is wired before the first turn runs.
 func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Table, providers map[string]provider.Provider, sess *session.Session, provName, model, wd string, skills []skill.Skill, hooks *hook.Set) *chatSession {
 	return &chatSession{
-		store:     store,
-		tools:     tools,
-		pricing:   pricing,
-		providers: providers,
-		sess:      sess,
-		provName:  provName,
-		model:     model,
-		project:   filepath.Base(wd),
-		wd:        wd,
-		skills:    skills,
-		hooks:     hooks,
-		router:    routing.Default(),
+		store:      store,
+		tools:      tools,
+		pricing:    pricing,
+		providers:  providers,
+		sess:       sess,
+		provName:   provName,
+		model:      model,
+		project:    filepath.Base(wd),
+		wd:         wd,
+		skills:     skills,
+		hooks:      hooks,
+		router:     routing.Default(),
+		baseRouter: routing.Default(),
 	}
 }
 
 // setRouter installs the model routing/tiering policy (AS-042), read from layered
 // config at startup via routing.ConfigFrom (AS-093). A face that does not call it
-// keeps routing.Default() — the previous hardcoded cheap-tier behavior.
-func (s *chatSession) setRouter(p routing.Policy) { s.router = p }
+// keeps routing.Default() — the previous hardcoded cheap-tier behavior. It seeds
+// both the effective router and the baseRouter a session swap resets to (AS-110).
+func (s *chatSession) setRouter(p routing.Policy) { s.router, s.baseRouter = p, p }
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -1029,13 +1038,21 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	return command.Output{Text: composition.Render(comp)}, nil
 }
 
-// cmdRoute renders the /route inspector (AS-042, PRD §7.15): the active model
-// routing/tiering policy (each tier's concrete model per vendor and the
-// per-feature overrides) plus the tier that served each recent call, mapped from
-// the same cost accounting /cost reads. It is read-only — config owns the policy
-// in V1; a per-session override and auto-escalation are tracked as follow-on
-// (AS-110) — so the panel opens instantly with no model calls.
-func (s *chatSession) cmdRoute(_ context.Context, _ []string) (command.Output, error) {
+// cmdRoute inspects the model routing/tiering policy (AS-042, PRD §7.15) and, with
+// arguments, sets a transient per-session override on top of it (AS-110):
+//
+//	/route                         → render the active policy + recent calls
+//	/route <feature> <tier>        → pin a feature to a tier for this session
+//	/route <tier> <vendor> <model> → remap a tier's model for a vendor this session
+//
+// Overrides are copied onto baseRouter (never mutating the shared config policy)
+// and reset on /clear and /resume. Inspection stays read-only and model-call-free,
+// so the panel opens instantly. When /compact has auto-escalated this session
+// (AS-116), the escalations — feature, tiers moved between, and reason — are shown.
+func (s *chatSession) cmdRoute(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 {
+		return s.routeOverride(args)
+	}
 	summary := cost.Summarize(s.events(), s.pricing)
 	turns := summary.Turns
 	const maxRecent = 5
@@ -1046,7 +1063,71 @@ func (s *chatSession) cmdRoute(_ context.Context, _ []string) (command.Output, e
 	for _, t := range turns {
 		recent = append(recent, routing.Call{Index: t.Index, Model: t.Model})
 	}
-	return command.Output{Text: routing.Render(s.router, recent)}, nil
+	// Snapshot the policy under the lock: a concurrent /route override or session
+	// swap (/clear, /resume) reassigns s.router, so reading the struct field
+	// unguarded is a data race. The maps are copy-on-write, so the snapshot stays
+	// valid after the lock is dropped.
+	s.mu.Lock()
+	router := s.router
+	s.mu.Unlock()
+	return command.Output{Text: routing.Render(router, recent, routeEscalations(s.events()))}, nil
+}
+
+// routeEscalations decodes the session's auto-escalation events into the routing
+// render's Escalation view (AS-116), so /route can show that an escalation
+// occurred, which tiers it moved between, and the producer's structured reason.
+func routeEscalations(events []schema.Block) []routing.Escalation {
+	var out []routing.Escalation
+	for _, b := range events {
+		if e, ok := eventlog.EscalationOf(b); ok {
+			out = append(out, routing.Escalation{
+				Feature: e.Feature,
+				From:    routing.Tier(e.From),
+				To:      routing.Tier(e.To),
+				Reason:  e.Reason,
+			})
+		}
+	}
+	return out
+}
+
+// routeOverride applies a transient per-session routing override and renders the
+// updated policy (AS-110). Arity disambiguates the two forms: two args are
+// `<feature> <tier>` (pin a feature to a tier), three are `<tier> <vendor> <model>`
+// (remap a tier's model for a vendor). Each override is layered onto the current
+// router via the copy-on-write With* helpers, so the shared config policy is never
+// mutated; /clear and /resume reset s.router back to baseRouter.
+func (s *chatSession) routeOverride(args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var note string
+	switch len(args) {
+	case 2:
+		feature := args[0]
+		tier, ok := routing.ParseTier(args[1])
+		if !ok {
+			return command.Output{}, fmt.Errorf("unknown tier %q (cheap|standard|strong)", args[1])
+		}
+		s.router = s.router.WithFeatureTier(feature, tier)
+		note = fmt.Sprintf("Pinned %q to the %s tier for this session.", feature, tier)
+	case 3:
+		tier, ok := routing.ParseTier(args[0])
+		if !ok {
+			return command.Output{}, fmt.Errorf("unknown tier %q (cheap|standard|strong)", args[0])
+		}
+		vendor, model := args[1], args[2]
+		if vendor == "" || model == "" {
+			return command.Output{}, fmt.Errorf("vendor and model must be non-empty")
+		}
+		s.router = s.router.WithVendorModel(tier, vendor, model)
+		note = fmt.Sprintf("Mapped the %s tier to %s=%s for this session.", tier, vendor, model)
+	default:
+		return command.Output{}, fmt.Errorf("usage: route <feature> <tier> | route <tier> <vendor> <model>")
+	}
+	// Read escalations through the Log's own lock (not s.events(), which would
+	// re-enter s.mu we already hold here).
+	escalations := routeEscalations(s.sess.Log.Events())
+	return command.Output{Text: note + " (resets on /clear or /resume)\n\n" + routing.Render(s.router, nil, escalations)}, nil
 }
 
 // cmdInsights renders the /insights session retrospective (AS-045, PRD §7.14): a
@@ -1155,6 +1236,7 @@ func appendMemoryLine(path string, existing []byte, line string) error {
 // restores the most recent removal exactly.
 //
 //   - /clean <handle>…  preview the removal (mutates nothing) and stage it
+//   - /clean "<topic>"  preview removing segments a topic query matches (AS-029)
 //   - /clean --apply     confirm the staged preview, appending the exclusion
 //   - /clean --undo      restore the most recent removal
 //   - /clean --cancel    discard the staged preview
@@ -1290,11 +1372,22 @@ func (s *chatSession) cleanSelectRestore(value string) string {
 
 // cleanPreview stages a removal: it projects the live window, builds the plan,
 // and stores it pending confirmation. Nothing is appended to the log.
+//
+// args are tried first as block handles (the AS-028 path). When none resolve,
+// they are taken as a natural-language topic query and matched with the AS-029
+// engine — so `/clean "the bug we fixed"` selects the related segments while an
+// exact handle stays exact. Either way nothing auto-removes: the staged preview
+// awaits /clean --apply (AC: preview before apply, nothing lost).
 func (s *chatSession) cleanPreview(handles []string) (command.Output, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
 	plan := clean.Preview(proj, s.pricing, s.model, time.Now(), handles)
+	if plan.Empty() {
+		if q := strings.TrimSpace(strings.Join(handles, " ")); q != "" {
+			plan = clean.PreviewMatch(proj, s.pricing, s.model, time.Now(), q)
+		}
+	}
 	if plan.Empty() {
 		s.pendingClean, s.pendingCleanFor = nil, nil
 		return command.Output{Text: clean.RenderPreview(plan)}, nil
@@ -1467,6 +1560,8 @@ const cleanUsage = `/clean removes segments from the model's context window.
   /clean             open the interactive selector (TUI): pick segments to remove
                      and restore excluded ones, with a live reclaim preview
   /clean <handle>…   preview removing the named segments (handles come from /context)
+  /clean "<topic>"   preview removing segments matching a topic, e.g.
+                     /clean "the bug we fixed" — matches are explained, nothing auto-removes
   /clean --apply     confirm the previewed removal
   /clean --undo      restore the most recent removal
   /clean --cancel    discard the preview
@@ -1731,7 +1826,10 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
 	plan := compact.Preview(proj, s.pricing, s.model, time.Now())
 	log, sessID := s.sess.Log, s.sess.ID
-	vendor, model := s.cheapModel()
+	vendor := s.provName
+	fallback := s.model
+	router := s.router
+	baseTier := router.FeatureTier("compact", routing.Cheap)
 	prov := s.providers[vendor]
 	s.mu.Unlock()
 
@@ -1755,24 +1853,63 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 		return command.Output{Text: "Compaction blocked by a pre-compact hook: " + out.Reason}, nil
 	}
 
-	summary, tokens, stopReason, err := summarize(ctx, prov, model, plan.Sources)
-	if err != nil {
-		return command.Output{}, fmt.Errorf("summarize for /compact: %w", err)
+	// /compact is a tier-declared, model-using task (AS-042), so route its attempt
+	// through the tier policy and auto-escalate once when the summarizer comes back
+	// empty — a structured low-confidence result — to the next stronger tier
+	// (AS-110 primitive, AS-116 first producer). This is explicit and feature-owned
+	// (a user-invoked /compact), never an invisible retry for a normal chat turn.
+	// Each attempt records its own usage event, so /cost attributes the retry's
+	// extra spend to the escalated turn, and the escalation is logged so /route can
+	// show it with the producer's structured reason (§9: grounded, never invented).
+	var summary string
+	var summarizeErr error
+	attempt := func(tier routing.Tier) routing.Attempt {
+		model := router.Resolve(tier, vendor, fallback)
+		sum, tokens, stopReason, aerr := summarize(ctx, prov, model, plan.Sources)
+		if aerr != nil {
+			// A transport/provider error is not a low-confidence result: don't
+			// escalate it. Report OK so Escalate stops, then the check below aborts.
+			summarizeErr = aerr
+			return routing.Attempt{OK: true}
+		}
+		if tokens != nil {
+			if _, err := log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
+				summarizeErr = err
+				return routing.Attempt{OK: true}
+			}
+		}
+		if strings.TrimSpace(sum) == "" {
+			return routing.Attempt{OK: false, Reason: "the summarizer returned an empty summary"}
+		}
+		summary = sum
+		return routing.Attempt{OK: true}
+	}
+	res, esc := routing.Escalate("compact", baseTier, attempt)
+	if summarizeErr != nil {
+		return command.Output{}, fmt.Errorf("summarize for /compact: %w", summarizeErr)
+	}
+	if esc != nil {
+		if _, err := log.Append(eventlog.NewEscalation(compact.Producer, eventlog.Escalation{
+			Feature: esc.Feature, From: string(esc.From), To: string(esc.To), Reason: esc.Reason,
+		})); err != nil {
+			return command.Output{}, fmt.Errorf("record escalation: %w", err)
+		}
 	}
 	block, ok := compact.Build(plan, summary)
-	if !ok {
+	if !res.OK || !ok {
 		s.clearPendingCompact()
 		return command.Output{Text: "The summarizer returned nothing; the conversation was left unchanged."}, nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Record the summarization's token usage so /cost itemizes it on the cheap
-	// tier (AS-038 AC4); a nil-usage surface simply records nothing.
-	if tokens != nil {
-		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
-			return command.Output{}, fmt.Errorf("record compaction usage: %w", err)
-		}
+	// The lock was dropped for the (slow) summarization, so a concurrent /clear or
+	// /resume may have swapped s.sess. The block carries the old session's source
+	// IDs, so appending it to a different session would corrupt that log; abandon
+	// the compaction instead, mirroring the staged-preview "session changed" guard.
+	if s.sess.ID != sessID {
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: "The session changed during compaction; the compaction was abandoned. Run /compact again."}, nil
 	}
 	if _, err := s.sess.Log.Append(block); err != nil {
 		return command.Output{}, fmt.Errorf("record compaction: %w", err)
@@ -1960,6 +2097,9 @@ func (s *chatSession) cmdClear(context.Context, []string) (command.Output, error
 	}
 	prev := s.sess
 	s.sess, s.engine = fresh, eng
+	// Drop any per-session /route overrides: they are transient and must not leak
+	// into the fresh session (AS-110 AC). The durable config policy is unchanged.
+	s.router = s.baseRouter
 	// Safe to close the previous log: the busy guard means no turn is writing it
 	// when a swap runs, so its file descriptor isn't leaked across /clear.
 	_ = prev.Log.Close()
@@ -2076,6 +2216,9 @@ func (s *chatSession) cmdResume(_ context.Context, args []string) (command.Outpu
 	}
 	prev := s.sess
 	s.sess, s.provName, s.model, s.engine = opened, provName, model, eng
+	// Drop per-session /route overrides on a session swap (AS-110 AC): overrides
+	// belong to the session that set them, not the one being resumed.
+	s.router = s.baseRouter
 	// Close the previously-active log; the busy guard means no turn is writing it.
 	_ = prev.Log.Close()
 	return command.Output{

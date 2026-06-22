@@ -262,11 +262,12 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "route",
-		Summary:       "Inspect the model routing/tiering policy",
+		Summary:       "Inspect or override the model routing/tiering policy",
+		Args:          "[<feature> <tier> | <tier> <vendor> <model>]",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
-		Examples:      []string{"smith route", "smith route --output json"},
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 3},
+		Examples:      []string{"smith route", "smith route compact standard", "smith route cheap anthropic claude-haiku-4-5"},
 		Run:           ctl.cmdRoute,
 	})
 	mustRegisterCommand(reg, command.Command{
@@ -282,7 +283,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	mustRegisterCommand(reg, command.Command{
 		Name:          "clean",
 		Summary:       "Remove segments from the context window",
-		Args:          "<handle>… | --apply | --undo | --cancel",
+		Args:          "<handle>… | \"<topic>\" | --apply | --undo | --cancel",
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {

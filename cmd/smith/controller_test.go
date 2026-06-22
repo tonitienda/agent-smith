@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
 	"github.com/tonitienda/agent-smith/internal/provider/openai"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -181,6 +182,53 @@ func runChatCommand(t *testing.T, ctl *chatSession, name string, args ...string)
 	return c.Run(ctx, rest)
 }
 
+// TestRouteOverrideAndReset covers the per-session /route override path (AS-110):
+// `/route <feature> <tier>` and `/route <tier> <vendor> <model>` set transient
+// overrides on the session's policy without touching the durable config policy,
+// and a session swap (/clear) resets them.
+func TestRouteOverrideAndReset(t *testing.T) {
+	ctl := newTestController(t)
+
+	if _, err := runChatCommand(t, ctl, "route", "compact", "standard"); err != nil {
+		t.Fatalf("route feature override: %v", err)
+	}
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Standard {
+		t.Errorf("after override, compact tier = %q, want standard", got)
+	}
+	// The durable base policy must stay on the default (no feature overrides).
+	if got := ctl.baseRouter.FeatureTier("compact", routing.Cheap); got != routing.Cheap {
+		t.Errorf("base policy mutated by override: compact = %q, want cheap", got)
+	}
+
+	if _, err := runChatCommand(t, ctl, "route", "cheap", "anthropic", "claude-custom"); err != nil {
+		t.Fatalf("route vendor override: %v", err)
+	}
+	if got := ctl.router.Resolve(routing.Cheap, "anthropic", "fallback"); got != "claude-custom" {
+		t.Errorf("after override, cheap anthropic = %q, want claude-custom", got)
+	}
+	// Earlier feature override still present (overrides accumulate within a session).
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Standard {
+		t.Errorf("vendor override dropped the feature override: compact = %q, want standard", got)
+	}
+
+	if _, err := ctl.cmdClear(context.TODO(), nil); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if got := ctl.router.FeatureTier("compact", routing.Cheap); got != routing.Cheap {
+		t.Errorf("override survived /clear: compact = %q, want reset to cheap", got)
+	}
+	if got := ctl.router.Resolve(routing.Cheap, "anthropic", "fallback"); got != "claude-haiku-4-5" {
+		t.Errorf("override survived /clear: cheap anthropic = %q, want default", got)
+	}
+}
+
+func TestRouteOverrideRejectsUnknownTier(t *testing.T) {
+	ctl := newTestController(t)
+	if _, err := runChatCommand(t, ctl, "route", "compact", "turbo"); err == nil {
+		t.Error("route compact turbo = nil error, want unknown-tier rejection")
+	}
+}
+
 // TestCleanPreviewApplyUndo covers the /clean wiring (AS-028): a preview stages
 // the removal without touching the log, --apply drops the block from the window
 // via an appended exclusion, and --undo restores it exactly.
@@ -222,6 +270,36 @@ func TestCleanPreviewApplyUndo(t *testing.T) {
 	}
 	if !liveContains(t, ctl, "blk_dropme00") {
 		t.Error("block not restored after /clean --undo")
+	}
+}
+
+// TestCleanTopicMatchPreviewApply covers the AS-029 wiring: a quoted topic
+// query that resolves no handle falls back to the matcher, stages an explained
+// preview, and --apply removes exactly the matched segments (the headline demo).
+func TestCleanTopicMatchPreviewApply(t *testing.T) {
+	ctl := newTestController(t)
+	appendUserTextID(t, ctl, "blk_bugfix000", strings.Repeat("we fixed the auth bug ", 8))
+	appendUserTextID(t, ctl, "blk_feature00", strings.Repeat("add the csv export feature ", 8))
+
+	out, err := runClean(t, ctl, "the bug we fixed")
+	if err != nil {
+		t.Fatalf("/clean topic preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Preview") || !strings.Contains(out.Text, "matched") {
+		t.Errorf("topic preview should explain the match:\n%s", out.Text)
+	}
+	if ctl.pendingClean == nil {
+		t.Fatal("topic preview did not stage a pending plan")
+	}
+
+	if _, err := runClean(t, ctl, "--apply"); err != nil {
+		t.Fatalf("/clean --apply: %v", err)
+	}
+	if liveContains(t, ctl, "blk_bugfix000") {
+		t.Error("matched bug segment still live after apply")
+	}
+	if !liveContains(t, ctl, "blk_feature00") {
+		t.Error("unrelated feature segment dropped by topic /clean")
 	}
 }
 

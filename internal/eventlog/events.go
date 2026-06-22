@@ -1,6 +1,7 @@
 package eventlog
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -290,6 +291,71 @@ func NewModeExit(producer, instanceID string) schema.Block {
 			DerivedFrom: []string{instanceID},
 		},
 	}
+}
+
+// KindEscalation is the event kind for a routing auto-escalation event: a control
+// event recording that a tier-declared, model-using task retried on a stronger
+// tier after a structured low-confidence/failed attempt (AS-110 primitive, AS-116
+// visibility, PRD §7.15). It is a non-content kind carrying no content body — the
+// escalation record (feature, the tiers it moved between, and the producer's
+// structured reason) rides on Block.Ext under escalationExtKey, and the producer
+// on Provenance. /route reads these events to show that an escalation occurred,
+// and the retry's own usage event attributes its extra spend in /cost.
+//
+// Like the other control kinds it lives here rather than in the frozen content-
+// block schema (AS-003) because it is a harness/log control event, not a content
+// block, and it uses the schema's additive Ext escape hatch (D2) rather than a
+// new envelope field so it never touches the frozen union. The projection engine
+// (AS-006) never renders it into model-facing context.
+const KindEscalation schema.Kind = "escalation"
+
+// escalationExtKey is the Block.Ext key the escalation payload is stored under.
+const escalationExtKey = "escalation"
+
+// Escalation is the decoded payload of a KindEscalation event: which feature
+// escalated, the tiers it moved between (as their string names), and the
+// structured reason the producer reported (never invented — §9 mitigation).
+type Escalation struct {
+	Feature string `json:"feature"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Reason  string `json:"reason"`
+}
+
+// NewEscalation builds an escalation event attributed to producer (the escalating
+// feature, e.g. the /compact summarizer), recording feature, the from→to tiers,
+// and the structured reason. The payload rides on Ext so the frozen schema is
+// untouched (D2 additive-only).
+//
+// The returned block has a fresh ID; its Seq and append timestamp are assigned
+// when it is appended to a Log.
+func NewEscalation(producer string, esc Escalation) schema.Block {
+	payload, _ := json.Marshal(esc) //nolint:errcheck // a fixed-shape struct never fails to marshal
+	return schema.Block{
+		ID:         schema.NewID(),
+		Kind:       KindEscalation,
+		Role:       schema.RoleHarness,
+		Provenance: &schema.Provenance{Producer: producer},
+		Ext:        map[string]json.RawMessage{escalationExtKey: payload},
+	}
+}
+
+// EscalationOf decodes b as an escalation event, reporting false for any other
+// kind or a payload that does not parse (defensive, mirroring BudgetLimit's
+// tolerate-and-skip posture).
+func EscalationOf(b schema.Block) (Escalation, bool) {
+	if b.Kind != KindEscalation {
+		return Escalation{}, false
+	}
+	raw, ok := b.Ext[escalationExtKey]
+	if !ok {
+		return Escalation{}, false
+	}
+	var esc Escalation
+	if err := json.Unmarshal(raw, &esc); err != nil {
+		return Escalation{}, false
+	}
+	return esc, true
 }
 
 // BudgetLimit returns the most recently set session ceiling on the log and
