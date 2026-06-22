@@ -12,6 +12,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/credential"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/provider/anthropic"
@@ -147,11 +148,18 @@ func (r *Runtime) BuiltinTools(wd string) (*tool.Registry, error) {
 	return reg, nil
 }
 
-// DefaultProviders is the production provider set.
+// DefaultProviders is the production provider set. Each provider's API key
+// resolves through the credential layer (AS-017): the provider env var wins,
+// else the OS keychain. A missing key yields an empty string here and surfaces
+// as a clear ErrAuth only when a turn actually runs — constructing the set stays
+// network- and keychain-failure-free.
 func DefaultProviders() map[string]provider.Provider {
+	store := credential.Keyring{}
+	anthKey, _ := credential.Resolve(os.Getenv, store, credential.Anthropic)
+	openaiKey, _ := credential.Resolve(os.Getenv, store, credential.OpenAI)
 	return map[string]provider.Provider{
-		"anthropic": anthropic.New(""),
-		"openai":    openai.New(""),
+		"anthropic": anthropic.New(anthKey),
+		"openai":    openai.New(openaiKey),
 	}
 }
 

@@ -39,7 +39,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-014](AS-014-file-and-search-tools.md) | File & search tools (read/write/edit/glob/grep) | tools | done | 013 |
 | [AS-015](AS-015-shell-tool.md) | Shell tool | tools | done | 013, 016 |
 | [AS-016](AS-016-permission-model.md) | Permission model + security posture doc | security | done | 013 |
-| [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | ready | 001 |
+| [AS-017](AS-017-keychain-key-storage.md) | OS-keychain API key storage | security | done | 001 |
 | [AS-018](AS-018-agentic-loop.md) | Agentic loop orchestrator | loop | done | 006, 008, 013 |
 | [AS-019](AS-019-parallel-tool-execution.md) | Parallel tool execution | loop | done | 018 |
 | [AS-020](AS-020-cost-accounting.md) | Token & cost accounting + `/cost` | cost | done | 009, 010, 022 |

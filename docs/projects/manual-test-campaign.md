@@ -73,6 +73,9 @@ Covers AS-008 through AS-012 and AS-092.
 | 3.2 | With `OPENAI_API_KEY` or OpenAI-compatible endpoint config, run the same one-turn task. | The same face-level events appear despite provider differences. |
 | 3.3 | Repeat a prompt with cache-eligible context. | Prompt-cache usage/savings appear in `/cost` when the provider reports them. |
 | 3.4 | Run provider conformance tests from the quality gate. | Recorded fixtures pass offline; no live network is needed for default tests. |
+| 3.5 | `smith auth set anthropic` (paste a key at the hidden prompt), then `smith auth status`. | Key stored in the OS keychain, never a plaintext file; status shows `set (keychain)` without revealing the value. (AS-017) |
+| 3.6 | Export `ANTHROPIC_API_KEY` and re-run `smith auth status anthropic`. | Reports `set (env ANTHROPIC_API_KEY)` — the env var overrides the stored key. (AS-017) |
+| 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) |
 
 ### 4. Tools, permissions, and transparent execution
 
@@ -180,7 +183,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-014 | Core tools: file read / write / edit, glob, grep | Implemented (`done`) |
 | AS-015 | Shell tool (command execution, gated by permissions) | Implemented (`done`) |
 | AS-016 | Permission model (ask / allowlist / auto) + documented security posture | Implemented (`done`) |
-| AS-017 | OS-keychain API key storage | Not implemented (`ready-to-implement`) |
+| AS-017 | OS-keychain API key storage | Implemented (`done`) |
 | AS-018 | Agentic loop orchestrator | Implemented (`done`) |
 | AS-019 | Parallel tool execution for independent calls | Implemented (`done`) |
 | AS-020 | Token & cost accounting engine + /cost command | Implemented (`done`) |
