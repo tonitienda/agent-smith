@@ -142,6 +142,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 | [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | done | 074, 006 |
 | [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | done | 005, 016 |
+| [AS-116](AS-116-json-root-help-output.md) | Root help ignores `--output json` | faces | ready | 065, 070 |
 
 ## Suggested build order
 
@@ -163,8 +164,10 @@ Previously listed `needs-clarification` tickets were triaged against the current
 repo documentation and clarified where the documented direction was sufficient.
 The one open item is **AS-113** (plugin consent screen), which has nothing to hang
 a consent flow on until a plugin-install/marketplace path exists (§7.26, not yet
-ticketed) — see its Open questions section. New ambiguous follow-on work should be
-captured by adding a fresh ticket with a focused Open questions section.
+ticketed) — see its Open questions section. New bug follow-ons such as **AS-116**
+should stay `ready-to-implement` unless they truly need a product decision. New
+ambiguous follow-on work should be captured by adding a fresh ticket with a
+focused Open questions section.
 
 The clarified decisions are recorded in the individual ticket files rather than
 repeated here, so the ticket remains the source of truth for implementation.

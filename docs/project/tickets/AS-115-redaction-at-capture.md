@@ -11,7 +11,7 @@ source: AS-056 spike (docs/design/compliance-archiving.md §2.2, §4, §8)
 
 # AS-115 · Redaction-at-capture
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
