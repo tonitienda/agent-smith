@@ -23,10 +23,12 @@ const unmapped = "main"
 const dash = "—"
 
 // Render formats the active policy for the /route inspector: the tier→model
-// mapping per vendor, the per-feature overrides, and (when recent is non-empty)
-// the tier that served each recent call. It is face-agnostic so the TUI and a
-// headless face render the same view.
-func Render(p Policy, recent []Call) string {
+// mapping per vendor, the per-feature overrides, (when recent is non-empty) the
+// tier that served each recent call, and (when escalations is non-empty) the
+// auto-escalations that occurred this session — the feature, the tiers it moved
+// between, and the structured reason (AS-116). It is face-agnostic so the TUI and
+// a headless face render the same view.
+func Render(p Policy, recent []Call, escalations []Escalation) string {
 	var b strings.Builder
 	b.WriteString("Model routing policy (AS-042)\n\n")
 
@@ -59,6 +61,15 @@ func Render(p Policy, recent []Call) string {
 			rrow("  #%d\t%s\t%s\t\n", c.Index, modelLabel(c.Model), tier)
 		}
 		_ = rtw.Flush()
+	}
+
+	if len(escalations) > 0 {
+		b.WriteString("\nEscalations\n")
+		etw, erow := render.Tab(&b, 0)
+		for _, e := range escalations {
+			erow("  %s\t%s → %s\t%s\t\n", e.Feature, e.From, e.To, e.Reason)
+		}
+		_ = etw.Flush()
 	}
 
 	return strings.TrimRight(b.String(), "\n")

@@ -1047,7 +1047,8 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 //
 // Overrides are copied onto baseRouter (never mutating the shared config policy)
 // and reset on /clear and /resume. Inspection stays read-only and model-call-free,
-// so the panel opens instantly. Auto-escalation visibility is tracked in AS-116.
+// so the panel opens instantly. When /compact has auto-escalated this session
+// (AS-116), the escalations — feature, tiers moved between, and reason — are shown.
 func (s *chatSession) cmdRoute(_ context.Context, args []string) (command.Output, error) {
 	if len(args) > 0 {
 		return s.routeOverride(args)
@@ -1069,7 +1070,25 @@ func (s *chatSession) cmdRoute(_ context.Context, args []string) (command.Output
 	s.mu.Lock()
 	router := s.router
 	s.mu.Unlock()
-	return command.Output{Text: routing.Render(router, recent)}, nil
+	return command.Output{Text: routing.Render(router, recent, routeEscalations(s.events()))}, nil
+}
+
+// routeEscalations decodes the session's auto-escalation events into the routing
+// render's Escalation view (AS-116), so /route can show that an escalation
+// occurred, which tiers it moved between, and the producer's structured reason.
+func routeEscalations(events []schema.Block) []routing.Escalation {
+	var out []routing.Escalation
+	for _, b := range events {
+		if e, ok := eventlog.EscalationOf(b); ok {
+			out = append(out, routing.Escalation{
+				Feature: e.Feature,
+				From:    routing.Tier(e.From),
+				To:      routing.Tier(e.To),
+				Reason:  e.Reason,
+			})
+		}
+	}
+	return out
 }
 
 // routeOverride applies a transient per-session routing override and renders the
@@ -1105,7 +1124,10 @@ func (s *chatSession) routeOverride(args []string) (command.Output, error) {
 	default:
 		return command.Output{}, fmt.Errorf("usage: route <feature> <tier> | route <tier> <vendor> <model>")
 	}
-	return command.Output{Text: note + " (resets on /clear or /resume)\n\n" + routing.Render(s.router, nil)}, nil
+	// Read escalations through the Log's own lock (not s.events(), which would
+	// re-enter s.mu we already hold here).
+	escalations := routeEscalations(s.sess.Log.Events())
+	return command.Output{Text: note + " (resets on /clear or /resume)\n\n" + routing.Render(s.router, nil, escalations)}, nil
 }
 
 // cmdInsights renders the /insights session retrospective (AS-045, PRD §7.14): a
@@ -1804,7 +1826,10 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
 	plan := compact.Preview(proj, s.pricing, s.model, time.Now())
 	log, sessID := s.sess.Log, s.sess.ID
-	vendor, model := s.cheapModel()
+	vendor := s.provName
+	fallback := s.model
+	router := s.router
+	baseTier := router.FeatureTier("compact", routing.Cheap)
 	prov := s.providers[vendor]
 	s.mu.Unlock()
 
@@ -1828,24 +1853,63 @@ func (s *chatSession) compactApply(ctx context.Context) (command.Output, error) 
 		return command.Output{Text: "Compaction blocked by a pre-compact hook: " + out.Reason}, nil
 	}
 
-	summary, tokens, stopReason, err := summarize(ctx, prov, model, plan.Sources)
-	if err != nil {
-		return command.Output{}, fmt.Errorf("summarize for /compact: %w", err)
+	// /compact is a tier-declared, model-using task (AS-042), so route its attempt
+	// through the tier policy and auto-escalate once when the summarizer comes back
+	// empty — a structured low-confidence result — to the next stronger tier
+	// (AS-110 primitive, AS-116 first producer). This is explicit and feature-owned
+	// (a user-invoked /compact), never an invisible retry for a normal chat turn.
+	// Each attempt records its own usage event, so /cost attributes the retry's
+	// extra spend to the escalated turn, and the escalation is logged so /route can
+	// show it with the producer's structured reason (§9: grounded, never invented).
+	var summary string
+	var summarizeErr error
+	attempt := func(tier routing.Tier) routing.Attempt {
+		model := router.Resolve(tier, vendor, fallback)
+		sum, tokens, stopReason, aerr := summarize(ctx, prov, model, plan.Sources)
+		if aerr != nil {
+			// A transport/provider error is not a low-confidence result: don't
+			// escalate it. Report OK so Escalate stops, then the check below aborts.
+			summarizeErr = aerr
+			return routing.Attempt{OK: true}
+		}
+		if tokens != nil {
+			if _, err := log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
+				summarizeErr = err
+				return routing.Attempt{OK: true}
+			}
+		}
+		if strings.TrimSpace(sum) == "" {
+			return routing.Attempt{OK: false, Reason: "the summarizer returned an empty summary"}
+		}
+		summary = sum
+		return routing.Attempt{OK: true}
+	}
+	res, esc := routing.Escalate("compact", baseTier, attempt)
+	if summarizeErr != nil {
+		return command.Output{}, fmt.Errorf("summarize for /compact: %w", summarizeErr)
+	}
+	if esc != nil {
+		if _, err := log.Append(eventlog.NewEscalation(compact.Producer, eventlog.Escalation{
+			Feature: esc.Feature, From: string(esc.From), To: string(esc.To), Reason: esc.Reason,
+		})); err != nil {
+			return command.Output{}, fmt.Errorf("record escalation: %w", err)
+		}
 	}
 	block, ok := compact.Build(plan, summary)
-	if !ok {
+	if !res.OK || !ok {
 		s.clearPendingCompact()
 		return command.Output{Text: "The summarizer returned nothing; the conversation was left unchanged."}, nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	// Record the summarization's token usage so /cost itemizes it on the cheap
-	// tier (AS-038 AC4); a nil-usage surface simply records nothing.
-	if tokens != nil {
-		if _, err := s.sess.Log.Append(eventlog.NewUsage(compact.Producer, vendor, model, stopReason, tokens, nil)); err != nil {
-			return command.Output{}, fmt.Errorf("record compaction usage: %w", err)
-		}
+	// The lock was dropped for the (slow) summarization, so a concurrent /clear or
+	// /resume may have swapped s.sess. The block carries the old session's source
+	// IDs, so appending it to a different session would corrupt that log; abandon
+	// the compaction instead, mirroring the staged-preview "session changed" guard.
+	if s.sess.ID != sessID {
+		s.pendingCompact, s.pendingCompactFor = nil, nil
+		return command.Output{Text: "The session changed during compaction; the compaction was abandoned. Run /compact again."}, nil
 	}
 	if _, err := s.sess.Log.Append(block); err != nil {
 		return command.Output{}, fmt.Errorf("record compaction: %w", err)
