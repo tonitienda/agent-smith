@@ -1,7 +1,7 @@
 ---
 id: AS-017
 title: OS-keychain API key storage
-status: ready-to-implement
+status: done
 github_issue: 17
 depends_on: [AS-001]
 area: security
@@ -28,11 +28,23 @@ Proposed approach (pending the clarifications below): use a cross-platform keyri
 
 ## Acceptance criteria
 
-- [ ] Keys are never written to disk in plaintext by Agent Smith.
-- [ ] `smith auth set/remove/status` manages keys per provider.
-- [ ] Env vars override stored keys, enabling CI/headless use.
-- [ ] A missing key produces a clear, actionable error naming both `smith auth set` and the provider env var escape hatch.
-- [ ] Key lookup goes through a narrow internal interface so tests can run without the host keychain.
+- [x] Keys are never written to disk in plaintext by Agent Smith. (Only persistent store is the OS keychain via `internal/credential.Keyring`; no plaintext fallback — `auth set` fails with `ErrUnavailable` instead.)
+- [x] `smith auth set/remove/status` manages keys per provider. (`cmd/smith/auth.go`)
+- [x] Env vars override stored keys, enabling CI/headless use. (`credential.Resolve` checks the env var before the keychain.)
+- [x] A missing key produces a clear, actionable error naming both `smith auth set` and the provider env var escape hatch. (`auth status` env hint + `unavailableErr`.)
+- [x] Key lookup goes through a narrow internal interface so tests can run without the host keychain. (`credential.Store`; tests use in-memory fakes — `internal/credential/credential_test.go`, `cmd/smith/auth_test.go`.)
+
+## Implementation notes
+
+- `internal/credential` is the narrow seam: `Store` (Get/Set/Remove), the
+  `Keyring` OS-backed implementation (go-keyring), `Provider` account↔env-var
+  mapping, and `Resolve` (env-over-keychain precedence). It is an allow-listed
+  third-party exception in `docs/architecture/dependency-boundaries.md`.
+- `smithapp.DefaultProviders` resolves each provider's key through `credential`
+  before constructing the provider; a missing key stays empty and surfaces as
+  `ErrAuth` only when a turn runs.
+- Profiles and richer endpoint-specific entries beyond
+  `openai-compatible:<name>` are deferred per the clarified scope above.
 
 ## Dependencies
 

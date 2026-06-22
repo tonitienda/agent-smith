@@ -16,6 +16,7 @@ package will fail `make test`.
 |---|---|---|
 | **Executable / composition** | `cmd/...` (e.g. `cmd/smith`) | Yes — process-edge wiring (terminal setup, the TUI face). |
 | **Face** | `internal/tui` | Yes — the interactive terminal UI builds on Bubble Tea / Lip Gloss / Glamour. |
+| **OS secret store** | `internal/credential` | Yes — the OS-keychain adapter wraps `go-keyring` (macOS Keychain / Linux Secret Service / Windows Credential Manager); there is no stdlib equivalent (AS-017, D9). |
 | **Core** | everything else: `schema`, `internal/eventlog`, `internal/projection`, `internal/provider` (+ adapters), `internal/loop`, `internal/cost`, `internal/budget`, `internal/config`, `internal/permission`, `internal/tool` (+ `builtin`), `internal/command`, capability packages (`memory`, `skill`, `customcmd`, `hook`, `mcp`, `subagent`), `internal/compact`, `internal/clean`, `internal/rewind`, `internal/session`, `internal/smithapp`, `internal/cli`, … | **No** — Go standard library and this module only. |
 
 The **provider adapter** packages (`internal/provider/anthropic`,
@@ -24,16 +25,14 @@ stdlib JSON/SSE machinery, never a vendor SDK.
 
 ## Allowed exceptions
 
-There are currently **no** third-party imports inside the core layer. The only
-packages that import outside the standard library are the face (`internal/tui`)
-and the composition root (`cmd/smith`), both of which depend on the
-Charmbracelet TUI stack and `golang.org/x/term`.
+Beyond the face (`internal/tui`) and composition root (`cmd/smith`) — which
+depend on the Charmbracelet TUI stack and `golang.org/x/term` — one core-adjacent
+adapter imports a third-party library:
 
-Any future exception must be justified by a ticket, documented in this table,
-and added to the allow-list in `internal/archtest/boundaries_test.go` — the test
-fails otherwise, so the documentation and the enforcement cannot silently drift
-apart.
+Any exception must be justified by a ticket, documented in this table, and added
+to the allow-list in `internal/archtest/boundaries_test.go` — the test fails
+otherwise, so the documentation and the enforcement cannot silently drift apart.
 
 | Exception | Package | Justification |
 |---|---|---|
-| _(none)_ | — | — |
+| `go-keyring` | `internal/credential` | OS-keychain key storage has no stdlib equivalent; the package is a thin adapter behind the `credential.Store` seam so the rest of core depends only on the interface (AS-017, PRD D9). |

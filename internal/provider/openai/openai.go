@@ -24,9 +24,10 @@
 // OpenAI-compatible endpoint without extra code. Model selection is per request
 // (provider.Request.Model); the adapter holds no global model state.
 //
-// Auth is via an API key. The key is sourced through the key-storage layer
-// (AS-017) once it exists; until then New falls back to the OPENAI_API_KEY
-// environment variable when no key is passed explicitly.
+// Auth is via an API key. The composition root resolves it through the key-storage
+// layer (AS-017, internal/credential): the OPENAI_API_KEY env var, else the OS
+// keychain. When no key is passed explicitly, New still falls back to
+// OPENAI_API_KEY directly so the package is usable on its own.
 //
 // Retry/backoff is intentionally not implemented here: failures are classified
 // into the AS-008 taxonomy (*provider.Error with Retryable and RetryAfter set),
@@ -120,10 +121,11 @@ func WithHTTPClient(c *http.Client) Option {
 	}
 }
 
-// New builds a Provider. When apiKey is empty it falls back to the
-// OPENAI_API_KEY environment variable (the AS-017 key-storage layer will replace
-// this fallback). A still-empty key is not an error here — Stream surfaces it as
-// a typed ErrAuth so construction stays infallible.
+// New builds a Provider. The composition root passes a key resolved through the
+// AS-017 credential layer; when apiKey is empty New still falls back to the
+// OPENAI_API_KEY environment variable so the package works standalone. A
+// still-empty key is not an error here — Stream surfaces it as a typed ErrAuth so
+// construction stays infallible.
 func New(apiKey string, opts ...Option) *Provider {
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")

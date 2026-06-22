@@ -46,6 +46,7 @@ func commands() []*cli.Command {
 		registryLeaf(reg, "route", "route", nil),
 		registryLeaf(reg, "insights", "insights", allArgs),
 		registryLeaf(reg, "skills", "skills", allArgs),
+		authCommand(),
 		configCommand(),
 		serveCommand(),
 		tuiCommand(),
