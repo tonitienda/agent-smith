@@ -159,7 +159,9 @@ func readSecret(c *cli.Context, p credential.Provider) (string, error) {
 		}
 		return strings.TrimSpace(string(raw)), nil
 	}
-	raw, err := io.ReadAll(c.Stdin)
+	// Cap the read: an API key is small, so a larger (or unbounded) pipe is
+	// either a mistake or hostile — bound it rather than buffer it all.
+	raw, err := io.ReadAll(io.LimitReader(c.Stdin, 4096))
 	if err != nil {
 		return "", fmt.Errorf("read key: %w", err)
 	}
