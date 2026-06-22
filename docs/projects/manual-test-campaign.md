@@ -34,7 +34,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-031, AS-071, AS-093 | Implemented | Set config through env, user config, project config, and flags. | Precedence is flag > project > user > env > default; typed consumers agree. |
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
-| AS-017, AS-029, AS-043, AS-046, AS-049–AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109–AS-111, AS-116 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-029, AS-043, AS-046, AS-049–AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109, AS-111 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -278,7 +278,9 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-113 | Plugin consent screen + scope→sentence table | Needs clarification (`needs-clarification`) |
 | AS-114 | Scope Coding Mode process-skill blocks to the active phase | Implemented (`done`) |
 | AS-115 | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | Implemented (`done`) |
-| AS-116 | Root help ignores `--output json` | Not implemented (`ready-to-implement`) |
+| AS-116 | Surface auto-escalation in `/route` and `/cost` + wire the first producer | Implemented (`done`) |
+| AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Needs clarification (`needs-clarification`) |
+| AS-118 | Root help ignores `--output json` | Implemented (`done`) |
 
 ## Current local smoke pass (2026-06-22)
 
@@ -288,7 +290,7 @@ The following lightweight checks were attempted while creating this campaign:
 | --- | --- | --- |
 | `timeout 60 make build` | Pass | The binary built successfully after the initial long-running build was allowed to complete. |
 | Ticket status extraction from `docs/project/tickets/AS-*.md` | Pass | Used to generate the coverage matrix above. |
-| `./smith --help --output json` plus `python3 -m json.tool` | Fail | Root help emitted plain text instead of JSON; tracked as AS-116 with `type: bug`. |
+| `./smith --help --output json` plus `python3 -m json.tool` | Pass | Root help now emits valid JSON (root summary, global flags, command tree). Fixed in AS-118. |
 
 
-AS-116 was created from this smoke pass because root JSON help did not behave as documented. No other completed feature was proven to fail during the limited local pass.
+AS-118 (originally filed as a duplicate AS-116 id, then renumbered past a colliding AS-117) was created from this smoke pass because root JSON help did not behave as documented; it is now fixed and the JSON help is parseable. No other completed feature was proven to fail during the limited local pass.
