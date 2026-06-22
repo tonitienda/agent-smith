@@ -136,6 +136,7 @@ func (a *App) writeRootHelpJSON() error {
 		Usage:       a.Name + " [command] [flags]",
 		Version:     a.Version,
 		GlobalFlags: globalFlagEntries(),
+		Commands:    []helpEntry{},
 	}
 	for _, c := range a.Commands {
 		entry.Commands = append(entry.Commands, commandHelpEntry(c, c.Name))
@@ -148,7 +149,7 @@ func (a *App) writeRootHelpJSON() error {
 func globalFlagEntries() []flagEntry {
 	fs := flag.NewFlagSet("", flag.ContinueOnError)
 	registerGlobals(fs)
-	var out []flagEntry
+	out := []flagEntry{}
 	fs.VisitAll(func(f *flag.Flag) {
 		if len([]rune(f.Name)) == 1 {
 			return
