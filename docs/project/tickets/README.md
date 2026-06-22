@@ -142,7 +142,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-113](AS-113-plugin-consent-screen.md) | Plugin consent screen + scope→sentence table (spun out of AS-059) | security | needs-clarification | 044 |
 | [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | done | 074, 006 |
 | [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | done | 005, 016 |
-| [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | ready | 110 |
+| [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | done | 110 |
 
 ## Suggested build order
 
