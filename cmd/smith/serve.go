@@ -189,7 +189,7 @@ func (b *serveBackend) Open(resumeID string, conn serve.Conn) (serve.Session, er
 	// Sub-agent lifecycle (AS-107) parity with headless: the durable fact ledger is
 	// shared with other sessions of this project. A serve session does not load the
 	// skill tool, so the resolver only needs the working-directory memory tree.
-	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(b.wd, nil), openFactLedger(b.store, b.stderr), b.stderr)
+	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(b.wd, nil), openFactLedger(b.store, b.stderr), nil, b.stderr)
 	if err != nil {
 		_ = sess.Log.Close()
 		return nil, fmt.Errorf("build sub-agents: %w", err)

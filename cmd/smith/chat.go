@@ -152,7 +152,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// Inject the durable fact ledger and the memory/skill-aware save-target
 	// resolver (AS-108) so a dismissed fact stays dismissed across sessions and a
 	// fact found inside a skill scope proposes saving to that skill.
-	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(wd, skills), openFactLedger(store, os.Stderr), os.Stderr)
+	subReg, subStore, err := buildSubAgents(cfg, saveTargetResolver(wd, skills), openFactLedger(store, os.Stderr), skills, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("build sub-agents: %w", err)
 	}

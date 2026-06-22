@@ -40,7 +40,7 @@ func shellResult(id string, failed bool) schema.Block {
 // built-in sub-agent so a real session has it available (AS-107 AC1, the
 // registration half).
 func TestBuildSubAgentsRegistersBuiltin(t *testing.T) {
-	reg, store, err := buildSubAgents(nil, nil, nil, &bytes.Buffer{})
+	reg, store, err := buildSubAgents(nil, nil, nil, nil, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("buildSubAgents: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestBuildSubAgentsConfigOverlay(t *testing.T) {
 		},
 	}))
 	var stderr bytes.Buffer
-	reg, _, err := buildSubAgents(cfg, nil, nil, &stderr)
+	reg, _, err := buildSubAgents(cfg, nil, nil, nil, &stderr)
 	if err != nil {
 		t.Fatalf("buildSubAgents: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestBuildSubAgentsConfigOverlay(t *testing.T) {
 // command and asserts the wired registry + Runner record a finding into the store
 // the composition root owns (AS-107 AC3) — the seam /insights (AS-045) will read.
 func TestBuildSubAgentsProducesFinding(t *testing.T) {
-	reg, store, err := buildSubAgents(nil, nil, nil, &bytes.Buffer{})
+	reg, store, err := buildSubAgents(nil, nil, nil, nil, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("buildSubAgents: %v", err)
 	}
