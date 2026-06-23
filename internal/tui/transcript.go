@@ -486,7 +486,7 @@ func truncate(s string, n int) string {
 var (
 	userLabelStyle      = StyleUser
 	assistantLabelStyle = StyleAssistant
-	reasoningLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorMuted)
+	reasoningLabelStyle = StyleThinking.Bold(true)
 	toolLabelStyle      = StyleToolName
 	commandLabelStyle   = StyleSlashCommand.Bold(true)
 	errorStyle          = StyleError

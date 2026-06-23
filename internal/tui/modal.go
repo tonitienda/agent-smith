@@ -127,6 +127,6 @@ var (
 	modalBoxStyle       = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(ColorDiffRemovedText).Padding(0, 2)
 	modalTitleStyle     = lipgloss.NewStyle().Bold(true).Foreground(ColorDiffRemovedText)
 	modalDetailStyle    = lipgloss.NewStyle().Foreground(ColorFgDefault)
-	modalChoiceStyle    = lipgloss.NewStyle().Foreground(ColorNeutral).Padding(0, 1)
+	modalChoiceStyle    = StyleNeutral.Padding(0, 1)
 	modalChoiceSelStyle = lipgloss.NewStyle().Bold(true).Foreground(BgScreen).Background(ColorDiffRemovedText).Padding(0, 1)
 )
