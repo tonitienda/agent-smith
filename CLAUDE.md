@@ -14,6 +14,8 @@ Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.m
 - Build the user-facing binary through `make build`; it emits a static `./smith` binary by default.
 - All agents (Claude, Codex, GrokBuild) and humans must follow the harness command contract in [`docs/agent-quality-gates.md`](docs/agent-quality-gates.md): pick the smallest entry point that covers the change (`quick` while editing, `arch` after package moves) and run `full` — `./scripts/agent-quality-gate.sh` (`make fmt`, `make test`, `make vet`, `make lint`) — before every commit/handoff, via hooks or the closest agent-specific equivalent. `make lint` installs and runs the pinned repo-local `golangci-lint` instead of a global binary. The contract also maps each CI job to a local command (CI/local parity) and defines the failure-reporting format.
 - Harness design work is tracked in [`docs/projects/harness-quality-system.md`](docs/projects/harness-quality-system.md) and AS-099–AS-103; the active contract derived from it lives in [`docs/agent-quality-gates.md`](docs/agent-quality-gates.md). The named `./scripts/harness/*.sh` wrappers (`quick`, `full`, `arch`, `ci-local`) exist as thin entry points over those commands; `./scripts/agent-quality-gate.sh` remains the canonical full gate (`scripts/harness/full.sh` wraps it).
+- **TUI / terminal face:** visual rules in `internal/tui/CLAUDE.md`; full spec in
+  `docs/design/tui-visual-design.md`
 
 ## Tickets
 
