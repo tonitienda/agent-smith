@@ -2,8 +2,10 @@ package delegate_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
+	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/delegate"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/provider"
@@ -98,6 +100,82 @@ func TestSpawnRunsLinkedChildAndRollsUpCost(t *testing.T) {
 	}
 	if rolled != 1 {
 		t.Errorf("rolled-up usage events = %d, want 1", rolled)
+	}
+}
+
+// echoTool is a no-op tool the looping child calls each turn so its loop would
+// run to maxIterations unless a guard stops it.
+func echoTool() tool.Tool {
+	return tool.Func{
+		Spec: tool.Def{Name: "echo", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		Fn:   func(context.Context, json.RawMessage) (tool.Output, error) { return tool.Output{Text: "ok"}, nil },
+	}
+}
+
+// loopWithUsage scripts a child that calls echo every turn and reports usage, so
+// each completed turn adds priced spend the per-child budget guard can halt on.
+func loopWithUsage(in, out int) *provider.Mock {
+	return &provider.Mock{ScriptFn: func(context.Context, provider.Request) ([]provider.Event, error) {
+		ev := provider.ToolCallTurn("toolu_x", "echo", json.RawMessage(`{}`))
+		usage := provider.Event{Type: provider.EventUsage, Usage: &schema.Tokens{Input: &in, Output: &out}}
+		res := make([]provider.Event, 0, len(ev)+1)
+		res = append(res, ev[:len(ev)-1]...)
+		return append(res, usage, ev[len(ev)-1]), nil
+	}}
+}
+
+// TestSpawnPerChildBudgetHalts is the AS-120 ceiling check: a delegation whose
+// child would otherwise loop to maxIterations halts once the child's own priced
+// spend reaches the configured per-child ceiling, independent of the parent
+// budget. Each turn prices at $1 (1M input tokens at $1/Mtok); a $2.50 ceiling
+// halts after a couple of turns, far short of the loop's safety valve.
+func TestSpawnPerChildBudgetHalts(t *testing.T) {
+	store := newStore(t)
+	parent, err := store.Create("parent")
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	defer func() { _ = parent.Log.Close() }()
+
+	table, err := cost.ParseTable([]byte(`{"version":1,"currency":"USD","models":[{"model":"child-model","input_per_mtok":1.0,"output_per_mtok":0.0}]}`))
+	if err != nil {
+		t.Fatalf("parse pricing: %v", err)
+	}
+
+	sp := delegate.New(store, map[string]provider.Provider{"mock": loopWithUsage(1_000_000, 0)},
+		func() (*tool.Registry, error) {
+			reg := tool.NewRegistry()
+			if err := reg.Register(echoTool()); err != nil {
+				return nil, err
+			}
+			return reg, nil
+		},
+		func() delegate.Parent {
+			return delegate.Parent{
+				Log:            parent.Log,
+				SessionID:      parent.ID,
+				ProvName:       "mock",
+				Model:          "child-model",
+				Router:         routing.Default(),
+				Pricing:        table,
+				ChildBudgetUSD: 2.50,
+			}
+		})
+
+	if _, err := sp.Spawn(context.Background(), builtin.TaskRequest{Prompt: "loop"}); err != nil {
+		t.Fatalf("Spawn: %v", err)
+	}
+
+	// The child halted on its own spend: only a handful of priced turns rolled up,
+	// nowhere near the loop's default 50-iteration safety valve.
+	var rolled int
+	for _, b := range parent.Log.Events() {
+		if b.Kind == eventlog.KindUsage {
+			rolled++
+		}
+	}
+	if rolled == 0 || rolled > 5 {
+		t.Errorf("rolled-up child turns = %d, want a small number (budget halt), not the safety valve", rolled)
 	}
 }
 

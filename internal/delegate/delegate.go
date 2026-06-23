@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
@@ -57,6 +58,17 @@ type Parent struct {
 	// Router resolves the cheap model tier for fan-out (AS-042); zero value falls
 	// back to the parent model.
 	Router routing.Policy
+	// Pricing prices the child's own spend for the per-child budget ceiling
+	// (AS-120). Nil disables the child ceiling (the child still rolls up onto the
+	// parent's metered total).
+	Pricing *cost.Table
+	// ChildBudgetUSD is the per-delegation dollar ceiling (AS-120): a child halts
+	// when its own spend reaches it, independent of the parent budget. Zero (the
+	// default) means no extra ceiling.
+	ChildBudgetUSD float64
+	// BudgetWarnFraction is the warn fraction applied to the child ceiling; zero
+	// defers to the budget package default.
+	BudgetWarnFraction float64
 }
 
 // Spawner builds and runs child agents. Construct it with New and pass it to
@@ -123,11 +135,27 @@ func (s *Spawner) Spawn(ctx context.Context, req builtin.TaskRequest) (builtin.T
 
 	var rtOpts []tool.Option
 	if p.Permission != nil {
-		rtOpts = append(rtOpts, tool.WithPermission(p.Permission))
+		// Tag the child's calls so the parent's gate can attribute the prompt to
+		// this delegated agent (AS-120): "delegated agent <id> wants to run …".
+		perm := p.Permission
+		rtOpts = append(rtOpts, tool.WithPermission(func(ctx context.Context, call tool.Call) tool.Decision {
+			return perm(tool.WithAgent(ctx, child.ID), call)
+		}))
 	}
 	rt := tool.NewRuntime(reg, child.Log, rtOpts...)
 
-	eng, err := loop.New(prov, child.Log, rt, reg, model)
+	// Per-delegation budget ceiling (AS-120): bound a runaway child by its own
+	// spend, independent of the parent ceiling. The child loop checks at each turn
+	// boundary against this child session's priced spend; an unset (0) ceiling or a
+	// missing pricing table leaves the child bounded only by max-iterations.
+	var engOpts []loop.Option
+	if p.ChildBudgetUSD > 0 && p.Pricing != nil {
+		childLog := child.Log
+		spent := func() float64 { return cost.Summarize(childLog.Events(), p.Pricing).TotalUSD }
+		engOpts = append(engOpts, loop.WithBudget(spent, p.ChildBudgetUSD, p.BudgetWarnFraction))
+	}
+
+	eng, err := loop.New(prov, child.Log, rt, reg, model, engOpts...)
 	if err != nil {
 		return builtin.TaskResult{}, fmt.Errorf("delegate: build child engine: %w", err)
 	}

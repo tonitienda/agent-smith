@@ -75,6 +75,11 @@ type TurnCost struct {
 	Tokens     Tokens
 	Priced     bool
 
+	// AgentID is the delegated child whose spend this rolled-up turn carries
+	// (AS-046 sidechain); empty for the parent's own turns. It drives the
+	// per-child itemization in Summary.Delegated (AS-120).
+	AgentID string
+
 	InputUSD      float64
 	OutputUSD     float64
 	CacheReadUSD  float64
@@ -112,6 +117,23 @@ type Summary struct {
 	// the session dollar total is a lower bound. Currency is the table's code.
 	AllPriced bool
 	Currency  string
+
+	// Delegated itemizes the spend of each delegated child session (AS-120),
+	// derived from the sidechain usage rolled onto this log (AS-046). The children's
+	// turns are also counted in Turns and the grand Total/TotalUSD, so this is a
+	// breakdown, not an addition. Empty when no delegation ran.
+	Delegated []ChildCost
+}
+
+// ChildCost is one delegated child session's rolled-up spend, grouped by the
+// child's AgentID (AS-120). Turns is how many of the parent's turns this child
+// contributed; Tokens and TotalUSD are its share of the session total.
+type ChildCost struct {
+	AgentID   string
+	Turns     int
+	Tokens    Tokens
+	TotalUSD  float64
+	AllPriced bool
 }
 
 // Latest returns the most recent turn (the last usage event in log order) and
@@ -132,6 +154,9 @@ func (s Summary) Latest() (TurnCost, bool) {
 // nothing (every turn is Priced=false) but still reports exact token counts.
 func Summarize(events []schema.Block, table *Table) Summary {
 	s := Summary{AllPriced: true, Currency: table.Currency()}
+	// childIdx maps an AgentID to its slot in s.Delegated so a child's turns
+	// accumulate in first-seen order without a second pass.
+	childIdx := map[string]int{}
 	for _, b := range events {
 		if b.Kind != eventlog.KindUsage {
 			continue
@@ -146,6 +171,22 @@ func Summarize(events []schema.Block, table *Table) Summary {
 		if !tc.Priced {
 			s.AllPriced = false
 		}
+
+		if tc.AgentID != "" {
+			i, ok := childIdx[tc.AgentID]
+			if !ok {
+				i = len(s.Delegated)
+				childIdx[tc.AgentID] = i
+				s.Delegated = append(s.Delegated, ChildCost{AgentID: tc.AgentID, AllPriced: true})
+			}
+			c := &s.Delegated[i]
+			c.Turns++
+			c.Tokens = c.Tokens.add(tc.Tokens)
+			c.TotalUSD += tc.TotalUSD
+			if !tc.Priced {
+				c.AllPriced = false
+			}
+		}
 	}
 	return s
 }
@@ -159,6 +200,9 @@ func priceTurn(index int, b schema.Block, table *Table) TurnCost {
 	}
 	if b.Provider != nil {
 		tc.Model = b.Provider.Model
+	}
+	if b.Thread != nil && b.Thread.IsSidechain {
+		tc.AgentID = b.Thread.AgentID
 	}
 
 	rate, ok := table.Lookup(tc.Model)

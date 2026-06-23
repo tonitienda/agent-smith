@@ -66,6 +66,53 @@ func TestLongestPrefixWins(t *testing.T) {
 	}
 }
 
+// sidechainUsage builds a rolled-up child usage event (AS-046): a usage block
+// tagged with the child's AgentID on a sidechain thread, the way delegate rolls
+// one onto the parent log.
+func sidechainUsage(agentID, model string, tok *schema.Tokens) schema.Block {
+	b := usageBlock(model, tok)
+	b.Thread = &schema.Thread{AgentID: agentID, IsSidechain: true}
+	return b
+}
+
+// TestSummarizeItemizesDelegatedSpend is the AS-120 itemization check: rolled-up
+// sidechain turns are grouped per child in Summary.Delegated (turns + tokens +
+// dollars), while still counting toward the grand total — a breakdown, not an
+// addition. The parent's own turns never appear in Delegated.
+func TestSummarizeItemizesDelegatedSpend(t *testing.T) {
+	tbl := cost.Embedded()
+	events := []schema.Block{
+		usageBlock("claude-opus-4-8", &schema.Tokens{Input: ptr(100), Output: ptr(50)}), // parent's own
+		sidechainUsage("agent-A", "claude-opus-4-8", &schema.Tokens{Input: ptr(200), Output: ptr(10)}),
+		sidechainUsage("agent-A", "claude-opus-4-8", &schema.Tokens{Input: ptr(300), Output: ptr(20)}),
+		sidechainUsage("agent-B", "claude-opus-4-8", &schema.Tokens{Input: ptr(400), Output: ptr(30)}),
+	}
+
+	s := cost.Summarize(events, tbl)
+	if len(s.Delegated) != 2 {
+		t.Fatalf("delegated children = %d, want 2", len(s.Delegated))
+	}
+
+	a := s.Delegated[0]
+	if a.AgentID != "agent-A" || a.Turns != 2 || a.Tokens.Input != 500 || a.Tokens.Output != 30 {
+		t.Errorf("agent-A child cost = %+v, want 2 turns / input 500 / output 30", a)
+	}
+	b := s.Delegated[1]
+	if b.AgentID != "agent-B" || b.Turns != 1 || b.Tokens.Input != 400 {
+		t.Errorf("agent-B child cost = %+v, want 1 turn / input 400", b)
+	}
+
+	// The grand total still includes every turn (parent + both children): the
+	// breakdown does not double-count.
+	if s.Total.Input != 1000 || s.Total.Output != 110 {
+		t.Errorf("grand total tokens = %+v, want input 1000 / output 110", s.Total)
+	}
+	delegatedUSD := a.TotalUSD + b.TotalUSD
+	if delegatedUSD <= 0 || delegatedUSD >= s.TotalUSD {
+		t.Errorf("delegated spend %v should be a positive share below the grand total %v", delegatedUSD, s.TotalUSD)
+	}
+}
+
 // TestSummarizeReconcilesAndPrices verifies token totals reconcile exactly with
 // the logged usage and the per-turn dollar math matches the rate table.
 func TestSummarizeReconcilesAndPrices(t *testing.T) {

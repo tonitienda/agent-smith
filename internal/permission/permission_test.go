@@ -75,6 +75,28 @@ func TestModeAskPromptsAndHonorsOutcome(t *testing.T) {
 	}
 }
 
+// TestPromptAttributesDelegatedAgent is the AS-120 attribution check: when a
+// delegated child's call flows through the gate, its agent id (tagged on the
+// context by the delegation layer) reaches the Asker's Request, so a face can
+// name the child; a non-delegated call carries no agent id.
+func TestPromptAttributesDelegatedAgent(t *testing.T) {
+	asker := &recordingAsker{outcome: Outcome{Allow: true}}
+	p := New(Config{DefaultMode: ModeAsk}, WithAsker(asker))
+
+	p.decide(tool.WithAgent(context.Background(), "child-7"), shellCall("ls"))
+	p.decide(context.Background(), shellCall("pwd"))
+
+	if len(asker.requests) != 2 {
+		t.Fatalf("requests = %d, want 2", len(asker.requests))
+	}
+	if got := asker.requests[0].AgentID; got != "child-7" {
+		t.Errorf("delegated request AgentID = %q, want child-7", got)
+	}
+	if got := asker.requests[1].AgentID; got != "" {
+		t.Errorf("non-delegated request AgentID = %q, want empty", got)
+	}
+}
+
 func TestModeAskDeniesWhenNoAsker(t *testing.T) {
 	p := New(Config{DefaultMode: ModeAsk})
 	d := p.decide(context.Background(), shellCall("git status"))

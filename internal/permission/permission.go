@@ -70,6 +70,10 @@ type Request struct {
 	Tool      string
 	Subject   string
 	Arguments []byte
+	// AgentID names the delegated sub-agent whose call this is (AS-120), so a
+	// face can attribute the prompt ("delegated agent <id> wants to …"). It is
+	// empty for the main agent's own calls.
+	AgentID string
 }
 
 // Outcome is the Asker's answer. Allow gates this one call. Remember asks the
@@ -208,7 +212,12 @@ func (p *Policy) prompt(ctx context.Context, call tool.Call) tool.Decision {
 	}
 
 	subject, _ := p.subjectValue(call)
-	out, err := p.asker.Ask(ctx, Request{Tool: call.Name, Subject: subject, Arguments: call.Arguments})
+	out, err := p.asker.Ask(ctx, Request{
+		Tool:      call.Name,
+		Subject:   subject,
+		Arguments: call.Arguments,
+		AgentID:   tool.AgentFromContext(ctx),
+	})
 	if err != nil {
 		return tool.Denied("approval failed: " + err.Error())
 	}

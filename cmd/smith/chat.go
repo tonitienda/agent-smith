@@ -212,12 +212,15 @@ func startChat(resumeID string, noSplash bool, override string) error {
 			perm = ctl.policy.Func()
 		}
 		return delegate.Parent{
-			Log:        ctl.sess.Log,
-			SessionID:  ctl.sess.ID,
-			ProvName:   ctl.provName,
-			Model:      ctl.model,
-			Permission: perm,
-			Router:     ctl.router,
+			Log:                ctl.sess.Log,
+			SessionID:          ctl.sess.ID,
+			ProvName:           ctl.provName,
+			Model:              ctl.model,
+			Permission:         perm,
+			Router:             ctl.router,
+			Pricing:            pricing,
+			ChildBudgetUSD:     budgetCfg.PerChildLimitUSD,
+			BudgetWarnFraction: budgetCfg.WarnFraction,
 		}
 	})
 	if err := reg.Register(builtin.NewTask(spawner)); err != nil {

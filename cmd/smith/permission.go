@@ -56,6 +56,7 @@ func (a tuiAsker) Ask(ctx context.Context, req permission.Request) (permission.O
 		Subject:     req.Subject,
 		Detail:      editDiff(req),
 		Destructive: destructive(req.Tool),
+		Agent:       req.AgentID,
 	}
 	d, err := a.app.Ask(ctx, prompt)
 	if err != nil {

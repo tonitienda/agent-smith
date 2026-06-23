@@ -183,6 +183,10 @@ func (m model) permCardView() string {
 	}
 	var b strings.Builder
 	b.WriteString(permTitleStyle.Render("approve " + permLabel(p.prompt)))
+	if p.prompt.Agent != "" {
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("delegated agent " + p.prompt.Agent))
+	}
 	if p.prompt.Subject != "" {
 		b.WriteString("\n")
 		b.WriteString(permSubjectStyle.Width(width).Render(p.prompt.Subject))
@@ -207,6 +211,10 @@ func (m model) permModalView() string {
 	p := m.perm
 	var b strings.Builder
 	b.WriteString(modalTitleStyle.Render("⚠  approve " + permLabel(p.prompt)))
+	if p.prompt.Agent != "" {
+		b.WriteString("\n")
+		b.WriteString(dimStyle.Render("delegated agent " + p.prompt.Agent))
+	}
 	if p.prompt.Subject != "" {
 		b.WriteString("\n\n")
 		detailWidth := m.width - 8

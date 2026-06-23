@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
@@ -189,14 +190,18 @@ func (b *serveBackend) Open(resumeID string, conn serve.Conn) (serve.Session, er
 	// the connected client (never a hang). A serve session loads no skills or MCP
 	// servers, so the child gets the builtin tool set.
 	router, _ := routing.ConfigFrom(cfg)
+	budgetCfg, _ := budget.ConfigFrom(cfg)
 	taskParent := func() delegate.Parent {
 		return delegate.Parent{
-			Log:        sess.Log,
-			SessionID:  sess.ID,
-			ProvName:   provName,
-			Model:      model,
-			Permission: policy.Func(),
-			Router:     router,
+			Log:                sess.Log,
+			SessionID:          sess.ID,
+			ProvName:           provName,
+			Model:              model,
+			Permission:         policy.Func(),
+			Router:             router,
+			Pricing:            pricing,
+			ChildBudgetUSD:     budgetCfg.PerChildLimitUSD,
+			BudgetWarnFraction: budgetCfg.WarnFraction,
 		}
 	}
 	if err := tools.Register(builtin.NewTask(taskSpawner(b.store, b.wd, nil, nil, taskParent))); err != nil {

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
@@ -461,14 +462,18 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 	// call that would prompt is denied rather than hanging (D-CLI-9). A headless run
 	// loads no skills or MCP servers, so the child gets the builtin tool set.
 	router, _ := routing.ConfigFrom(cfg)
+	childBudgetCfg, _ := budget.ConfigFrom(cfg)
 	taskParent := func() delegate.Parent {
 		return delegate.Parent{
-			Log:        sess.Log,
-			SessionID:  sess.ID,
-			ProvName:   provName,
-			Model:      model,
-			Permission: gate.decide,
-			Router:     router,
+			Log:                sess.Log,
+			SessionID:          sess.ID,
+			ProvName:           provName,
+			Model:              model,
+			Permission:         gate.decide,
+			Router:             router,
+			Pricing:            pricing,
+			ChildBudgetUSD:     childBudgetCfg.PerChildLimitUSD,
+			BudgetWarnFraction: childBudgetCfg.WarnFraction,
 		}
 	}
 	if err := tools.Register(builtin.NewTask(taskSpawner(store, wd, nil, nil, taskParent))); err != nil {
