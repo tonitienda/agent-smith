@@ -2,16 +2,28 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/run"
+)
+
+// Worker-pool timings (AS-132). heartbeat refreshes a claimed run's liveness;
+// staleAfter is how long a run may go without a heartbeat before a survivor
+// reclaims it (comfortably larger than heartbeat); pollEvery is how often a
+// --watch worker checks for new work while idle.
+const (
+	heartbeatEvery = 5 * time.Second
+	staleAfter     = 30 * time.Second
+	pollEvery      = time.Second
 )
 
 // enqueueRun records a queued run for the background runner (AS-054, `smith run
@@ -53,12 +65,14 @@ func runStore() (*run.Store, error) {
 	return store, nil
 }
 
-// runsCommand groups the background-runner verbs (AS-054): `list` and `status`
-// inspect the queue, `work` drains it unattended, and `resume` re-queues an
-// interrupted run. All are scriptable — the runner's whole point is unattended,
+// runsCommand groups the background-runner verbs (AS-054, AS-132): `list` and
+// `status` inspect the queue, `work` drains it unattended (or `--watch`es it with
+// `--concurrency` workers), and `resume` re-queues an interrupted run. All are scriptable — the runner's whole point is unattended,
 // auditable operation (§3 Async Ana) — and emit machine-readable JSON under
 // `--output json`.
 func runsCommand() *cli.Command {
+	var watch bool
+	var concurrency int
 	return &cli.Command{
 		Name:    "runs",
 		Summary: "Inspect and drive the background run queue",
@@ -82,11 +96,16 @@ func runsCommand() *cli.Command {
 			},
 			{
 				Name:          "work",
-				Summary:       "Execute queued runs unattended, then exit",
-				Examples:      []string{"smith runs work", "smith runs work --output json"},
+				Summary:       "Execute queued runs unattended (--watch to stay running)",
+				Usage:         "[--watch] [--concurrency N]",
+				Examples:      []string{"smith runs work", "smith runs work --watch --concurrency 4"},
 				Scriptability: command.Scriptable.String(),
 				OutputSchema:  "runs[]: id, status, cost_usd, … (one per processed run)",
-				Run:           runsWork,
+				Flags: func(fs *flag.FlagSet) {
+					fs.BoolVar(&watch, "watch", false, "stay running and pick up runs as they are enqueued (Ctrl+C to stop)")
+					fs.IntVar(&concurrency, "concurrency", 1, "number of runs to execute in parallel")
+				},
+				Run: func(c *cli.Context) error { return runsWork(c, watch, concurrency) },
 			},
 			{
 				Name:          "resume",
@@ -206,9 +225,15 @@ func runsResume(c *cli.Context) error {
 	rec.CostUSD = 0
 	rec.ExitCode = 0
 	rec.Error = ""
+	rec.WorkerID = ""
 	rec.StartedAt = nil
 	rec.FinishedAt = nil
+	rec.HeartbeatAt = nil
 	if err := store.Save(rec); err != nil {
+		return err
+	}
+	// Clear any lingering lease so a worker can re-claim the now-queued run.
+	if err := store.Release(rec.ID); err != nil {
 		return err
 	}
 	if c.Globals.Output == cli.OutputJSON || c.Globals.Output == cli.OutputStreamJSON {
@@ -217,12 +242,16 @@ func runsResume(c *cli.Context) error {
 	return c.Emit(rec.ID)
 }
 
-// runsWork drains the queue: it reclaims any run left `running` by a dead worker
-// as `interrupted` (single-worker model — see the AS-054 decision), then executes
-// each queued run in creation order within its budget ceiling, recording an
-// auditable session per run. Ctrl+C cancels the in-flight run cleanly (marked
-// interrupted) and stops the worker. It prints one result line/object per run.
-func runsWork(c *cli.Context) error {
+// runsWork drains the queue and, with --watch, stays up to pick newly enqueued
+// runs. --concurrency N runs N runs in parallel; each is claimed through an atomic
+// per-run lease so no two workers ever execute the same run, and a crashed
+// worker's in-flight run is reclaimed as `interrupted` (its heartbeat goes stale).
+// Ctrl+C stops claiming new runs and lets in-flight runs unwind cleanly. It prints
+// one result line/object per processed run.
+func runsWork(c *cli.Context, watch bool, concurrency int) error {
+	if concurrency < 1 {
+		return cli.Usagef("runs work: --concurrency must be >= 1")
+	}
 	store, err := runStore()
 	if err != nil {
 		return err
@@ -231,57 +260,175 @@ func runsWork(c *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
-	if err := reclaimStale(store); err != nil {
-		return err
-	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	// Snapshot the queue once — store.List re-reads and parses the whole run
-	// directory, so calling it per run would be O(N^2) disk I/O. List is
-	// newest-first, so iterate backwards to drain FIFO (oldest first). A run
-	// enqueued after this snapshot is picked up by the next `runs work`.
-	recs, err := store.List()
+	processed, err := workQueue(ctx, c.Globals.Config, store, wd, c.Stderr, workOpts{
+		concurrency: concurrency,
+		watch:       watch,
+		staleAfter:  staleAfter,
+		heartbeat:   heartbeatEvery,
+		pollEvery:   pollEvery,
+		workerID:    newWorkerID(),
+	})
 	if err != nil {
 		return err
-	}
-	var processed []runView
-	for i := len(recs) - 1; i >= 0; i-- {
-		rec := recs[i]
-		if rec.Status != run.StatusQueued {
-			continue
-		}
-		if ctx.Err() != nil {
-			break
-		}
-		rec, err = workOne(ctx, c.Globals.Config, store, wd, rec, c.Stderr)
-		if err != nil {
-			// A bookkeeping write failed (full disk, permissions): stop rather than
-			// loop forever on a run whose on-disk status never advanced.
-			return err
-		}
-		processed = append(processed, runViewOf(rec))
 	}
 	return emitProcessed(c, processed)
 }
 
-// workOne executes a single claimed run and persists its outcome. configOverride
-// is the worker's --config path, threaded into the execution core so a queued run
-// honors the same custom model/provider/pricing the worker was invoked with.
-// Transient provider/network failures are already retried inside the turn by the
-// loop's backoff policy (AS-018), so a provider error here is terminal — recorded
-// as a failure, recoverable by `runs resume`. A non-nil error means a record write
-// failed (the on-disk status may be stale); the caller stops the worker.
-func workOne(ctx context.Context, configOverride string, store *run.Store, wd string, rec run.Record, stderr io.Writer) (run.Record, error) {
-	now := time.Now().UTC()
-	rec.Status = run.StatusRunning
-	rec.StartedAt = &now
-	if err := store.Save(rec); err != nil {
-		return rec, fmt.Errorf("save running status for %s: %w", rec.ID, err)
+// workOpts configures a worker pool. workerID is the pool's base id; each worker
+// goroutine appends its index so two workers never share a lease identity.
+type workOpts struct {
+	concurrency int
+	watch       bool
+	staleAfter  time.Duration
+	heartbeat   time.Duration
+	pollEvery   time.Duration
+	workerID    string
+}
+
+// newWorkerID is a per-process base id for a worker pool. Uniqueness only needs to
+// hold among workers contending for one project's queue (typically one host), so
+// pid + start nanos suffices.
+func newWorkerID() string {
+	return fmt.Sprintf("worker-%d-%d", os.Getpid(), time.Now().UnixNano())
+}
+
+// workQueue runs opts.concurrency worker goroutines that drain the project's run
+// queue, optionally staying up to pick newly enqueued runs (watch). Each worker
+// claims runs through the store's atomic lease, so no two workers execute the same
+// run; a crashed worker's in-flight run is reclaimed as interrupted (its heartbeat
+// goes stale) by a survivor's periodic Reclaim. It returns the runs it processed.
+func workQueue(ctx context.Context, configOverride string, store *run.Store, wd string, stderr io.Writer, opts workOpts) ([]runView, error) {
+	// Reclaim crashed-worker runs before starting. A live peer's run has a fresh
+	// heartbeat and is left alone, so this is safe even as peers start concurrently.
+	if _, err := store.Reclaim(opts.staleAfter, time.Now().UTC()); err != nil {
+		return nil, err
 	}
 
+	var (
+		mu        sync.Mutex
+		processed []runView
+		firstErr  error
+		wg        sync.WaitGroup
+	)
+	fail := func(err error) {
+		mu.Lock()
+		if firstErr == nil {
+			firstErr = err
+		}
+		mu.Unlock()
+	}
+
+	for i := 0; i < opts.concurrency; i++ {
+		workerID := fmt.Sprintf("%s-%d", opts.workerID, i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				rec, ok, err := claimNext(store, workerID)
+				if err != nil {
+					fail(err)
+					return
+				}
+				if !ok {
+					if !opts.watch {
+						return // queue drained
+					}
+					// Idle: reclaim any peer that died, then wait for new work.
+					if _, err := store.Reclaim(opts.staleAfter, time.Now().UTC()); err != nil {
+						fail(err)
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(opts.pollEvery):
+						continue
+					}
+				}
+				done, err := workOne(ctx, configOverride, store, wd, rec, workerID, opts.heartbeat, stderr)
+				if err != nil {
+					// A bookkeeping write failed (full disk, permissions): stop rather
+					// than loop forever on a run whose on-disk status never advanced.
+					fail(err)
+					return
+				}
+				mu.Lock()
+				processed = append(processed, runViewOf(done))
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return processed, firstErr
+}
+
+// claimNext claims the oldest queued run not already taken by a peer, or reports
+// ok=false when none remain. store.List is newest-first, so it scans backwards to
+// honour FIFO order.
+func claimNext(store *run.Store, workerID string) (run.Record, bool, error) {
+	recs, err := store.List()
+	if err != nil {
+		return run.Record{}, false, err
+	}
+	for i := len(recs) - 1; i >= 0; i-- {
+		if recs[i].Status != run.StatusQueued {
+			continue
+		}
+		rec, ok, err := store.Claim(recs[i].ID, workerID)
+		if err != nil {
+			return run.Record{}, false, err
+		}
+		if ok {
+			return rec, true, nil
+		}
+		// Claimed by a peer between List and Claim — keep scanning.
+	}
+	return run.Record{}, false, nil
+}
+
+// workOne executes an already-claimed (running) run and persists its outcome,
+// heartbeating it while it executes so a survivor's Reclaim never steals a run
+// that is still progressing, and releasing its lease when done so a later `runs
+// resume` can re-claim it. configOverride is the worker's --config path, threaded
+// into the execution core so a queued run honors the same custom
+// model/provider/pricing the worker was invoked with. Transient provider/network
+// failures are already retried inside the turn by the loop's backoff policy
+// (AS-018), so a provider error here is terminal — recorded as a failure,
+// recoverable by `runs resume`. A non-nil error means a record write failed (the
+// on-disk status may be stale); the caller stops that worker.
+func workOne(ctx context.Context, configOverride string, store *run.Store, wd string, rec run.Record, workerID string, heartbeat time.Duration, stderr io.Writer) (run.Record, error) {
+	defer func() { _ = store.Release(rec.ID) }()
+
+	// Heartbeat until execution returns so the run's liveness timestamp stays fresh.
+	// Stopped and joined before the final Save below, so a heartbeat write never
+	// races the outcome write.
+	hbCtx, hbStop := context.WithCancel(context.Background())
+	var hbWG sync.WaitGroup
+	hbWG.Add(1)
+	go func() {
+		defer hbWG.Done()
+		t := time.NewTicker(heartbeat)
+		defer t.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-t.C:
+				_ = store.Heartbeat(rec.ID, workerID)
+			}
+		}
+	}()
+
 	out, setupErr := executeRun(ctx, configOverride, wd, rec.Prompt, headlessOpts{budgetUSD: rec.BudgetUSD, auto: rec.Auto}, nil, stderr)
+	hbStop()
+	hbWG.Wait()
 	fin := time.Now().UTC()
 	rec.FinishedAt = &fin
 	if setupErr != nil {
@@ -321,29 +468,6 @@ func statusFromExit(code int) run.Status {
 	default:
 		return run.StatusFailed
 	}
-}
-
-// reclaimStale marks any run still `running` as `interrupted` before a new worker
-// starts. The runner is single-worker by default (AS-054 decision), so a leftover
-// `running` record means the previous worker died mid-run; resume re-queues it.
-func reclaimStale(store *run.Store) error {
-	recs, err := store.List()
-	if err != nil {
-		return err
-	}
-	for _, rec := range recs {
-		if rec.Status != run.StatusRunning {
-			continue
-		}
-		rec.Status = run.StatusInterrupted
-		if rec.Error == "" {
-			rec.Error = "worker exited before the run finished"
-		}
-		if err := store.Save(rec); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // emitProcessed renders the worker's batch result: a JSON object listing the
