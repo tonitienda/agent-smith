@@ -2,7 +2,7 @@
 id: AS-132
 title: Background runner daemon + worker concurrency (spun out of AS-054)
 status: ready-to-implement
-github_issue: null
+github_issue: 401
 depends_on: [AS-054]
 area: async
 priority: P2
