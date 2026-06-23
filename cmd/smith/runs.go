@@ -300,13 +300,19 @@ func newWorkerID() string {
 // queue, optionally staying up to pick newly enqueued runs (watch). Each worker
 // claims runs through the store's atomic lease, so no two workers execute the same
 // run; a crashed worker's in-flight run is reclaimed as interrupted (its heartbeat
-// goes stale) by a survivor's periodic Reclaim. It returns the runs it processed.
+// goes stale) by a single periodic reclaimer. It returns the runs it processed.
 func workQueue(ctx context.Context, configOverride string, store *run.Store, wd string, stderr io.Writer, opts workOpts) ([]runView, error) {
 	// Reclaim crashed-worker runs before starting. A live peer's run has a fresh
 	// heartbeat and is left alone, so this is safe even as peers start concurrently.
 	if _, err := store.Reclaim(opts.staleAfter, time.Now().UTC()); err != nil {
 		return nil, err
 	}
+
+	// A worker's terminal error (or Ctrl+C) cancels the pool, so siblings stop
+	// claiming and unwind instead of blocking wg.Wait — and an in-flight run sees
+	// the cancellation and ends as interrupted.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	var (
 		mu        sync.Mutex
@@ -320,6 +326,31 @@ func workQueue(ctx context.Context, configOverride string, store *run.Store, wd 
 			firstErr = err
 		}
 		mu.Unlock()
+		cancel()
+	}
+
+	// A single reclaimer recovers peers that crash mid-session; running it once per
+	// pool (not once per idle worker) keeps the queue-directory scan off the hot
+	// idle path. Only watch mode lives long enough to need it — a drain pass already
+	// reclaimed once at the top.
+	if opts.watch {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t := time.NewTicker(opts.staleAfter / 2)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					if _, err := store.Reclaim(opts.staleAfter, time.Now().UTC()); err != nil {
+						fail(err)
+						return
+					}
+				}
+			}
+		}()
 	}
 
 	for i := 0; i < opts.concurrency; i++ {
@@ -339,11 +370,6 @@ func workQueue(ctx context.Context, configOverride string, store *run.Store, wd 
 				if !ok {
 					if !opts.watch {
 						return // queue drained
-					}
-					// Idle: reclaim any peer that died, then wait for new work.
-					if _, err := store.Reclaim(opts.staleAfter, time.Now().UTC()); err != nil {
-						fail(err)
-						return
 					}
 					select {
 					case <-ctx.Done():
