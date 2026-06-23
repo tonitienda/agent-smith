@@ -12,22 +12,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tonitienda/agent-smith/internal/budget"
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
-	"github.com/tonitienda/agent-smith/internal/delegate"
-	"github.com/tonitienda/agent-smith/internal/hook"
-	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
-	"github.com/tonitienda/agent-smith/internal/subagent"
-	"github.com/tonitienda/agent-smith/internal/tool"
-	"github.com/tonitienda/agent-smith/internal/tool/builtin"
-	"github.com/tonitienda/agent-smith/schema"
 )
 
 // commands builds the noun-grouped verb tree (D-CLI-1). The read-only verbs
@@ -43,6 +35,7 @@ func commands() []*cli.Command {
 	reg := chatCommands(nil)
 	return []*cli.Command{
 		runCommand(),
+		runsCommand(),
 		sessionCommand(reg),
 		contextCommand(reg),
 		registryLeaf(reg, "cost", "cost", nil),
@@ -247,6 +240,7 @@ func runCommand() *cli.Command {
 	var file string
 	var budgetFlag string
 	var auto bool
+	var queue bool
 	return &cli.Command{
 		Name:          "run",
 		Summary:       "Run a single task non-interactively",
@@ -258,11 +252,13 @@ func runCommand() *cli.Command {
 			`echo "summarize CHANGELOG" | smith run`,
 			"smith run -f task.md",
 			`smith run "ship it" --output json --budget 0.25 --auto`,
+			`smith run "nightly triage" --queue --budget 1.00 --auto`,
 		},
 		Flags: func(fs *flag.FlagSet) {
 			fs.StringVar(&file, "f", "", "read the prompt from a file")
 			fs.StringVar(&budgetFlag, "budget", "", "halt the run at this dollar ceiling (e.g. 0.25)")
 			fs.BoolVar(&auto, "auto", false, "auto-approve tool calls (unattended); default denies what would prompt")
+			fs.BoolVar(&queue, "queue", false, "enqueue the task for the background runner instead of running it now (AS-054)")
 		},
 		Run: func(c *cli.Context) error {
 			prompt, err := resolvePrompt(c, file)
@@ -273,11 +269,17 @@ func runCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			opts := headlessOpts{budgetUSD: budgetUSD, auto: auto}
+			if queue {
+				// Enqueue and return immediately — the run executes later under
+				// `smith runs work` (AS-054), so no engine is built here.
+				return enqueueRun(c, prompt, opts)
+			}
 			// Cancel the run gracefully on Ctrl+C so the loop reconciles any in-flight
 			// tool call rather than the OS killing the process mid-turn.
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-			return runHeadless(ctx, c, prompt, headlessOpts{budgetUSD: budgetUSD, auto: auto})
+			return runHeadless(ctx, c, prompt, opts)
 		},
 	}
 }
@@ -399,134 +401,20 @@ type headlessOpts struct {
 // runHeadless drives a single task for `smith run` and renders the outcome per
 // --output (D-CLI-4): the assistant's final text on stdout for plain mode, or a
 // structured runResult (answer, cost, session id, stop reason, permission denials)
-// for json/stream-json. It builds a fresh session — resumable later (AS-051 AC4) —
-// wires the allowlist-then-deny permission posture (D-CLI-9, or auto with
-// `--auto`), the lifecycle hooks (AS-035), and budget enforcement (AS-041/AS-086)
-// when --budget is set, then maps how the run ended to the additive exit-code
-// taxonomy (permission/budget/cancellation/provider).
+// for json/stream-json. The shared execution core (executeRun) builds the session,
+// posture, hooks, and engine; this wrapper feeds it the stream observer and maps
+// the outcome to the additive exit-code taxonomy. The background runner (AS-054)
+// drives the same core without the output rendering.
 func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headlessOpts) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
 	}
-	store, err := session.NewStore("", wd)
-	if err != nil {
-		return fmt.Errorf("open session store: %w", err)
-	}
-	sess, err := store.Create("")
-	if err != nil {
-		return fmt.Errorf("create session: %w", err)
-	}
-	defer func() { _ = sess.Log.Close() }()
-	// A headless run is a fresh session, so seed the project's memory files
-	// (AS-032) before the single turn — the model follows the same standing
-	// guidance an interactive session does.
-	if err := seedMemory(wd, sess); err != nil {
-		return err
-	}
-
-	tools, err := appRuntime.BuiltinTools(wd)
+	out, err := executeRun(ctx, c.Globals.Config, wd, prompt, opts, streamObserver(c), c.Stderr)
 	if err != nil {
 		return err
 	}
-	prov, provName, model, err := headlessProvider(c.Globals.Config)
-	if err != nil {
-		return err
-	}
-	pricing, err := sessionPricing(c.Globals.Config)
-	if err != nil {
-		return fmt.Errorf("load pricing table: %w", err)
-	}
-
-	// Permission posture (D-CLI-9): allowlist-then-deny by default, auto with
-	// --auto. The gate is wrapped so denied calls surface in the result.
-	gate, err := headlessPermission(wd, c.Globals.Config, opts.auto)
-	if err != nil {
-		return fmt.Errorf("load permission policy: %w", err)
-	}
-
-	// Load and wire the lifecycle hooks (AS-035) so a headless run honors the same
-	// pre/post-tool-use and prompt-submit automation an interactive session does.
-	cfg, err := loadLayeredConfig(c.Globals.Config)
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-	hooks := loadHooks(cfg, c.Stderr)
-	// Capture-time redaction (AS-115): a headless run honors the same `redaction`
-	// opt-in an interactive session does, scrubbing secrets before the log.
-	applyRedaction(cfg, sess.Log, c.Stderr)
-
-	// User-delegated subagents (AS-046/AS-119): a headless run exposes the `task`
-	// tool with the same isolation, linking, and cost rollup as the TUI. The child
-	// inherits this run's permission gate (allowlist-then-deny), so a child tool
-	// call that would prompt is denied rather than hanging (D-CLI-9). A headless run
-	// loads no skills or MCP servers, so the child gets the builtin tool set.
-	router, _ := routing.ConfigFrom(cfg)
-	childBudgetCfg, _ := budget.ConfigFrom(cfg)
-	taskParent := func() delegate.Parent {
-		return delegate.Parent{
-			Log:                sess.Log,
-			SessionID:          sess.ID,
-			ProvName:           provName,
-			Model:              model,
-			Permission:         gate.decide,
-			Router:             router,
-			Pricing:            pricing,
-			ChildBudgetUSD:     childBudgetCfg.PerChildLimitUSD,
-			BudgetWarnFraction: childBudgetCfg.WarnFraction,
-		}
-	}
-	if err := tools.Register(builtin.NewTask(taskSpawner(store, wd, nil, nil, taskParent))); err != nil {
-		return fmt.Errorf("register task tool: %w", err)
-	}
-
-	rtOpts := append([]tool.Option{tool.WithPermission(gate.decide)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
-	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
-
-	engOpts := []loop.Option{}
-	if obs := streamObserver(c); obs != nil {
-		engOpts = append(engOpts, loop.WithObserver(obs))
-	}
-	// Budget enforcement (AS-041/AS-086): --budget sets the ceiling for this run,
-	// priced against the same table as /cost. Without --budget the run is unmetered.
-	if opts.budgetUSD > 0 {
-		log := sess.Log
-		spent := func() float64 { return cost.Summarize(log.Events(), pricing).TotalUSD }
-		reserve := func(c []schema.Block) (float64, bool) { return cost.EstimateTurnCostUSD(c, model, pricing) }
-		engOpts = append(engOpts,
-			loop.WithBudget(spent, opts.budgetUSD, 0),
-			loop.WithBudgetReservation(reserve, false),
-		)
-	}
-	// Sub-agent lifecycle (AS-107): a headless run drives the same built-in passive
-	// analyzers (AS-048) an interactive session does, with the `subagents.<name>`
-	// config overlay. One Runner over the run's single session; the loop tears it
-	// down off the streaming path, so a one-shot run still surfaces findings.
-	// A headless run does not load the skill tool, so no fact can be skill-scoped;
-	// the resolver only needs the working-directory memory tree. The durable ledger
-	// is shared with interactive sessions of the same project (AS-108).
-	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, nil), openFactLedger(store, c.Stderr), nil, c.Stderr)
-	if err != nil {
-		return fmt.Errorf("build sub-agents: %w", err)
-	}
-	engOpts = append(engOpts, loop.WithSubAgents(subagent.NewRunner(subReg, subStore, sess.ID)))
-	eng, err := loop.New(prov, sess.Log, rt, tools, model, engOpts...)
-	if err != nil {
-		return fmt.Errorf("build engine: %w", err)
-	}
-
-	fireLifecycle(ctx, hooks, sess.Log, hook.Payload{Event: hook.SessionStart, Session: sess.ID})
-	defer fireLifecycle(context.Background(), hooks, sess.Log, hook.Payload{Event: hook.SessionStop, Session: sess.ID})
-
-	if out := fireLifecycle(ctx, hooks, sess.Log, hook.Payload{Event: hook.UserPromptSubmit, Session: sess.ID, Prompt: prompt}); out.Blocked {
-		return fmt.Errorf("prompt blocked by hook: %s", out.Reason)
-	} else if rewritten := promptRewrite(out.Input); rewritten != "" {
-		prompt = rewritten
-	}
-
-	res, runErr := eng.Run(ctx, prompt)
-	totalUSD := cost.Summarize(sess.Log.Events(), pricing).TotalUSD
-	return emitResult(c, sess.ID, res, totalUSD, gate.denied(), runErr)
+	return emitResult(c, out.sessionID, out.res, out.costUSD, out.denied, out.runErr)
 }
 
 // headlessProvider resolves the provider and model for a headless run from the
