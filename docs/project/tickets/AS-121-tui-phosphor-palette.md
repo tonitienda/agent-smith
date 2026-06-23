@@ -1,7 +1,7 @@
 ---
 id: AS-121
 title: TUI phosphor palette — centralize color tokens and apply to all surfaces
-status: ready-to-implement
+status: done
 github_issue: 386
 depends_on: [AS-021, AS-053]
 area: tui
@@ -112,3 +112,23 @@ While touching the palette styles, apply the spec layout:
 - Running in a 256-color terminal (e.g. `COLORTERM=` unset) shows reasonable colour
   approximations without broken escape sequences.
 - No raw hex strings remain in `internal/tui/` outside `colors.go`.
+
+## Resolution
+
+- `internal/tui/colors.go` is the single token source: one `lipgloss.Color` per
+  token plus the named semantic `Style*` set the spec and downstream tickets
+  rely on (`StyleUser`…`StyleBanner`, incl. `StyleNeutral`/`StyleMuted`).
+- All inline ANSI indices migrated: `transcript.go` role/status/mode-bar styles,
+  `meter.go` gauge, `modal.go`, `permission.go`, `palette.go`, `selector.go`.
+  Verified no `lipgloss.Color(` literal survives outside `colors.go`.
+- **Fallback decision:** tokens are authored as truecolor hex; Lipgloss/termenv
+  profile detection degrades each to the nearest 256/16-color value
+  automatically, so no hand-maintained fallback table is kept (the AS-121
+  indices are the reference targets that nearest-color reproduces).
+- **Tick strategy decision:** fan out a distinct `tea.Tick` per cadence;
+  "reuse the same tick" downstream means "don't add a second ticker for an
+  existing cadence", not one global period (recorded in `colors.go`).
+- Palette §3: color tokens applied (selected row `BgModeBar`, command name
+  `ColorCommand`, items `StyleNeutral`). The full search-row-border / footer-hint
+  *layout* redesign is left to AS-127 (TUI command palette visual redesign) to
+  avoid duplicating that ticket.

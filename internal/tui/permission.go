@@ -309,9 +309,9 @@ func capHeight(s string, max int) string {
 // pause rather than an alarm; the destructive modal reuses the severe red modal
 // styling (modal.go).
 var (
-	permCardStyle    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("11")).Padding(0, 1)
-	permTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
-	permSubjectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	diffAddStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	diffDelStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	permCardStyle    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ColorAmberBright).Padding(0, 1)
+	permTitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(ColorAmberBright)
+	permSubjectStyle = lipgloss.NewStyle().Foreground(ColorFgDefault)
+	diffAddStyle     = lipgloss.NewStyle().Foreground(ColorDiffAddedText)
+	diffDelStyle     = lipgloss.NewStyle().Foreground(ColorDiffRemovedText)
 )

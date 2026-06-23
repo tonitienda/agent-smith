@@ -50,7 +50,7 @@ func TestMeterColorThresholds(t *testing.T) {
 		pct  float64
 		want lipgloss.Color
 	}{
-		{0, "10"}, {59, "10"}, {60, "11"}, {84, "11"}, {85, "9"}, {130, "9"},
+		{0, ColorBrand}, {59, ColorBrand}, {60, ColorAmberBright}, {84, ColorAmberBright}, {85, ColorDiffRemovedText}, {130, ColorDiffRemovedText},
 	}
 	for _, c := range cases {
 		if got := meterStyle(c.pct).GetForeground(); got != c.want {

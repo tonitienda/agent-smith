@@ -160,7 +160,7 @@ func trimDotZero(s string) string { return strings.TrimSuffix(s, ".0") }
 // flush in the status bar; the Matrix personality layer (AS-053) will own richer
 // theming.
 var (
-	meterGreenStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Background(lipgloss.Color("8"))
-	meterYellowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Background(lipgloss.Color("8"))
-	meterRedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Background(lipgloss.Color("8"))
+	meterGreenStyle  = lipgloss.NewStyle().Foreground(ColorBrand).Background(BgStatusLine)
+	meterYellowStyle = lipgloss.NewStyle().Foreground(ColorAmberBright).Background(BgStatusLine)
+	meterRedStyle    = lipgloss.NewStyle().Foreground(ColorDiffRemovedText).Background(BgStatusLine)
 )
