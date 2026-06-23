@@ -2,7 +2,7 @@
 id: AS-115
 title: "Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056)"
 status: done
-github_issue: null
+github_issue: 380
 depends_on: [AS-005, AS-016]
 area: compliance
 priority: P3

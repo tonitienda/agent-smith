@@ -2,7 +2,7 @@
 id: AS-125
 title: TUI status line + mode bar visual polish — spec-compliant layout and colours
 status: ready-to-implement
-github_issue: null
+github_issue: 390
 depends_on: [AS-121, AS-025, AS-073]
 area: tui
 priority: P0

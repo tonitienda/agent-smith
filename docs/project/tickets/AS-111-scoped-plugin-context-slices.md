@@ -2,7 +2,7 @@
 id: AS-111
 title: Scope-gated context slices for third-party sub-agents
 status: ready-to-implement
-github_issue: null
+github_issue: 377
 depends_on: [AS-044]
 area: security
 priority: P1

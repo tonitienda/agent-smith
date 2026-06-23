@@ -2,7 +2,7 @@
 id: AS-124
 title: TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time
 status: ready-to-implement
-github_issue: null
+github_issue: 389
 depends_on: [AS-121, AS-024]
 area: tui
 priority: P0

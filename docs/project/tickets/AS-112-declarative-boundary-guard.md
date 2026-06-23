@@ -2,7 +2,7 @@
 id: AS-112
 title: Guard the declarative-only plugin boundary with a test + archtest
 status: done
-github_issue: null
+github_issue: 378
 depends_on: [AS-044, AS-098]
 area: quality
 priority: P1

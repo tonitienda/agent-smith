@@ -2,7 +2,7 @@
 id: AS-113
 title: Plugin consent screen + scope→sentence table
 status: needs-clarification
-github_issue: null
+github_issue: 379
 depends_on: [AS-044]
 area: security
 priority: P2

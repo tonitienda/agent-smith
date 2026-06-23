@@ -2,7 +2,7 @@
 id: AS-130
 title: TUI /agents orchestrator panel — tree view, state dots, pulsing animation
 status: ready-to-implement
-github_issue: null
+github_issue: 395
 depends_on: [AS-121, AS-044, AS-067]
 area: tui
 priority: P0

@@ -2,7 +2,7 @@
 id: AS-129
 title: TUI permission gate visual redesign — diff colours, dimmed context, option list
 status: ready-to-implement
-github_issue: null
+github_issue: 394
 depends_on: [AS-121, AS-024]
 area: tui
 priority: P0

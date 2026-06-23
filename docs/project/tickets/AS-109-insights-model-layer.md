@@ -2,7 +2,7 @@
 id: AS-109
 title: /insights model-assisted layer + goal anchoring (spun out of AS-045)
 status: ready-to-implement
-github_issue: null
+github_issue: 375
 depends_on: [AS-045, AS-040, AS-042]
 area: insights-wedge
 priority: P2

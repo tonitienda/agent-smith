@@ -2,7 +2,7 @@
 id: AS-105
 title: Migrate the remaining mode-flag commands onto the shared flag contract
 status: done
-github_issue: null
+github_issue: 372
 depends_on: [AS-104]
 area: commands
 priority: P2

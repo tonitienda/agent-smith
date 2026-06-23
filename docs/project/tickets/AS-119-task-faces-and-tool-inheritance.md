@@ -2,7 +2,7 @@
 id: AS-119
 title: User-delegated subagents — headless/serve wiring + child tool inheritance
 status: done
-github_issue: null
+github_issue: 384
 depends_on: [AS-046, AS-051, AS-077]
 area: subagents
 priority: P2

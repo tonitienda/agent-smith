@@ -2,7 +2,7 @@
 id: AS-120
 title: User-delegated subagents — per-child cost itemization, prompt attribution, budget ceiling
 status: done
-github_issue: null
+github_issue: 385
 depends_on: [AS-046, AS-020, AS-041]
 area: cost
 priority: P2

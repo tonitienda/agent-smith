@@ -2,7 +2,7 @@
 id: AS-122
 title: TUI splash / startup screen — logo, context line, invite text, blinking caret
 status: ready-to-implement
-github_issue: null
+github_issue: 387
 depends_on: [AS-121, AS-126]
 area: tui
 priority: P0

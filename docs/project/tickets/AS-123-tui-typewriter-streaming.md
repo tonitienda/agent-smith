@@ -2,7 +2,7 @@
 id: AS-123
 title: TUI typewriter streaming — character-by-character reveal with trailing block cursor
 status: ready-to-implement
-github_issue: null
+github_issue: 388
 depends_on: [AS-121, AS-021]
 area: tui
 priority: P0

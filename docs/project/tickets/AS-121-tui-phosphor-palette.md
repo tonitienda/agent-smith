@@ -2,7 +2,7 @@
 id: AS-121
 title: TUI phosphor palette — centralize color tokens and apply to all surfaces
 status: ready-to-implement
-github_issue: null
+github_issue: 386
 depends_on: [AS-021, AS-053]
 area: tui
 priority: P0

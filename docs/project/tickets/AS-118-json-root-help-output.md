@@ -3,7 +3,7 @@ id: AS-118
 title: "Root help ignores --output json"
 status: done
 type: bug
-github_issue: null
+github_issue: 383
 depends_on: [AS-065, AS-070]
 area: faces
 priority: P2

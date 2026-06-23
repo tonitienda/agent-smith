@@ -2,7 +2,7 @@
 id: AS-116
 title: Surface auto-escalation in /route and /cost + wire the first producer
 status: done
-github_issue: null
+github_issue: 381
 depends_on: [AS-110]
 area: cost
 priority: P2

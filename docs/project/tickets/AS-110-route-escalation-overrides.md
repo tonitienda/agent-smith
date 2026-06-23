@@ -2,7 +2,7 @@
 id: AS-110
 title: Model routing escalation + per-session /route overrides
 status: done
-github_issue: null
+github_issue: 376
 depends_on: [AS-042]
 area: cost
 priority: P2

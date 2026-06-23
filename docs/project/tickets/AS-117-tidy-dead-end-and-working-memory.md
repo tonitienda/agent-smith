@@ -2,7 +2,7 @@
 id: AS-117
 title: /tidy dead-end collapse + working-memory promotion (spun out of AS-043)
 status: needs-clarification
-github_issue: null
+github_issue: 382
 depends_on: [AS-043, AS-048]
 area: context-wedge
 priority: P2

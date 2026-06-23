@@ -2,7 +2,7 @@
 id: AS-128
 title: TUI /context panel visual redesign — segmented bar, legend grid, stats rail
 status: ready-to-implement
-github_issue: null
+github_issue: 393
 depends_on: [AS-121, AS-026]
 area: tui
 priority: P0

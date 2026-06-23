@@ -2,7 +2,7 @@
 id: AS-108
 title: "Persist the rediscovered-fact ledger and wire a memory/skill-aware save-target resolver"
 status: done
-github_issue: null
+github_issue: 374
 depends_on: [AS-107, AS-032, AS-034]
 area: subagents
 priority: P2

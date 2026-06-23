@@ -2,7 +2,7 @@
 id: AS-104
 title: Thread a shared flag contract through the command catalog
 status: done
-github_issue: null
+github_issue: 371
 depends_on: [AS-090]
 area: commands
 priority: P2

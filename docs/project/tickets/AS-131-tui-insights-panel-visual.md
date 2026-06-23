@@ -2,7 +2,7 @@
 id: AS-131
 title: TUI /insights panel visual redesign — stat cards, timeline, tool histogram
 status: ready-to-implement
-github_issue: null
+github_issue: 396
 depends_on: [AS-121, AS-045]
 area: tui
 priority: P0

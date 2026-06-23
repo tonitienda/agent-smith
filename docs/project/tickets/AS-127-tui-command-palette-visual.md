@@ -2,7 +2,7 @@
 id: AS-127
 title: TUI command palette visual redesign — search field, per-command styling, footer hints
 status: ready-to-implement
-github_issue: null
+github_issue: 392
 depends_on: [AS-121, AS-022]
 area: tui
 priority: P0
