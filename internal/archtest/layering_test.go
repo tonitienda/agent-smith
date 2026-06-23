@@ -88,6 +88,18 @@ func TestLayeringContracts(t *testing.T) {
 			forbidden: []string{"internal/loop", "internal/tui"},
 			reason:    "tools are leaves the loop wires in; they must not reach back into the loop or faces",
 		},
+		{
+			name:      "builtin tools do not import loop or faces",
+			pkgDir:    "internal/tool/builtin",
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve"},
+			reason:    "the shipped tools stay leaves; the task tool (AS-046) depends on the builtin.Spawner seam, not the loop, so the delegation wiring lives in the orchestration layer (internal/delegate)",
+		},
+		{
+			name:      "delegate does not import faces",
+			pkgDir:    "internal/delegate",
+			forbidden: []string{"internal/tui", "internal/serve"},
+			reason:    "delegate is orchestration: it may use the loop, providers, tools, and session store but never a face (AS-046)",
+		},
 	}
 
 	for _, tc := range cases {

@@ -34,7 +34,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-031, AS-071, AS-093 | Implemented | Set config through env, user config, project config, and flags. | Precedence is flag > project > user > env > default; typed consumers agree. |
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
-| AS-017, AS-046, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109, AS-111 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -130,10 +130,11 @@ Covers AS-031, AS-032, AS-034 through AS-036, AS-047, AS-048, AS-071, AS-082, AS
 
 ### 8. Subagents, insights, and plugin trust boundaries
 
-Covers AS-044, AS-045, AS-050, AS-056, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113.
+Covers AS-044, AS-045, AS-046, AS-050, AS-056, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
+| 8.0 | In an interactive session, prompt the model to use the `task` tool to delegate a self-contained subtask (or two in parallel). | The child runs in its own session (visible via `/resume` as a `task: …` session linked to the parent); its summary returns into the parent context attributed to `task`; the child's spend is included in `/cost`. Child tool calls prompt through the same permission gate. Headless/serve delegation and per-child cost itemization are **Not implemented** until AS-119/AS-120. |
 | 8.1 | Run a session that should invoke built-in subagent/living-skill lifecycle hooks. | Built-in system subagents are registered by the composition root and run through the turn lifecycle. |
 | 8.2 | Run `/insights` after a session with a goal, tool use, and context churn. | Implemented dashboard summarizes cost/context/session findings; model-assisted goal anchoring is **Not implemented** until AS-109 lands. |
 | 8.2a | Across several sessions in the same project, rediscover the same fact (and/or enable the skill-expectation analyzer), then run `/skills`. | The per-session findings list plus a cross-session rollup render; a fact seen in 3+ sessions is flagged escalated; `/skills apply <n>` lands the remedy's diff into its target file and marks the finding resolved (it stops pending and survives a restart). |
@@ -212,7 +213,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-043 | /tidy — context reorganization without lossy summarization (flagship wedge) | Not implemented (`ready-to-implement`) |
 | AS-044 | System sub-agent lifecycle framework + plugin registry | Implemented (`done`) |
 | AS-045 | /insights — model-assisted session retrospective dashboard (flagship wedge) | Implemented (`done`) |
-| AS-046 | User-delegated subagents (scoped child agents with own context) | Not implemented (`ready-to-implement`) |
+| AS-046 | User-delegated subagents (scoped child agents with own context) | Implemented (`done`) — interactive face; headless/serve + per-child cost itemization spun out to AS-119/AS-120 |
 | AS-047 | Skill expectation contracts (frontmatter schema, parsing, span boundaries) | Implemented (`done`) |
 | AS-048 | Rediscovered-fact detector (living skills, first form) | Implemented (`done`) |
 | AS-049 | skill-expectation-analyzer — predict-then-measure skill grading (experimental) | Implemented (`done`) |

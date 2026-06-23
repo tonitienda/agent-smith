@@ -80,7 +80,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-043](AS-043-tidy.md) | `/tidy` context reorganization (wedge) | context-wedge | done | 006, 027, 028 |
 | [AS-044](AS-044-system-subagent-framework.md) | System sub-agent framework + plugin registry | subagents | done | 006, 018, 020, 031 |
 | [AS-045](AS-045-insights-dashboard.md) | `/insights` session dashboard (wedge) | insights-wedge | done | 020, 022, 044 |
-| [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | ready | 013, 018 |
+| [AS-046](AS-046-user-subagents.md) | User-delegated subagents | subagents | done | 013, 018 |
 | [AS-047](AS-047-skill-contracts.md) | Skill expectation contracts (C.1) | living-skills | done | 034 |
 | [AS-048](AS-048-rediscovered-fact-detector.md) | Rediscovered-fact detector (D7 first form) | living-skills | done | 032, 044, 047 |
 | [AS-049](AS-049-skill-expectation-analyzer.md) | skill-expectation-analyzer (experimental) | living-skills | done | 044, 047, 048 |
@@ -146,6 +146,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | done | 110 |
 | [AS-117](AS-117-tidy-dead-end-and-working-memory.md) | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | context-wedge | needs-clarification | 043, 048 |
 | [AS-118](AS-118-json-root-help-output.md) | Root help ignores `--output json` | faces | done | 065, 070 |
+| [AS-119](AS-119-task-faces-and-tool-inheritance.md) | `task` delegation across faces + child tool inheritance (spun out of AS-046) | subagents | ready | 046, 051, 077 |
+| [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | ready | 046, 020, 041 |
 
 ## Suggested build order
 

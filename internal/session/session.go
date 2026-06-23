@@ -54,6 +54,12 @@ type Metadata struct {
 	ProjectPath string    `json:"project_path"`
 	CreatedAt   time.Time `json:"created_at"`
 	Title       string    `json:"title,omitempty"`
+	// Parent is the ID of the session that delegated this one (AS-046). It is set
+	// only on child sessions a `task` delegation spawns, linking a child back to
+	// the parent that ran it so the delegation tree is reconstructable from disk
+	// and a child is discoverable as belonging to its parent. Empty for a normal,
+	// user-started session. Additive and omitempty (D2): older logs simply lack it.
+	Parent string `json:"parent,omitempty"`
 }
 
 // Summary is the project-scoped listing view for a stored session. Every field
@@ -116,6 +122,28 @@ func (s *Store) Create(title string) (*Session, error) {
 		return nil, err
 	}
 	return &Session{ID: id, Dir: dir, Metadata: meta, Log: log}, nil
+}
+
+// CreateChild creates a new session linked to parentID (AS-046): a `task`
+// delegation spawns a child agent with its own isolated event log, and the link
+// records which session delegated it. The child is an ordinary session in every
+// other respect — discoverable by List, resumable by Open — so a delegated run
+// is inspectable and resumable like any other. A blank parentID behaves exactly
+// like Create.
+func (s *Store) CreateChild(title, parentID string) (*Session, error) {
+	sess, err := s.Create(title)
+	if err != nil {
+		return nil, err
+	}
+	if parentID == "" {
+		return sess, nil
+	}
+	sess.Metadata.Parent = parentID
+	if err := writeMetadata(sess.Dir, sess.Metadata); err != nil {
+		_ = sess.Log.Close()
+		return nil, err
+	}
+	return sess, nil
 }
 
 // Open loads an existing project-scoped session by ID and replays its log.

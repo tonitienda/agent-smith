@@ -11,6 +11,42 @@ import (
 	"github.com/tonitienda/agent-smith/schema"
 )
 
+// TestCreateChildPersistsParentLink covers AS-046: a child session records its
+// parent on disk and is otherwise an ordinary, reopenable session, while a blank
+// parent behaves like Create.
+func TestCreateChildPersistsParentLink(t *testing.T) {
+	store, err := NewStore(t.TempDir(), filepath.Join(t.TempDir(), "repo"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := store.CreateChild("delegated", "sess_parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.Open(child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reopened.Log.Close() }()
+	if reopened.Metadata.Parent != "sess_parent" {
+		t.Errorf("child parent = %q, want sess_parent", reopened.Metadata.Parent)
+	}
+
+	orphan, err := store.CreateChild("plain", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := orphan.Log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if orphan.Metadata.Parent != "" {
+		t.Errorf("blank-parent child recorded parent %q, want empty", orphan.Metadata.Parent)
+	}
+}
+
 func TestSessionPersistsAndReloadsProjection(t *testing.T) {
 	root := t.TempDir()
 	project := filepath.Join(t.TempDir(), "repo")
