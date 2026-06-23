@@ -1,7 +1,7 @@
 ---
 id: AS-132
 title: Background runner daemon + worker concurrency (spun out of AS-054)
-status: ready-to-implement
+status: done
 github_issue: 401
 depends_on: [AS-054]
 area: async
@@ -40,11 +40,23 @@ are not lost:
 - [ ] The single-worker `smith runs work` behaviour (drain-and-exit) still works
       unchanged.
 
-## Open questions
+## Resolved decisions
 
-- Claim mechanism: per-record lock file vs. worker-id + heartbeat timestamp in the
-  record. The heartbeat approach reclaims stale leases without filesystem locks and
-  fits the additive record shape, but needs a staleness threshold.
+- **Claim mechanism (was an open question): both, each for what it is good at.** An
+  `O_EXCL` lease file (`<run-id>/lease`) is the atomic claim *gate* — among any number
+  of contending workers exactly one can create it, so the queued→running transition
+  has a single winner without a filesystem advisory lock. *Liveness* is tracked
+  separately by an additive `heartbeat_at` (plus `worker_id`) on the record (PRD D2): a
+  worker refreshes it every 5s while executing, and `Reclaim` marks a `running` run
+  `interrupted` only when its heartbeat is missing or older than the 30s staleness
+  threshold — so a live peer's in-flight run is never stolen, while a crashed worker's
+  run is recovered. The lease is released on completion and on `runs resume`, so a
+  re-queued run can be re-claimed. A missing/nil heartbeat counts as stale, which keeps
+  the AS-054 "reclaim a leftover `running` on start" behaviour intact for the single
+  worker.
+- **Watch + concurrency surface.** `smith runs work --watch` keeps the worker up,
+  polling for new work; `--concurrency N` (default 1) runs N claim/execute loops in
+  parallel. Default `smith runs work` (drain-and-exit, single worker) is unchanged.
 
 ## Dependencies
 

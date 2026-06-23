@@ -286,6 +286,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-116 | Surface auto-escalation in `/route` and `/cost` + wire the first producer | Implemented (`done`) |
 | AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Needs clarification (`needs-clarification`) |
 | AS-118 | Root help ignores `--output json` | Implemented (`done`) |
+| AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
 
 ## Current local smoke pass (2026-06-22)
 

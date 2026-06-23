@@ -148,7 +148,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-118](AS-118-json-root-help-output.md) | Root help ignores `--output json` | faces | done | 065, 070 |
 | [AS-119](AS-119-task-faces-and-tool-inheritance.md) | `task` delegation across faces + child tool inheritance (spun out of AS-046) | subagents | done | 046, 051, 077 |
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
-| [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | ready | 054 |
+| [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | done | 054 |
 
 ## Index — TUI visual polish (AS-121 … AS-131) — demo-priority
 

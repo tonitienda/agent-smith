@@ -1,14 +1,132 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/run"
 )
+
+// fastWorkOpts is a worker-pool config tuned for tests: sub-second heartbeat,
+// stale, and poll intervals so watch/concurrency behaviour resolves quickly.
+func fastWorkOpts(concurrency int, watch bool) workOpts {
+	return workOpts{
+		concurrency: concurrency,
+		watch:       watch,
+		staleAfter:  500 * time.Millisecond,
+		heartbeat:   10 * time.Millisecond,
+		pollEvery:   5 * time.Millisecond,
+		workerID:    newWorkerID(),
+	}
+}
+
+func testRunStore(t *testing.T) *run.Store {
+	t.Helper()
+	wd, _ := os.Getwd()
+	s, err := run.NewStore("", wd)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	return s
+}
+
+// TestWorkQueueConcurrent (AS-132 AC2): several workers drain a queue with every
+// run executed exactly once — no run is processed twice and none is dropped.
+func TestWorkQueueConcurrent(t *testing.T) {
+	isolateHome(t)
+	useMockProvider(t, &provider.Mock{NameValue: "anthropic", Events: provider.TextTurn("done", provider.StopEndTurn)})
+	store := testRunStore(t)
+	wd, _ := os.Getwd()
+
+	const runs = 12
+	want := map[string]bool{}
+	for range runs {
+		rec, err := store.Enqueue(run.Spec{Prompt: "work"})
+		if err != nil {
+			t.Fatalf("Enqueue: %v", err)
+		}
+		want[rec.ID] = true
+	}
+
+	processed, err := workQueue(context.Background(), "", store, wd, io.Discard, fastWorkOpts(4, false))
+	if err != nil {
+		t.Fatalf("workQueue: %v", err)
+	}
+	if len(processed) != runs {
+		t.Fatalf("processed %d runs, want %d", len(processed), runs)
+	}
+	seen := map[string]bool{}
+	for _, v := range processed {
+		if seen[v.ID] {
+			t.Fatalf("run %s processed more than once", v.ID)
+		}
+		seen[v.ID] = true
+		if v.Status != string(run.StatusDone) {
+			t.Errorf("run %s status = %q, want done", v.ID, v.Status)
+		}
+	}
+	for id := range want {
+		if !seen[id] {
+			t.Errorf("run %s was never processed", id)
+		}
+	}
+}
+
+// TestWorkQueueWatch (AS-132 AC1): a watch-mode worker stays up and executes a run
+// enqueued after it started, then exits cleanly when its context is canceled.
+func TestWorkQueueWatch(t *testing.T) {
+	isolateHome(t)
+	useMockProvider(t, &provider.Mock{NameValue: "anthropic", Events: provider.TextTurn("late", provider.StopEndTurn)})
+	store := testRunStore(t)
+	wd, _ := os.Getwd()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan []runView, 1)
+	go func() {
+		p, err := workQueue(ctx, "", store, wd, io.Discard, fastWorkOpts(1, true))
+		if err != nil {
+			t.Errorf("workQueue: %v", err)
+		}
+		done <- p
+	}()
+
+	// Enqueue only after the watcher is already running.
+	time.Sleep(20 * time.Millisecond)
+	rec, err := store.Enqueue(run.Spec{Prompt: "enqueued after start"})
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Wait for the watcher to pick it up and finish it.
+	deadline := time.After(5 * time.Second)
+	for {
+		got, _ := store.Get(rec.ID)
+		if got.Status == run.StatusDone {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("run not completed by watch worker; status=%q", got.Status)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	cancel()
+	select {
+	case p := <-done:
+		if len(p) != 1 || p[0].ID != rec.ID {
+			t.Fatalf("processed = %+v, want the one enqueued run", p)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("watch worker did not exit after cancel")
+	}
+}
 
 // isolateHome points the data dir at a temp HOME so the queue (and the sessions a
 // worker creates) stay out of the developer's real ~/.agent-smith.

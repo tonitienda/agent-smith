@@ -82,6 +82,13 @@ type Record struct {
 	ExitCode   int     `json:"exit_code,omitempty"`
 	Error      string  `json:"error,omitempty"`
 
+	// WorkerID and HeartbeatAt are the concurrency-worker lease (AS-132): a worker
+	// stamps its id and a periodically-refreshed timestamp on a run it is executing
+	// so peers can tell a live run from one whose worker crashed. Both are additive
+	// (PRD D2) — a single-worker record simply never sets them.
+	WorkerID    string     `json:"worker_id,omitempty"`
+	HeartbeatAt *time.Time `json:"heartbeat_at,omitempty"`
+
 	CreatedAt  time.Time  `json:"created_at"`
 	StartedAt  *time.Time `json:"started_at,omitempty"`
 	FinishedAt *time.Time `json:"finished_at,omitempty"`
@@ -95,7 +102,14 @@ type Spec struct {
 	Auto      bool
 }
 
-const recordFile = "run.json"
+const (
+	recordFile = "run.json"
+	// leaseFile is the per-run atomic claim gate for concurrent workers (AS-132).
+	// Its existence — created with O_EXCL — means a worker owns (or owned) the run;
+	// liveness is tracked separately by Record.HeartbeatAt so a crashed owner's run
+	// can be reclaimed.
+	leaseFile = "lease"
+)
 
 // Store owns the run queue directory for one project. The zero value is invalid;
 // use NewStore so project paths are normalized before hashing (matching the
@@ -210,6 +224,112 @@ func (s *Store) Save(rec Record) error {
 	}
 	b = append(b, '\n')
 	return writeFileSync(filepath.Join(dir, recordFile), b)
+}
+
+// Claim atomically transitions the queued run id to running, owned by workerID.
+// The claim gate is an O_EXCL lease file in the run's directory, so among any
+// number of competing workers exactly one wins a given run; the rest get
+// claimed=false (no error) and move on (AS-132). A worker that wins must heartbeat
+// the run (Heartbeat) so a survivor can tell a live claim from a crashed one
+// (Reclaim), and release it when done (Release).
+func (s *Store) Claim(id, workerID string) (Record, bool, error) {
+	if !safeID(id) {
+		return Record{}, false, fmt.Errorf("run: unsafe run id %q", id)
+	}
+	lease := filepath.Join(s.RunsDir(), id, leaseFile)
+	f, err := os.OpenFile(lease, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if errors.Is(err, os.ErrExist) {
+		return Record{}, false, nil // another worker holds (or held) this run
+	}
+	if err != nil {
+		return Record{}, false, fmt.Errorf("run: acquire lease: %w", err)
+	}
+	_, _ = f.WriteString(workerID)
+	_ = f.Close()
+
+	rec, err := s.Get(id)
+	if err != nil {
+		_ = os.Remove(lease)
+		return Record{}, false, err
+	}
+	// We won the lease, but only a still-queued run is ours to start; anything else
+	// (already finished, or a stray lingering lease) is left alone.
+	if rec.Status != StatusQueued {
+		_ = os.Remove(lease)
+		return Record{}, false, nil
+	}
+	now := time.Now().UTC()
+	rec.Status = StatusRunning
+	rec.WorkerID = workerID
+	rec.StartedAt = &now
+	rec.HeartbeatAt = &now
+	if err := s.Save(rec); err != nil {
+		_ = os.Remove(lease)
+		return Record{}, false, err
+	}
+	return rec, true, nil
+}
+
+// Heartbeat refreshes the liveness timestamp on a run this worker owns. It is a
+// best-effort no-op when the run is no longer ours or no longer running (a final
+// Save raced ahead), so a late heartbeat never resurrects a finished run.
+func (s *Store) Heartbeat(id, workerID string) error {
+	rec, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if rec.Status != StatusRunning || rec.WorkerID != workerID {
+		return nil
+	}
+	now := time.Now().UTC()
+	rec.HeartbeatAt = &now
+	return s.Save(rec)
+}
+
+// Release removes a run's lease so a later `runs resume` can re-claim it. A
+// terminal run keeps no lease; a missing lease is not an error.
+func (s *Store) Release(id string) error {
+	if !safeID(id) {
+		return fmt.Errorf("run: unsafe run id %q", id)
+	}
+	if err := os.Remove(filepath.Join(s.RunsDir(), id, leaseFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("run: release lease: %w", err)
+	}
+	return nil
+}
+
+// Reclaim marks every stale `running` run — a worker that died mid-flight — as
+// interrupted and clears its lease, so a survivor never collides with it and the
+// run becomes eligible for `runs resume` (AS-132). A run is stale when its
+// heartbeat is missing or older than staleAfter; a live worker heartbeats well
+// inside that window, so its in-flight run is left untouched (safe to run even as
+// peers start up). Returns the reclaimed records.
+func (s *Store) Reclaim(staleAfter time.Duration, now time.Time) ([]Record, error) {
+	recs, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	var reclaimed []Record
+	for _, rec := range recs {
+		if rec.Status != StatusRunning {
+			continue
+		}
+		if rec.HeartbeatAt != nil && now.Sub(*rec.HeartbeatAt) <= staleAfter {
+			continue // a live worker is heartbeating this run
+		}
+		rec.Status = StatusInterrupted
+		if rec.Error == "" {
+			rec.Error = "worker exited before the run finished"
+		}
+		if err := s.Save(rec); err != nil {
+			return reclaimed, err
+		}
+		if err := s.Release(rec.ID); err != nil {
+			return reclaimed, err
+		}
+		reclaimed = append(reclaimed, rec)
+	}
+	return reclaimed, nil
 }
 
 func readRecord(path string) (Record, error) {

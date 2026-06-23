@@ -21,7 +21,7 @@ C4Component
         Component(eventlog, "Event log", "internal/eventlog", "Append-only in-memory/disk JSONL log of schema blocks.")
         Component(schema, "Block schema", "schema", "Additive-only content-block union used by logs, providers, tools, and projections.")
         Component(session, "Session store", "internal/session", "Project-scoped session directory, metadata, and log opening/listing.")
-        Component(runqueue, "Run queue", "internal/run", "Project-scoped durable queue of background runs (AS-054): enqueue, list, status, atomic record updates. Persistence only; cmd/smith `runs work` executes via the shared headless core.")
+        Component(runqueue, "Run queue", "internal/run", "Project-scoped durable queue of background runs (AS-054): enqueue, list, status, atomic record updates, plus an O_EXCL lease + heartbeat claim for concurrent workers (AS-132). Persistence only; cmd/smith `runs work` (optionally `--watch`/`--concurrency`) executes via the shared headless core.")
         Component(provider, "Provider abstraction", "internal/provider", "Normalized request/stream/error interface for all model vendors.")
         Component(adapters, "Provider adapters", "internal/provider/anthropic, internal/provider/openai", "Vendor request assembly and stream normalization.")
         Component(tools, "Tool runtime and registry", "internal/tool + internal/tool/builtin", "Validates, gates, executes, truncates, and logs tool calls/results.")
