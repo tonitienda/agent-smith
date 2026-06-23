@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -284,13 +285,12 @@ func (m *model) finalizeText() {
 // The startup header (D-TUI-10) is the first thing in the scrollback when splash
 // is on, so it shows on launch and scrolls away with the conversation.
 func (m *model) renderTranscript() string {
+	if len(m.segs) == 0 {
+		return m.emptyState()
+	}
 	parts := make([]string, 0, len(m.segs)+1)
 	if m.splash {
 		parts = append(parts, m.headerView())
-	}
-	if len(m.segs) == 0 {
-		parts = append(parts, dimStyle.Render("Ask Agent Smith anything to begin."))
-		return strings.Join(parts, "\n\n")
 	}
 	for i := range m.segs {
 		parts = append(parts, m.renderSegment(&m.segs[i]))
@@ -298,12 +298,83 @@ func (m *model) renderTranscript() string {
 	return strings.Join(parts, "\n\n")
 }
 
+// emptyState renders the launch/idle screen: the splash header and invite copy,
+// with the AS-126 digital rain composited behind it at medium+ intensity. The
+// foreground copy overwrites whole rows, so the chrome-only rain never bleeds
+// over substance (internal/tui/CLAUDE.md invariant 3) — there is none here, but
+// the same discipline keeps the copy legible.
+func (m *model) emptyState() string {
+	var fg []string
+	if m.splash {
+		fg = append(fg, strings.Split(m.headerView(), "\n")...)
+		fg = append(fg, "")
+	}
+	fg = append(fg, dimStyle.Render("Ask Agent Smith anything to begin."))
+	if phrase := m.idlePhrase(); phrase != "" {
+		fg = append(fg, "", dimStyle.Render(phrase))
+	}
+	if m.rain == nil {
+		return strings.Join(fg, "\n")
+	}
+	rows := strings.Split(m.rain.render(), "\n")
+	for i, line := range fg {
+		if i < len(rows) {
+			rows[i] = line
+		} else {
+			rows = append(rows, line)
+		}
+	}
+	return strings.Join(rows, "\n")
+}
+
+// idlePhrase is the rotating Matrix one-liner shown below the invite at medium+
+// intensity (AS-126 §3); empty when the theme is muted. It reuses the clock-
+// bucketed personality rotation so the phrase changes without per-render state.
+func (m model) idlePhrase() string {
+	if m.pers == nil || m.pers.Intensity() < personality.IntensityMedium {
+		return ""
+	}
+	return m.pers.StatusLine()
+}
+
 // headerView is the small ASCII startup header: a banner plus project · model ·
 // mode (D-TUI-10). No model call, no delay — it is pure projection of the cached
-// status-line identity.
+// status-line identity. While the one-shot glitch-in is active the logo renders
+// with a couple of glyphs replaced by block noise (AS-126 §5).
 func (m *model) headerView() string {
 	meta := strings.Join(nonEmpty(m.meta.Project, m.meta.Model, "work mode"), " · ")
-	return bannerStyle.Render("▞▞ AGENT SMITH") + "\n" + dimStyle.Render(meta)
+	logo := "▞▞ AGENT SMITH"
+	if m.glitch {
+		logo = glitchLogo(logo)
+	}
+	return bannerStyle.Render(logo) + "\n" + dimStyle.Render(meta)
+}
+
+// glitchLogo replaces two glyphs in the banner with block noise for the one-shot
+// startup glitch-in; a single frame later headerView settles to the clean logo.
+func glitchLogo(s string) string {
+	r := []rune(s)
+	for _, i := range []int{6, 10} { // two letters inside "AGENT SMITH"
+		if i >= 0 && i < len(r) && r[i] != ' ' {
+			if i%2 == 0 {
+				r[i] = '░'
+			} else {
+				r[i] = '▒'
+			}
+		}
+	}
+	return string(r)
+}
+
+// userLabel is the chrome display-name for the user's turns: the Matrix name
+// (e.g. "Mr. Anderson") at medium+ intensity, the plain "you" when muted. It goes
+// through personality.Name so the one name map stays the source of truth (AS-126
+// §4); a nil personality (tests) keeps the plain label.
+func (m model) userLabel() string {
+	if m.pers != nil {
+		return m.pers.Name(personality.RoleUser)
+	}
+	return "you"
 }
 
 // renderSegment styles one segment. Assistant bodies render as markdown once
@@ -311,7 +382,7 @@ func (m *model) headerView() string {
 func (m *model) renderSegment(s *segment) string {
 	switch s.kind {
 	case segUser:
-		return userLabelStyle.Render("you") + "\n" + s.text
+		return userLabelStyle.Render(m.userLabel()) + "\n" + s.text
 
 	case segAssistant:
 		body := s.text

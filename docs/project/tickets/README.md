@@ -159,7 +159,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-123](AS-123-tui-typewriter-streaming.md) | TUI typewriter streaming — char-by-char reveal with trailing block cursor | tui | ready | 121, 021 |
 | [AS-124](AS-124-tui-tool-card-polish.md) | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | tui | ready | 121, 024 |
 | [AS-125](AS-125-tui-status-line-polish.md) | TUI status line + mode bar visual polish — spec-compliant layout and colours | tui | ready | 121, 025, 073 |
-| [AS-126](AS-126-tui-matrix-rain-medium-default.md) | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | tui | ready | 121, 053 |
+| [AS-126](AS-126-tui-matrix-rain-medium-default.md) | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | tui | done | 121, 053 |
 | [AS-127](AS-127-tui-command-palette-visual.md) | TUI command palette visual redesign — search border, per-command styling, footer hints | tui | ready | 121, 022 |
 | [AS-128](AS-128-tui-context-panel-visual.md) | TUI /context panel visual redesign — segmented bar, amber auto-compact marker, stats rail | tui | ready | 121, 026 |
 | [AS-129](AS-129-tui-permission-diff-visual.md) | TUI permission gate visual redesign — diff colours, dimmed context, option list | tui | ready | 121, 024 |

@@ -46,6 +46,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -109,6 +110,7 @@ type App struct {
 	rehydrate   RehydrateFunc
 	refresh     func()
 	workingLine func() string
+	pers        *personality.Personality
 
 	// mu guards prog, which is set when Run starts the program. The permission
 	// Asker (Ask) runs on the turn goroutine and reads prog to deliver a prompt
@@ -146,6 +148,15 @@ func WithRehydrate(f RehydrateFunc) Option {
 // nil closure (the default) keeps the plain default.
 func WithWorkingLine(f func() string) Option {
 	return func(a *App) { a.workingLine = f }
+}
+
+// WithPersonality wires the Matrix personality layer (AS-053) so the chrome can
+// consult the effective flavor intensity, role display-names, and the /serious
+// kill switch — the inputs to the digital rain, idle phrases, logo glitch-in, and
+// "Mr. Anderson" naming (AS-126). The face renders all of that as chrome only and
+// never over substance. A nil personality (the default) keeps the plain splash.
+func WithPersonality(p *personality.Personality) Option {
+	return func(a *App) { a.pers = p }
 }
 
 // WithCommandRefresh wires a callback the face runs as the command palette opens,
@@ -192,6 +203,11 @@ func (a *App) Observer() loop.Observer {
 // text selection/copy keeps working (docs/project/TUI-UX.md D-TUI-12).
 func (a *App) Run(runner Runner) error {
 	m := newModel(runner, a.meta, a.events, newMarkdownRenderer, a.commands, a.meter, a.splash, a.rehydrate, a.refresh, a.workingLine)
+	m.pers = a.pers
+	// Arm the one-shot logo glitch-in here, not in Init: Init's value receiver means
+	// any field it sets is discarded, so the flag must be live on the model handed
+	// to tea.NewProgram (AS-126 §5). glitchClear (issued by Init) ends it.
+	m.glitch = m.rainConfigured()
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	a.mu.Lock()
 	a.prog = p

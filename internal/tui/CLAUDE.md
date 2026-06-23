@@ -32,8 +32,11 @@ they apply to every TUI task.
    plain.** `/serious` mutes the entire layer instantly (plain names, no rain, no
    phrases).
 
-4. **Intensity dial:** `subtle` (default) → `medium` → `bold`, additive. Ship `subtle`
-   by default. Definitions in the spec.
+4. **Intensity dial:** `subtle` → `medium` (default) → `bold`, additive. Ship `medium`
+   by default (AS-126 decision: the phosphor rain on splash/idle is the signature demo
+   moment and is instantly reversible via `/serious`). `subtle` is phosphor colours only;
+   `medium` adds digital rain on idle/splash, idle phrases, Matrix names, and the logo
+   glitch-in; `bold` layers on scanlines/CRT sweep. Definitions in the spec.
 
 5. **Liveliness = feedback, not decoration.** Every spinner, pulse, and typewriter
    effect must map to real state (a running tool, streaming tokens, an active subagent).

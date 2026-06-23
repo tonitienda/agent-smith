@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/personality"
 )
 
 // inputHeight is the fixed height of the multi-line input editor; statusHeight is
@@ -125,6 +127,18 @@ type model struct {
 	// splash controls whether the startup header renders atop the transcript;
 	// --no-splash and serious mode clear it (D-TUI-10).
 	splash bool
+	// pers is the Matrix personality layer (AS-053), consulted for the effective
+	// flavor intensity, role display-names, and the /serious kill switch that drive
+	// the chrome-only rain/glitch (AS-126). nil disables all of it (tests, muted
+	// themes), so the face degrades to the plain splash. Importing the flavor
+	// package here is sound: the TUI is chrome, and the substance paths are guarded
+	// against importing it by internal/personality/no_business_imports_test.go.
+	pers *personality.Personality
+	// rain is the live digital-rain background composited behind the empty-state
+	// splash at medium+ intensity (AS-126); nil when muted or not yet sized. glitch
+	// is the one-shot logo glitch-in shown for the first ~80ms after launch.
+	rain   *rain
+	glitch bool
 	// expandTools, when set, shows tool results in full rather than a preview; the
 	// leader chord Ctrl+G then t toggles it (AS-024 AC1).
 	expandTools bool
@@ -201,7 +215,51 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(textarea.Blink, waitForEvent(m.events))
+	cmds := []tea.Cmd{textarea.Blink, waitForEvent(m.events)}
+	if m.rainConfigured() {
+		// The rain ticker runs while the transcript is empty; the handler gates the
+		// actual animation on rainActive() so /serious pauses and resumes it without
+		// a restart. The one-shot logo glitch-in (m.glitch, set at construction) is
+		// cleared after a single frame. Init's receiver is a value, so the flag is
+		// set in App.Run, not here.
+		cmds = append(cmds, rainTick(), glitchClear())
+	}
+	return tea.Batch(cmds...)
+}
+
+// rainConfigured reports whether the personality is themed at medium+ intensity,
+// the prerequisite for any rain/glitch chrome (independent of serious mode, which
+// is checked per-frame so the ticker can pause and resume).
+func (m model) rainConfigured() bool {
+	return m.pers != nil && m.pers.Intensity() >= personality.IntensityMedium
+}
+
+// rainActive reports whether the rain should animate right now: configured, the
+// transcript still empty, no turn running, and the input empty — so it never
+// overlays content and stops the instant the user types or a turn begins (AS-126).
+func (m model) rainActive() bool {
+	return m.rainConfigured() && !m.busy && len(m.segs) == 0 &&
+		strings.TrimSpace(m.textarea.Value()) == ""
+}
+
+// ensureRain lazily builds (or rebuilds on a size change) the rain sized to the
+// transcript viewport. Seeded from the clock so successive launches differ.
+func (m *model) ensureRain() {
+	w, h := m.viewport.Width, m.viewport.Height
+	if w < 1 || h < 1 {
+		return
+	}
+	if m.rain == nil || m.rain.w != w || m.rain.h != h {
+		m.rain = newRain(w, h, time.Now().UnixNano())
+	}
+}
+
+// glitchClearMsg ends the one-shot startup logo glitch-in.
+type glitchClearMsg struct{}
+
+// glitchClear schedules the end of the logo glitch-in (~80ms, one frame).
+func glitchClear() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return glitchClearMsg{} })
 }
 
 // waitForEvent blocks on the next loop event and re-arms itself, so loop
@@ -254,6 +312,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// for it, so submitText supplies the user segment.
 		if msg.err == nil && msg.out.Prompt != "" {
 			return m.submitText(msg.out.Prompt)
+		}
+		return m, nil
+
+	case rainTickMsg:
+		// Retire the rain once the first turn lands — the transcript will never be
+		// empty again, so stop re-arming the ticker.
+		if len(m.segs) != 0 {
+			m.rain = nil
+			return m, nil
+		}
+		if m.rainActive() {
+			m.ensureRain()
+			m.rain.tick()
+			m.refresh()
+		} else {
+			m.rain = nil // muted (/serious) or input non-empty: drain and go quiet
+		}
+		return m, rainTick()
+
+	case glitchClearMsg:
+		if m.glitch {
+			m.glitch = false
+			m.refresh()
 		}
 		return m, nil
 
