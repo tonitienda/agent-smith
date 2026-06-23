@@ -41,8 +41,8 @@ Declare one `lipgloss.Color` per token (or `lipgloss.AdaptiveColor` for fallback
 | `ColorNeutral` | `#9fb4a3` | `145` |
 | `ColorMid` | `#7d9a84` | `108` |
 | `ColorMuted` | `#5f7a66` | `65` |
-| `ColorDim` | `#38503f` | `238` |
-| `ColorDimmest` | `#4f6a57` | `241` |
+| `ColorDim` | `#4f6a57` | `241` |
+| `ColorDimmest` | `#38503f` | `238` |
 | `ColorAmberBright` | `#ffb000` | `214` |
 | `ColorAmberMuted` | `#caa24a` | `179` |
 | `BgScreen` | `#0a0e0b` | `232` |
@@ -60,7 +60,31 @@ Declare one `lipgloss.Color` per token (or `lipgloss.AdaptiveColor` for fallback
 Build named `lipgloss.Style` variables for every semantic role (§3 of the spec):
 `StyleUser`, `StyleAssistant`, `StyleThinking`, `StyleToolName`, `StyleToolArgs`,
 `StyleToolOutput`, `StyleSuccess`, `StyleRunning`, `StyleSlashCommand`, `StyleFilePath`,
-`StyleGoal`, `StyleCost`, `StyleError`, `StyleDim`, `StyleBanner`.
+`StyleGoal`, `StyleCost`, `StyleError`, `StyleNeutral`, `StyleMuted`, `StyleDim`,
+`StyleBanner`. (`StyleNeutral` = `ColorNeutral`, `StyleMuted` = `ColorMuted`; both are
+relied on by AS-122/124/125/127/128/129/130/131, so they must exist here.)
+
+`ColorDim` is the *brighter* dim and `ColorDimmest` the darkest — the green fade ramp
+used by AS-126 (rain trail) and AS-131 (histogram) reads `ColorCommand → ColorNeutral
+→ ColorMuted → ColorDim → ColorDimmest`, so the values must stay monotonically darker
+in that order.
+
+### Downstream-token rule (applies to AS-122/125/128/129/130)
+
+Later tickets reference extra hexes (divider, mode-bar accents, diff backgrounds, etc.).
+Those are **not** allowed as inline literals: each must be added as a named token to
+`colors.go` by the ticket that needs it. AS-121's "no raw hex outside `colors.go`"
+acceptance criterion holds for the whole `internal/tui/` tree, permanently.
+
+### Tick strategy (shared contract for AS-122/123/124/125/126/130)
+
+There is no single `tea.Tick` that all animations can reuse — caret blink (525 ms),
+typewriter (40 ms), rain (~60 ms), spinner (the existing bubbles `spinner.TickMsg` in
+`model.go`, ~110 ms), and pulses (~1.2 s) have incompatible periods. Pick one of:
+fan out distinct `tea.Tick`s per cadence, **or** run one fast master tick (e.g. 40 ms)
+and derive slower effects from a frame counter. Downstream tickets that say "reuse the
+same tick" mean "do not add a redundant ticker for the same cadence" — they do not imply
+one global period. State the chosen approach here when AS-121 lands.
 
 ### 2. Migrate all call sites
 

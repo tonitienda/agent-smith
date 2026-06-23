@@ -37,8 +37,9 @@ typingIdx  int      // how many have been revealed so far
 typingTick bool     // true when a Tick is scheduled
 ```
 
-When a streaming token arrives (`loop.UIEventToken` or equivalent), instead of directly
-appending to the transcript block, push the runes into `typingBuf`.
+When a streaming token arrives (`loop.UITextDelta`, with `Text` carrying the fragment;
+reasoning uses `loop.UIReasoningDelta` — see `internal/loop/event.go`), instead of
+directly appending to the transcript block, push the runes into `typingBuf`.
 
 ### Tick-driven reveal
 
@@ -48,7 +49,7 @@ appending to the transcript block, push the runes into `typingBuf`.
 - If `typingBuf` fills faster than reveals (fast network, slow terminal), cap the drip at
   one rune per tick — never skip ahead. The user should feel a consistent typing cadence
   regardless of network speed.
-- When the stream ends (`loop.UIEventTurnDone` / equivalent), flush remaining
+- When the stream ends (`loop.UITurnComplete`), flush remaining
   `typingBuf` immediately so the full text appears without waiting for remaining ticks.
   This prevents the cursor hanging on finished content.
 

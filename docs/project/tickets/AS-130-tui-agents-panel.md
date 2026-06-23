@@ -66,6 +66,11 @@ Running agent's name row: `ColorFgDefault`. Done/queued: `StyleMuted`.
 - Status summary in `StyleNeutral`.
 - `saved ~Ns vs. serial` right-aligned in `StyleGoal`.
 
+Flavor wording (the operator glyph, and any "fleet"/Matrix label for the sub-agents) is
+chrome: gate it on `personality` intensity/serious and pull entity names from
+`Personality.Name(personality.RoleSystemSubagents)` rather than hardcoding — same rule as
+AS-126. The plain fallback (`sub-agents`, no glyph) must show under serious/`subtle`.
+
 ### Pulse tick
 
 Reuse the existing model tick (same source as the rain tick from AS-126 / spinner from

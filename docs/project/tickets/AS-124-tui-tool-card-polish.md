@@ -61,8 +61,10 @@ box with `border` set to the left-only `│` in `ColorBorderActive`. When done, 
 
 ### Spinner tick
 
-- Reuse the existing spinner tick if one is already in the model (the status-line spinner
-  from AS-025). Drive both from the same tick source; don't add a second ticker.
+- The model already drives a bubbles `spinner.TickMsg` (see `model.go:260`). Reuse that
+  tick source for the card spinner; don't add a second ticker (see the AS-121 tick
+  contract). Define the glyph cycle once as a shared constant and reference it from any
+  other ticket that draws a braille spinner (AS-125, AS-130).
 - Cycle: `⣾ ⣽ ⣻ ⢿ ⣿ ⡿ ⣟ ⣯`, frame rate ~110 ms.
 
 ## Acceptance criteria

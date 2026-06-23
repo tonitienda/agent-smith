@@ -26,12 +26,26 @@ chrome-only surfaces. The visual effects themselves — digital rain columns, id
 `Mr. Anderson` naming, glitch-in on the logo — are **not yet rendered**. This ticket
 builds them.
 
-## What to build
+## Reconcile with the existing `internal/personality` package
+
+AS-053 already shipped `internal/personality/personality.go` with a *string* intensity
+of `full | subtle` (`subtle` = status/loading lines only, no renaming), the
+`/serious` kill switch (`ToggleSerious`), `RoleSystemSubagents → "Agents"`, and its own
+`matrixStatusLines`. This ticket must **extend that package, not fork it** — do not
+declare a parallel `Intensity` type in `internal/tui/`. Concretely:
+
+- Widen `personality.Settings.Intensity` to the three-value set `subtle | medium | bold`
+  (additively — keep `full` as an accepted alias for `medium` so existing config still
+  parses, PRD D2). Default resolves to `medium`.
+- Map the existing `subtle bool` field onto the new enum; `medium`/`bold` are the
+  flavor-on intensities. Renaming (Matrix names) stays gated to `medium`/`bold`, matching
+  today's `!subtle` check.
+- The rain, idle phrases, glitch-in, scanlines etc. are *render-side* concerns: the
+  personality package answers "which intensity / is serious" and owns the flavor strings;
+  the rain animation itself lives in the chrome render path (`internal/tui`), which is
+  already allowed to import `personality`.
 
 ### 1. Intensity enum + config
-
-In `internal/tui/` (or a new `internal/personality/` package that the arch test allows
-to touch only chrome):
 
 ```go
 type Intensity int
@@ -42,11 +56,13 @@ const (
 )
 ```
 
+- Declare this enum in `internal/personality` and resolve `Settings.Intensity` to it.
 - Default: `IntensityMedium`.
-- `/serious` sets `serious bool` to `true`; while true, render as if `IntensitySubtle`
-  with plain names (`you`, `smith`, `sub-agents`). `/serious` again toggles it back.
-- Config key `tui.intensity: subtle|medium|bold` (AS-031 layered config); runtime
-  override via `--intensity` flag.
+- `/serious` calls the existing `ToggleSerious`; while serious, render as if
+  `IntensitySubtle` with plain names (`you`, `smith`, `sub-agents`).
+- Config key `personality.intensity: subtle|medium|bold` (AS-031 layered config; this is
+  the existing `personality` section, not a new `tui` one); runtime override via
+  `--intensity` flag.
 
 ### 2. Digital rain (medium + bold, idle/splash only)
 
@@ -87,7 +103,9 @@ and invite text using Lipgloss `Place` or manual row-by-row rendering. The foreg
 ### 3. Idle phrases (medium + bold)
 
 While the input is empty and no turn is running, cycle a rotating one-liner in `StyleMuted`
-below the invite text. Swap every ~3 s:
+below the invite text. Swap every ~3 s. **Source these from the existing
+`matrixStatusLines` in `personality.go`** (add any of the phrases below that are missing
+rather than maintaining a second list):
 
 ```
 following the white rabbit…
@@ -98,18 +116,23 @@ free your mind.
 what is real?
 ```
 
-Plain English; no themed phrases when serious is on.
+Plain English; no themed phrases when serious is on. The rotation is already implemented
+by `Personality.StatusLine()` (clock-bucketed, stateless) — reuse it; don't reinvent.
 
 ### 4. `Mr. Anderson` naming in chrome (medium + bold)
 
-In chrome-only surfaces (status line, mode bar, splash header context line):
-- User display name: `Mr. Anderson` → replace `you` in the status line working-line.
-- Sub-agents display label: `agents` → `the fleet`.
-- Serious mode: revert to plain (`you`, `agents`).
+The name map already exists in `personality.go` (`matrixNames`): `RoleUser → "Mr.
+Anderson"`, `RoleSystemSubagents → "Agents"`, etc. **Use `Personality.Name(role)` for
+every chrome display-name** — do not hardcode substitutions in the render path. If a
+label should change (e.g. sub-agents reading as "the fleet" rather than "Agents"), edit
+`matrixNames`/`plainNames` in `personality.go` so the one map stays the source of truth;
+this ticket's default keeps the shipped `"Agents"` unless the design explicitly changes
+it.
 
-These substitutions must live entirely in the `workingLine` / chrome rendering path and
-must **not** touch transcript message bodies, tool names, or any substance surface.
-The existing arch test (AS-053) should already guard this; extend it if needed.
+Names render only at `medium`/`bold`; serious mode and `subtle` fall back to `plainNames`
+(`you`, `sub-agents`) — already handled by `Name()`. The arch test
+(`internal/personality/no_business_imports_test.go`) already guards that no substance
+path imports this package; extend it if you add new chrome callers.
 
 ### 5. Subtle logo glitch-in (medium only)
 
