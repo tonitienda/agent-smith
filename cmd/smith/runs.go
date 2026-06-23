@@ -238,50 +238,59 @@ func runsWork(c *cli.Context) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	// Snapshot the queue once — store.List re-reads and parses the whole run
+	// directory, so calling it per run would be O(N^2) disk I/O. List is
+	// newest-first, so iterate backwards to drain FIFO (oldest first). A run
+	// enqueued after this snapshot is picked up by the next `runs work`.
+	recs, err := store.List()
+	if err != nil {
+		return err
+	}
 	var processed []runView
-	for {
-		rec, ok, err := nextQueued(store)
+	for i := len(recs) - 1; i >= 0; i-- {
+		rec := recs[i]
+		if rec.Status != run.StatusQueued {
+			continue
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		rec, err = workOne(ctx, c.Globals.Config, store, wd, rec, c.Stderr)
 		if err != nil {
+			// A bookkeeping write failed (full disk, permissions): stop rather than
+			// loop forever on a run whose on-disk status never advanced.
 			return err
 		}
-		if !ok {
-			break
-		}
-		if ctx.Err() != nil {
-			break
-		}
-		rec = workOne(ctx, store, wd, rec, c.Stderr)
 		processed = append(processed, runViewOf(rec))
-		if ctx.Err() != nil {
-			break
-		}
 	}
 	return emitProcessed(c, processed)
 }
 
-// workOne executes a single claimed run and persists its outcome. Transient
-// provider/network failures are already retried inside the turn by the loop's
-// backoff policy (AS-018), so a provider error here is terminal — recorded as a
-// failure, recoverable by `runs resume`. The returned record is the final state.
-func workOne(ctx context.Context, store *run.Store, wd string, rec run.Record, stderr io.Writer) run.Record {
+// workOne executes a single claimed run and persists its outcome. configOverride
+// is the worker's --config path, threaded into the execution core so a queued run
+// honors the same custom model/provider/pricing the worker was invoked with.
+// Transient provider/network failures are already retried inside the turn by the
+// loop's backoff policy (AS-018), so a provider error here is terminal — recorded
+// as a failure, recoverable by `runs resume`. A non-nil error means a record write
+// failed (the on-disk status may be stale); the caller stops the worker.
+func workOne(ctx context.Context, configOverride string, store *run.Store, wd string, rec run.Record, stderr io.Writer) (run.Record, error) {
 	now := time.Now().UTC()
 	rec.Status = run.StatusRunning
 	rec.StartedAt = &now
 	if err := store.Save(rec); err != nil {
-		// A bookkeeping failure is fatal to this run; record best-effort and stop.
-		rec.Status = run.StatusFailed
-		rec.Error = err.Error()
-		return rec
+		return rec, fmt.Errorf("save running status for %s: %w", rec.ID, err)
 	}
 
-	out, setupErr := executeRun(ctx, "", wd, rec.Prompt, headlessOpts{budgetUSD: rec.BudgetUSD, auto: rec.Auto}, nil, stderr)
+	out, setupErr := executeRun(ctx, configOverride, wd, rec.Prompt, headlessOpts{budgetUSD: rec.BudgetUSD, auto: rec.Auto}, nil, stderr)
 	fin := time.Now().UTC()
 	rec.FinishedAt = &fin
 	if setupErr != nil {
 		rec.Status = run.StatusFailed
 		rec.Error = setupErr.Error()
-		_ = store.Save(rec)
-		return rec
+		if err := store.Save(rec); err != nil {
+			return rec, fmt.Errorf("save setup-failure status for %s: %w", rec.ID, err)
+		}
+		return rec, nil
 	}
 
 	code, reason := classifyExit(out.res, out.runErr, out.denied)
@@ -291,8 +300,10 @@ func workOne(ctx context.Context, store *run.Store, wd string, rec run.Record, s
 	rec.ExitCode = code
 	rec.Error = reason
 	rec.Status = statusFromExit(code)
-	_ = store.Save(rec)
-	return rec
+	if err := store.Save(rec); err != nil {
+		return rec, fmt.Errorf("save final status for %s: %w", rec.ID, err)
+	}
+	return rec, nil
 }
 
 // statusFromExit maps the headless exit-code taxonomy (D-CLI-7) to a durable run
@@ -333,27 +344,6 @@ func reclaimStale(store *run.Store) error {
 		}
 	}
 	return nil
-}
-
-// nextQueued returns the oldest queued run (FIFO by creation), reloading the store
-// each call so it sees records a retry re-queued. ok is false when none remain.
-func nextQueued(store *run.Store) (run.Record, bool, error) {
-	recs, err := store.List()
-	if err != nil {
-		return run.Record{}, false, err
-	}
-	var oldest run.Record
-	found := false
-	for _, rec := range recs {
-		if rec.Status != run.StatusQueued {
-			continue
-		}
-		if !found || rec.CreatedAt.Before(oldest.CreatedAt) {
-			oldest = rec
-			found = true
-		}
-	}
-	return oldest, found, nil
 }
 
 // emitProcessed renders the worker's batch result: a JSON object listing the
@@ -398,16 +388,15 @@ func formatRecord(rec run.Record) string {
 	return b.String()
 }
 
-// oneLine collapses a multi-line prompt to a single trimmed line for table/summary
-// rendering, truncating long prompts so a row stays readable.
+// oneLine collapses a prompt's whitespace runs to single spaces for table/summary
+// rendering, truncating long prompts so a row stays readable. Truncation is by
+// rune, not byte, so a multi-byte character is never split into invalid UTF-8.
 func oneLine(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\t", " "))
-	for strings.Contains(s, "  ") {
-		s = strings.ReplaceAll(s, "  ", " ")
-	}
+	s = strings.Join(strings.Fields(s), " ")
 	const max = 60
-	if len(s) > max {
-		return s[:max-1] + "…"
+	runes := []rune(s)
+	if len(runes) > max {
+		return string(runes[:max-1]) + "…"
 	}
 	return s
 }

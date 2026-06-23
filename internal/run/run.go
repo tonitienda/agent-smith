@@ -179,8 +179,12 @@ func (s *Store) List() ([]Record, error) {
 		if !e.IsDir() || !safeID(e.Name()) {
 			continue
 		}
+		// The runs directory is already uniquely scoped to this project by the
+		// SHA-256 projectKey, so no secondary ProjectPath comparison is needed — and
+		// a strict string compare would fragilely skip valid runs when the project is
+		// reached via a different symlink/case path than the one on the record.
 		rec, err := readRecord(filepath.Join(s.RunsDir(), e.Name(), recordFile))
-		if err != nil || rec.ProjectPath != s.projectDir {
+		if err != nil {
 			continue
 		}
 		out = append(out, rec)
@@ -259,15 +263,13 @@ func syncDirBestEffort(dir string) error {
 	if err != nil {
 		return fmt.Errorf("run: open dir for sync: %w", err)
 	}
-	// A directory fsync is unsupported on some filesystems; ignore that case the
-	// way the session store does, but surface real errors.
-	syncErr := d.Sync()
-	closeErr := d.Close()
-	if syncErr != nil && !errors.Is(syncErr, os.ErrInvalid) {
-		return errors.Join(fmt.Errorf("run: sync dir: %w", syncErr), closeErr)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("run: close dir after sync: %w", closeErr)
+	// A directory fsync is unsupported or behaves differently on several
+	// filesystems (NFS, WSL, virtual FSes) and may return ENOTSUP/EINVAL. The
+	// record file is already written, synced, and renamed, so the data is durable;
+	// treat the dir sync as strictly best-effort rather than failing Save.
+	_ = d.Sync()
+	if err := d.Close(); err != nil {
+		return fmt.Errorf("run: close dir after sync: %w", err)
 	}
 	return nil
 }
