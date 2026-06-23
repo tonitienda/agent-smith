@@ -1,0 +1,265 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-smith.dev/schema/agent-smith.blocks.v1.json",
+  "title": "Agent Smith content-block schema (v1)",
+  "description": "Language-neutral contract for the immutable content-block substrate (PRD D1/D3). Reference implementation: the Go package `schema` (AS-003). ADDITIVE-ONLY (PRD D2): this schema deliberately leaves `additionalProperties` open and treats every `enum`/`kind`/`stop_reason` as NON-EXHAUSTIVE so a document written by a newer, additively-evolved version still validates (consumers tolerate missing and unknown). It enforces only the constraints that are invariant forever: the five required envelope keys, the body required keys on a KNOWN `kind`, and the types of known fields. See docs/schema/README.md.",
+  "$ref": "#/$defs/Document",
+  "$defs": {
+    "Document": {
+      "type": "object",
+      "required": ["schema", "schema_version", "blocks"],
+      "properties": {
+        "schema": { "type": "string" },
+        "schema_version": { "type": "string" },
+        "blocks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Block" }
+        },
+        "ext": { "type": "object" }
+      }
+    },
+    "Block": {
+      "type": "object",
+      "description": "One immutable event on the append-only log: a shared envelope plus exactly one typed body matching `kind`.",
+      "required": ["id", "kind", "seq", "ts", "role"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "description": "Discriminates the body. Known values: text, tool_call, tool_result, file_read, reasoning, compaction, fallback. NON-EXHAUSTIVE: an unknown kind is a valid additive evolution and is accepted (no body constraint applied)."
+        },
+        "seq": { "type": "integer" },
+        "ts": { "type": "string", "format": "date-time" },
+        "role": {
+          "type": "string",
+          "description": "Known values: user, assistant, system, tool, harness. NON-EXHAUSTIVE."
+        },
+        "stop_reason": { "type": "string" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "provider": { "$ref": "#/$defs/Provider" },
+        "thread": { "$ref": "#/$defs/Thread" },
+        "attribution": { "$ref": "#/$defs/Attribution" },
+        "tokens": { "$ref": "#/$defs/Tokens" },
+        "cost_usd": { "type": "number" },
+        "usage_meta": { "$ref": "#/$defs/UsageMeta" },
+        "cache": { "$ref": "#/$defs/Cache" },
+        "excluded_by": { "type": "array", "items": { "type": "string" } },
+        "ext": { "type": "object" },
+        "text": { "$ref": "#/$defs/TextBody" },
+        "tool_call": { "$ref": "#/$defs/ToolCallBody" },
+        "tool_result": { "$ref": "#/$defs/ToolResultBody" },
+        "file_read": { "$ref": "#/$defs/FileReadBody" },
+        "reasoning": { "$ref": "#/$defs/ReasoningBody" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "text" } } },
+          "then": { "required": ["text"] }
+        },
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "tool_call" } } },
+          "then": { "required": ["tool_call"] }
+        },
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "tool_result" } } },
+          "then": { "required": ["tool_result"] }
+        },
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "file_read" } } },
+          "then": { "required": ["file_read"] }
+        },
+        {
+          "if": { "required": ["kind"], "properties": { "kind": { "const": "reasoning" } } },
+          "then": { "required": ["reasoning"] }
+        }
+      ]
+    },
+    "TextBody": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "subtype": { "type": "string" },
+        "parts": { "type": "array", "items": { "$ref": "#/$defs/Part" } },
+        "citations": { "type": "array", "items": { "$ref": "#/$defs/Citation" } },
+        "annotations": { "type": "array" },
+        "ext": { "type": "object" }
+      }
+    },
+    "ToolCallBody": {
+      "type": "object",
+      "required": ["tool_use_id", "name"],
+      "properties": {
+        "tool_use_id": { "type": "string" },
+        "name": { "type": "string" },
+        "arguments": {},
+        "arguments_raw": { "type": "string" },
+        "tool_kind": { "type": "string" },
+        "tool_subtype": { "type": "string" },
+        "parallel_group": { "type": "string" },
+        "mcp_server": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "ToolResultBody": {
+      "type": "object",
+      "required": ["tool_use_id"],
+      "properties": {
+        "tool_use_id": { "type": "string" },
+        "content": { "type": "array", "items": { "$ref": "#/$defs/Part" } },
+        "is_error": { "type": "boolean" },
+        "citations": { "type": "array", "items": { "$ref": "#/$defs/Citation" } },
+        "exit_code": { "type": "integer" },
+        "stdout": { "type": "string" },
+        "stderr": { "type": "string" },
+        "structured_content": {},
+        "truncated": { "type": "boolean" },
+        "offload_ref": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "FileReadBody": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string" },
+        "range": { "$ref": "#/$defs/LineRange" },
+        "content": { "type": "string" },
+        "content_hash": { "type": "string" },
+        "offload_ref": { "type": "string" },
+        "error": { "type": "string" },
+        "produced_by": { "type": "string" },
+        "media_type": { "type": "string" },
+        "source": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "ReasoningBody": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "summary": { "type": "array", "items": { "type": "string" } },
+        "encrypted": { "type": "string" },
+        "signature": { "type": "string" },
+        "redacted": { "type": "boolean" },
+        "replay_scope": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Part": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string" },
+        "media_type": { "type": "string" },
+        "text": { "type": "string" },
+        "url": { "type": "string" },
+        "data": { "type": "string" },
+        "offload_ref": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Citation": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "cited_text": { "type": "string" },
+        "source": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "producer": { "type": "string" },
+        "request_id": { "type": "string" },
+        "response_id": { "type": "string" },
+        "turn_id": { "type": "string" },
+        "derived_from": { "type": "array", "items": { "type": "string" } },
+        "ext": { "type": "object" }
+      }
+    },
+    "Provider": {
+      "type": "object",
+      "properties": {
+        "vendor": { "type": "string" },
+        "surface": { "type": "string" },
+        "model": { "type": "string" },
+        "native_type": { "type": "string" },
+        "native_id": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Thread": {
+      "type": "object",
+      "properties": {
+        "thread_id": { "type": "string" },
+        "parent_block_id": { "type": "string" },
+        "parent_thread_id": { "type": "string" },
+        "agent_id": { "type": "string" },
+        "is_sidechain": { "type": "boolean" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Attribution": {
+      "type": "object",
+      "properties": {
+        "skill": { "type": "string" },
+        "mcp_server": { "type": "string" },
+        "mcp_tool": { "type": "string" },
+        "tool": { "type": "string" },
+        "hook": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "Tokens": {
+      "type": "object",
+      "properties": {
+        "input": { "type": "integer", "minimum": 0 },
+        "output": { "type": "integer", "minimum": 0 },
+        "cache_read": { "type": "integer", "minimum": 0 },
+        "cache_write": { "type": "integer", "minimum": 0 },
+        "reasoning": { "type": "integer", "minimum": 0 },
+        "cache_write_5m": { "type": "integer", "minimum": 0 },
+        "cache_write_1h": { "type": "integer", "minimum": 0 },
+        "iterations": { "type": "array", "items": { "$ref": "#/$defs/Tokens" } },
+        "ext": { "type": "object" }
+      }
+    },
+    "UsageMeta": {
+      "type": "object",
+      "properties": {
+        "service_tier": { "type": "string" },
+        "speed": { "type": "string" },
+        "server_tool_use": {},
+        "ext": { "type": "object" }
+      }
+    },
+    "Cache": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string" },
+        "breakpoints": { "type": "array", "items": { "$ref": "#/$defs/CacheBreakpoint" } },
+        "ttl": { "type": "string" },
+        "ext": { "type": "object" }
+      }
+    },
+    "CacheBreakpoint": {
+      "type": "object",
+      "properties": {
+        "block_id": { "type": "string" },
+        "ttl": { "type": "string" }
+      }
+    },
+    "LineRange": {
+      "type": "object",
+      "properties": {
+        "start_line": { "type": "integer" },
+        "end_line": { "type": "integer" },
+        "start_byte": { "type": "integer" },
+        "end_byte": { "type": "integer" }
+      }
+    }
+  }
+}

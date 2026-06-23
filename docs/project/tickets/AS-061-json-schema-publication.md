@@ -1,7 +1,7 @@
 ---
 id: AS-061
 title: "Publish the block schema as JSON Schema (language-neutral contract + Go↔schema divergence guard)"
-status: ready-to-implement
+status: done
 github_issue: 70
 depends_on: [AS-003, AS-004, AS-060]
 area: schema
@@ -11,7 +11,7 @@ source: PRD.md D1, D2, D4; docs/design/block-schema-union.md §15
 
 # AS-061 · Publish the block schema as JSON Schema
 
-**Status: ready to implement** — but deliberately scheduled for the **V1-freeze window**, not now (see Timing).
+**Status: done** — V1 (AS-001…AS-030) has shipped, so the schema is frozen/additive-only and this landed in the V1-freeze window as planned. Implemented as the hand-authored JSON Schema [`docs/schema/block.schema.json`](../../schema/block.schema.json) (draft 2020-12), documented in [`docs/schema/README.md`](../../schema/README.md), and guarded by the stdlib-only validator [`internal/schemajson`](../../../internal/schemajson) whose tests (run by `go test ./...`/CI) validate every Go-marshaled document + golden corpus, accept forward-compat documents (unknown fields/kind), and reject a curated invalid corpus. The AS-060 real-capture pass remains open but cannot break this artifact: any deltas it promotes are additive optionals that the open `additionalProperties` already tolerates.
 
 ## Description
 
