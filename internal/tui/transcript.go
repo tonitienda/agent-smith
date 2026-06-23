@@ -480,23 +480,23 @@ func truncate(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-// Styles for transcript roles and the status bar. Colors are ANSI-256 so they
-// degrade gracefully across terminals; the Matrix personality layer (AS-053)
-// will own richer theming.
+// Styles for transcript roles and the status bar. All colors come from the
+// phosphor token table in colors.go (no raw hex here); the Matrix personality
+// layer (AS-053) owns richer theming on top.
 var (
-	userLabelStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	assistantLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	reasoningLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8"))
-	toolLabelStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("11"))
-	commandLabelStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-	dimStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	bannerStyle         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	statusBarStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8"))
+	userLabelStyle      = StyleUser
+	assistantLabelStyle = StyleAssistant
+	reasoningLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorMuted)
+	toolLabelStyle      = StyleToolName
+	commandLabelStyle   = StyleSlashCommand.Bold(true)
+	errorStyle          = StyleError
+	dimStyle            = StyleDim
+	bannerStyle         = StyleBanner
+	statusBarStyle      = lipgloss.NewStyle().Foreground(ColorFgDefault).Background(BgStatusLine)
 	// modeBarStyle dresses the pinned Coding Mode phase tracker (AS-073) in a
 	// distinct color from the status bar so entering the mode reads as crossing a
 	// threshold (D-CODE-4), not just another status row.
-	modeBarStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("6"))
+	modeBarStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorFgDefault).Background(BgModeBar)
 )
 
 // lipglossWidth reports the rendered cell width of s, ignoring style escapes.

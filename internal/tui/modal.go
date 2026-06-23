@@ -124,9 +124,9 @@ func (m model) modalView() string {
 // Modal styles: a severe red border and reverse-video selected button so a
 // destructive prompt can't be glossed over.
 var (
-	modalBoxStyle       = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("9")).Padding(0, 2)
-	modalTitleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
-	modalDetailStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	modalChoiceStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("7")).Padding(0, 1)
-	modalChoiceSelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("9")).Padding(0, 1)
+	modalBoxStyle       = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(ColorDiffRemovedText).Padding(0, 2)
+	modalTitleStyle     = lipgloss.NewStyle().Bold(true).Foreground(ColorDiffRemovedText)
+	modalDetailStyle    = lipgloss.NewStyle().Foreground(ColorFgDefault)
+	modalChoiceStyle    = lipgloss.NewStyle().Foreground(ColorNeutral).Padding(0, 1)
+	modalChoiceSelStyle = lipgloss.NewStyle().Bold(true).Foreground(BgScreen).Background(ColorDiffRemovedText).Padding(0, 1)
 )

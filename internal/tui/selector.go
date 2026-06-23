@@ -217,4 +217,4 @@ func (m model) selectorFooter() string {
 
 // selectorCheckedStyle marks a selected (but not cursored) row so the staged
 // selection reads at a glance without the reverse-video cursor highlight.
-var selectorCheckedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+var selectorCheckedStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorCommand)

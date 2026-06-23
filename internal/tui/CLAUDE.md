@@ -12,7 +12,8 @@ they apply to every TUI task.
 ## Non-negotiable invariants
 
 1. **Palette is fixed — green + amber phosphor.** Define colors once as named lipgloss
-   styles; never sprinkle raw hex at call sites. Core tokens:
+   styles; never sprinkle raw hex at call sites. `colors.go` is the single token
+   source (AS-121) — add new hues there, never inline. Core tokens:
    - brand / assistant green `#00ff66` · success `#00cc52` · command + bright `#7dffa8`
      · muted `#5f7a66` · neutral text `#9fb4a3`
    - user / warning amber `#ffb000` · goal + working `#caa24a`

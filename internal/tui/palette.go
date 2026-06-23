@@ -383,8 +383,9 @@ func (m model) panelFooter() string {
 	return statusBarStyle.Render(fmt.Sprintf("/%s — esc or q to close · ↑/↓ to scroll", m.panelTitle))
 }
 
-// Palette styles. The selected row is reverse-video so it reads at a glance.
+// Palette styles. The selected row fills with the mode-bar green and the matched
+// command name reads in command-green so it stands out at a glance (§7.6).
 var (
-	paletteItemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
-	paletteSelStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("0")).Background(lipgloss.Color("14"))
+	paletteItemStyle = StyleNeutral
+	paletteSelStyle  = lipgloss.NewStyle().Bold(true).Foreground(ColorCommand).Background(BgModeBar)
 )
