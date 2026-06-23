@@ -62,7 +62,7 @@ source: PRD.md §7.22, §3 (Async Ana)
   machine-readable JSON under `--output json`.
 - **Deferred (documented, not silent):** recurring schedules are delegated to
   cron/CI; a long-running worker daemon + concurrency > 1 is spun out as a
-  follow-on (AS-121); webhooks/desktop notifications remain deferred per the
+  follow-on (AS-132); webhooks/desktop notifications remain deferred per the
   clarified decisions above.
 
 ## Dependencies

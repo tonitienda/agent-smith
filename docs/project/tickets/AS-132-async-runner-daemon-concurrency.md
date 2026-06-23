@@ -1,5 +1,5 @@
 ---
-id: AS-121
+id: AS-132
 title: Background runner daemon + worker concurrency (spun out of AS-054)
 status: ready-to-implement
 github_issue: null
@@ -9,7 +9,7 @@ priority: P2
 source: PRD.md §7.22; AS-054 clarified decisions
 ---
 
-# AS-121 · Background runner daemon + worker concurrency
+# AS-132 · Background runner daemon + worker concurrency
 
 **Status: ready to implement**
 
