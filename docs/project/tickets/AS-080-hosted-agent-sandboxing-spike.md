@@ -1,7 +1,7 @@
 ---
 id: AS-080
 title: "Spike: hosted multi-tenant live-agent sandboxing"
-status: ready-to-implement
+status: done
 github_issue: 135
 depends_on: [AS-077, AS-059]
 area: security
@@ -11,7 +11,20 @@ source: PRD.md §9, D9, §10 Q12; GUI grilling session 2026-06
 
 # AS-080 · Spike — hosting a live agent for strangers
 
-**Status: ready to implement (spike)**
+**Status: done — recommendation written; closed in favour of AS-079.**
+
+## Resolution
+
+Spike delivered: [docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md).
+Recommendation — **do not host a live, stranger-driven agent**; `smith serve`
+(AS-077/078) is supported for **local** use only, and the public web demo is the
+read-only inspector (AS-079). Hosting strangers is multi-tenant arbitrary code
+execution that collides with D9 ("not a sandbox"); the permission model is consent
+for your own machine, not a containment boundary against a hostile operator. The
+isolation bar required *if* hosted live execution is ever revisited (per-session
+microVM, ephemeral fs, no ambient secrets, strict egress, quotas, BYO/abuse-capped
+keys) is documented in the design doc but spawns no tickets now — revisiting the
+decision is the trigger. PRD D9 + §10 Q12 trail updated to reflect the call.
 
 ## Description
 
