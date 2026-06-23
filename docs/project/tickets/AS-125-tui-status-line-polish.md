@@ -33,7 +33,7 @@ that can be approximated in a terminal by toggling between `ColorNeutral` and
 
 ### Status line
 
-After AS-121 tokens are in place, update `renderStatusBar` in `model.go`:
+After AS-121 tokens are in place, update `statusLine` in `model.go`:
 
 1. Apply `BgStatusLine` background and `ColorFgDefault` foreground via named styles.
 2. Left segment: `{provider} · {model} · {session}` in `StyleNeutral`; if a goal is set,

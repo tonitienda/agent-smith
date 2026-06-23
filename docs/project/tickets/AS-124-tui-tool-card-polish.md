@@ -31,7 +31,7 @@ the spec's card layout. Missing:
 ```
 
 - Spinner glyph (`⣾⣽⣻⢿⣿⡿⣟⣯` cycle, `StyleRunning` / `ColorAmberBright`) while running;
-  `✓` in `StyleSuccess` when done.
+  `✓` in `StyleSuccess` when done; `✗` in `StyleError` on failure.
 - Tool name: `StyleToolName` (`ColorNeutral`).
 - Args preview (first 60 chars of the first arg value): `StyleToolArgs` (`ColorMuted`).
 - Elapsed: right-aligned in `StyleMuted`; update on each tick while running.

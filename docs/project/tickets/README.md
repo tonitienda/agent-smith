@@ -149,12 +149,12 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-119](AS-119-task-faces-and-tool-inheritance.md) | `task` delegation across faces + child tool inheritance (spun out of AS-046) | subagents | done | 046, 051, 077 |
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
 
-## Index — TUI visual polish (AS-121 … AS-125) — demo-priority
+## Index — TUI visual polish (AS-121 … AS-126) — demo-priority
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-121](AS-121-tui-phosphor-palette.md) | TUI phosphor palette — centralize colour tokens and apply to all surfaces | tui | ready | 021, 053 |
-| [AS-122](AS-122-tui-splash-screen.md) | TUI splash screen — logo, divider rule, invite text, blinking caret | tui | ready | 121 |
+| [AS-122](AS-122-tui-splash-screen.md) | TUI splash screen — logo, divider rule, invite text, blinking caret | tui | ready | 121, 126 |
 | [AS-123](AS-123-tui-typewriter-streaming.md) | TUI typewriter streaming — char-by-char reveal with trailing block cursor | tui | ready | 121, 021 |
 | [AS-124](AS-124-tui-tool-card-polish.md) | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | tui | ready | 121, 024 |
 | [AS-125](AS-125-tui-status-line-polish.md) | TUI status line + mode bar visual polish — spec-compliant layout and colours | tui | ready | 121, 025, 073 |

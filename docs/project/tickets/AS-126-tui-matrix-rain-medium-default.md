@@ -66,8 +66,11 @@ type rainColumn struct {
 }
 ```
 
-- Character set: katakana `ァ–ン` (U+30A1–U+30F3) + digits `0–9` + a handful of ASCII
-  punctuation. Sample a new random rune per column per tick for the head cell.
+- Character set: **half-width** katakana `ｱ–ﾝ` (U+FF71–U+FF9D) + digits `0–9` + a
+  handful of ASCII punctuation. Half-width katakana are single-cell in monospaced
+  terminal fonts; full-width (`ァ–ン` U+30A1–U+30F3) are double-cell and would cause
+  column jitter as characters change — never use full-width in the rain columns.
+  Sample a new random rune per column per tick for the head cell.
 - Head cell: `ColorBrand` (`#00ff66`), bold.
 - Trail: fade down the green ramp — `ColorCommand` → `ColorNeutral` → `ColorMuted` →
   `ColorDim` → `ColorDimmest` — one step per row behind the head.
