@@ -159,7 +159,7 @@ func (r *Runtime) Execute(ctx context.Context, call schema.Block) (schema.Block,
 		return r.record(p.call, *p.deny)
 	}
 
-	out, runErr := r.run(ctx, p.tool, p.call.ToolCall.Arguments)
+	out, runErr := r.run(ctx, p.tool, p.call.ToolCall.Arguments, p.call.ToolCall.ToolUseID)
 	return r.finishCall(ctx, p, out, runErr)
 }
 
@@ -396,7 +396,7 @@ func (r *Runtime) runConcurrent(ctx context.Context, plans []plan, outs []Output
 			go func(i int) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				outs[i], errs[i] = r.run(ctx, plans[i].tool, plans[i].call.ToolCall.Arguments)
+				outs[i], errs[i] = r.run(ctx, plans[i].tool, plans[i].call.ToolCall.Arguments, plans[i].call.ToolCall.ToolUseID)
 			}(i)
 		case <-ctx.Done():
 			errs[i] = ctx.Err()
@@ -406,8 +406,11 @@ func (r *Runtime) runConcurrent(ctx context.Context, plans []plan, outs []Output
 }
 
 // run executes the tool under a child context bounded by the tool's budget, so
-// an elapsed budget cancels in-flight work and a cancelled parent does too.
-func (r *Runtime) run(ctx context.Context, t Tool, args []byte) (Output, error) {
+// an elapsed budget cancels in-flight work and a cancelled parent does too. The
+// executing call's tool_use id rides on the context so a tool can correlate a
+// side effect to its call (AS-084 file snapshots).
+func (r *Runtime) run(ctx context.Context, t Tool, args []byte, toolUseID string) (Output, error) {
+	ctx = ContextWithToolUseID(ctx, toolUseID)
 	ctx, cancel := context.WithTimeout(ctx, r.budget(t))
 	defer cancel()
 	return t.Run(ctx, args)

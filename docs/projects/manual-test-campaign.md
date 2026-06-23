@@ -34,7 +34,8 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-031, AS-071, AS-093 | Implemented | Set config through env, user config, project config, and flags. | Precedence is flag > project > user > env > default; typed consumers agree. |
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
-| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
+| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -53,7 +54,7 @@ Covers AS-001, AS-065, AS-066, AS-069, AS-070, AS-089, AS-090, AS-104, AS-105.
 
 ### 2. Schema, event log, projection, persistence, and replay substrate
 
-Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-056, AS-115.
+Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-056, AS-084, AS-115.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -62,6 +63,7 @@ Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-056, AS-115.
 | 2.3 | Run `./smith session list` and resume the session. | The session appears for the current project and transcript/context are rehydrated. |
 | 2.4 | Add prompts containing fake secrets/PII such as `sk-test-secret` or an email address and inspect captured log text. | Best-effort redaction occurs before capture where AS-115 applies; debug logs do not reveal more than intended. |
 | 2.5 | Exercise `/compact` preview/apply/undo and `/rewind` checkpoint/restore. | Derived compact blocks and restore events are visible and reversible. |
+| 2.6 | After file edits past a checkpoint, run `/rewind <handle> --restore-files` (AS-084). Repeat after hand-editing a Smith-written file outside the session. | Restored/deleted files match the checkpoint; externally-changed files are flagged as conflicts and never overwritten; the log still only grows. |
 
 ### 3. Providers, prompt caching, and provider conformance
 
@@ -251,7 +253,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-081 | Viscose (VS Code) extension over `smith serve` | Not implemented (`ready-to-implement`) |
 | AS-082 | Memory file @import-style includes | Implemented (`done`) |
 | AS-083 | MCP resources, prompts, reconnect, and tools/list pagination | Implemented (`done`) |
-| AS-084 | Rewind file-system snapshot & restore | Not implemented (`ready-to-implement`) |
+| AS-084 | Rewind file-system snapshot & restore | Implemented (`done`) |
 | AS-085 | Auto-compact on approaching the window limit (config-flagged, default off) | Implemented (`done`) |
 | AS-086 | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | Implemented (`done`) |
 | AS-087 | /init model-assisted draft enrichment | Not implemented (`ready-to-implement`) |

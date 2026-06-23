@@ -21,7 +21,7 @@ C4Container
     }
 
     System_Boundary(local, "Local machine state") {
-        ContainerDb(session_store, "Session store", "JSONL + JSON", "~/.agent-smith/sessions/<project-hash>/<session-id>/ events, metadata, debug logs.")
+        ContainerDb(session_store, "Session store", "JSONL + JSON", "~/.agent-smith/sessions/<project-hash>/<session-id>/ events, metadata, debug logs, and per-session file snapshots (snapshots/ for /rewind --restore-files, AS-084).")
         ContainerDb(config_files, "Layered config", "JSON", "Defaults, env, user, project, and flag overrides merged by internal/config.")
         ContainerDb(project_assets, "Project assets", "Markdown / source files", "Memory files, skills, custom commands, and the project under edit.")
     }

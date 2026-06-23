@@ -35,6 +35,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/skillrollup"
+	"github.com/tonitienda/agent-smith/internal/snapshot"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tidy"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -177,6 +178,14 @@ type chatSession struct {
 	// invalidates it rather than rewinding the wrong log (mirrors pendingClean).
 	pendingRewind    *rewind.Plan
 	pendingRewindFor *session.Session
+	// pendingRewindRestore records that the staged rewind was previewed with
+	// --restore-files, so /rewind --apply also restores the working tree (AS-084).
+	pendingRewindRestore bool
+
+	// snapshots is the per-session file snapshot store (AS-084): the write/edit
+	// tools capture pre-mutation content into it, and /rewind --restore-files reads
+	// it back. nil on faces that wire no store (file restore is then unavailable).
+	snapshots *snapshot.Store
 
 	// pendingCompact holds the previewed /compact plan awaiting confirmation
 	// (/compact --apply) or discard (/compact --cancel), keyed to the session it
@@ -247,6 +256,10 @@ func newChatSession(store *session.Store, tools *tool.Registry, pricing *cost.Ta
 // keeps routing.Default() — the previous hardcoded cheap-tier behavior. It seeds
 // both the effective router and the baseRouter a session swap resets to (AS-110).
 func (s *chatSession) setRouter(p routing.Policy) { s.router, s.baseRouter = p, p }
+
+// setSnapshots installs the per-session file snapshot store (AS-084) that
+// /rewind --restore-files reads back. A nil store leaves file restore disabled.
+func (s *chatSession) setSnapshots(st *snapshot.Store) { s.snapshots = st }
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -1818,7 +1831,7 @@ func (s *chatSession) cmdRewind(ctx context.Context, args []string) (command.Out
 	if len(args) == 0 {
 		return s.rewindList(), nil
 	}
-	return s.rewindPreview(args[0])
+	return s.rewindPreview(args[0], command.FlagsFrom(ctx).Bool("restore-files"))
 }
 
 // rewindList renders the session's checkpoints newest-first for both faces: a
@@ -1853,22 +1866,42 @@ func (s *chatSession) rewindList() command.Output {
 
 // rewindPreview stages a rewind: it resolves the handle to a checkpoint, builds
 // the plan, and stores it pending confirmation. Nothing is appended to the log.
-func (s *chatSession) rewindPreview(handle string) (command.Output, error) {
+// When restore is set (--restore-files, AS-084) it also stages the file-restore
+// intent and appends the per-file restore plan to the preview, so a conflict or
+// a too-large file is surfaced before anything is applied.
+func (s *chatSession) rewindPreview(handle string, restore bool) (command.Output, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	events := s.sess.Log.Events()
 	target, ok := rewind.Find(events, handle)
 	if !ok {
-		s.pendingRewind, s.pendingRewindFor = nil, nil
+		s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 		return command.Output{Text: fmt.Sprintf("No checkpoint matches %q. Run /rewind to list them.", handle)}, nil
 	}
 	plan := rewind.Preview(events, s.pricing, s.model, time.Now(), target)
 	if plan.Empty() {
-		s.pendingRewind, s.pendingRewindFor = nil, nil
+		s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 		return command.Output{Text: rewind.RenderPreview(plan)}, nil
 	}
 	s.pendingRewind, s.pendingRewindFor = &plan, s.sess
-	return command.Output{Text: rewind.RenderPreview(plan)}, nil
+	s.pendingRewindRestore = restore
+	text := rewind.RenderPreview(plan)
+	if restore {
+		text += "\n\n" + s.rewindRestorePreview(events, plan)
+	}
+	return command.Output{Text: text}, nil
+}
+
+// rewindRestorePreview renders the file-restore section for a staged
+// --restore-files rewind (AS-084): which files would be restored or deleted, and
+// which are skipped because they conflict with an external edit or are too large
+// to snapshot. It mutates nothing.
+func (s *chatSession) rewindRestorePreview(events []schema.Block, plan rewind.Plan) string {
+	if s.snapshots == nil {
+		return "⚠ --restore-files is not available in this session; files were not snapshotted."
+	}
+	actions := s.snapshots.PlanRestore(droppedFileMutations(events, plan.DropIDs))
+	return renderRestorePlan(actions, plan.Files)
 }
 
 // rewindApply confirms the staged preview, appending the exclusion event that
@@ -1880,9 +1913,10 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 		return command.Output{Text: "Nothing staged. Run /rewind <handle> to preview a rewind first."}, nil
 	}
 	if s.pendingRewindFor != s.sess {
-		s.pendingRewind, s.pendingRewindFor = nil, nil
+		s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 		return command.Output{Text: "The staged preview was for a different session and is no longer valid. Run /rewind again."}, nil
 	}
+	restoreFiles := s.pendingRewindRestore
 	// Recompute against the current log rather than trusting the snapshot taken
 	// at preview time: the checkpoint is identified by its stable anchor, and any
 	// events appended since the preview must also be named by the rewind, or
@@ -1891,19 +1925,19 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 	events := s.sess.Log.Events()
 	target, ok := rewind.Find(events, s.pendingRewind.Target.Anchor)
 	if !ok {
-		s.pendingRewind, s.pendingRewindFor = nil, nil
+		s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 		return command.Output{Text: "The staged checkpoint is no longer in this session. Run /rewind again."}, nil
 	}
 	plan := rewind.Preview(events, s.pricing, s.model, time.Now(), target)
 	event, ok := rewind.Apply(plan)
 	if !ok {
-		s.pendingRewind, s.pendingRewindFor = nil, nil
+		s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 		return command.Output{Text: "Nothing to rewind."}, nil
 	}
 	if _, err := s.sess.Log.Append(event); err != nil {
 		return command.Output{}, fmt.Errorf("record rewind: %w", err)
 	}
-	s.pendingRewind, s.pendingRewindFor = nil, nil
+	s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 	text := fmt.Sprintf("Rewound to %s.", rewind.ShortAnchor(plan.Target.Anchor))
 	switch net := plan.NetTokens(); {
 	case net > 0:
@@ -1911,7 +1945,19 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 	case net < 0:
 		text += fmt.Sprintf(" Window grew by ~%d tokens (a later /clean was undone).", -net)
 	}
-	text += " Restore with /rewind --undo."
+	// File restore (AS-084): re-plan against the current working tree so conflict
+	// detection is fresh, then restore the unambiguous files and report the rest.
+	// A restore error is surfaced but the conversation rewind already stands.
+	if restoreFiles && s.snapshots != nil {
+		actions := s.snapshots.PlanRestore(droppedFileMutations(events, plan.DropIDs))
+		res, err := s.snapshots.ApplyRestore(actions)
+		if err != nil {
+			text += fmt.Sprintf("\n\n⚠ File restore failed: %v", err)
+		} else {
+			text += "\n\n" + renderRestoreResult(res, actions, plan.Files)
+		}
+	}
+	text += "\nRestore the conversation with /rewind --undo."
 	return command.Output{Text: text, ResetView: true}, nil
 }
 
@@ -1953,7 +1999,7 @@ func (s *chatSession) rewindCancel() (command.Output, error) {
 	if s.pendingRewind == nil {
 		return command.Output{Text: "Nothing staged to cancel."}, nil
 	}
-	s.pendingRewind, s.pendingRewindFor = nil, nil
+	s.pendingRewind, s.pendingRewindFor, s.pendingRewindRestore = nil, nil, false
 	return command.Output{Text: "Discarded the staged /rewind preview. Nothing changed."}, nil
 }
 
@@ -1969,6 +2015,113 @@ func rewindLabel(c rewind.Checkpoint) string {
 		return fmt.Sprintf("%s⚑ mark: %s", stamp, c.Label)
 	}
 	return fmt.Sprintf("%sturn %d: %s", stamp, c.Turn, c.Label)
+}
+
+// droppedFileMutations extracts the write/edit calls among the events a rewind
+// drops, as snapshot mutations keyed by tool_use id and ordered by sequence, so
+// the snapshot store can plan a file restore (AS-084). Shell-driven changes are
+// not snapshotted and so are not included (the same scope as rewind's
+// modified-files warning).
+func droppedFileMutations(events []schema.Block, dropIDs []string) []snapshot.Mutation {
+	drop := make(map[string]bool, len(dropIDs))
+	for _, id := range dropIDs {
+		drop[id] = true
+	}
+	var out []snapshot.Mutation
+	for _, e := range events {
+		if !drop[e.ID] || e.Kind != schema.KindToolCall || e.ToolCall == nil {
+			continue
+		}
+		if e.ToolCall.Name != "write" && e.ToolCall.Name != "edit" {
+			continue
+		}
+		out = append(out, snapshot.Mutation{ToolUseID: e.ToolCall.ToolUseID, Seq: e.Seq})
+	}
+	return out
+}
+
+// renderRestorePlan describes, for a staged --restore-files rewind, what the
+// restore would do per file: rewrite, delete, or skip (conflict or too large).
+// planFiles is the rewind's full modified-files list; any file in it the plan
+// does not cover had no snapshot (captured before snapshots existed, or a capture
+// that failed) and is reported as not restorable.
+func renderRestorePlan(actions []snapshot.FileAction, planFiles []string) string {
+	restore, del, conflict, large := groupActions(actions)
+	noSnap := uncoveredFiles(actions, planFiles)
+
+	var b strings.Builder
+	b.WriteString("File restore (--restore-files):")
+	writeFileGroup(&b, "↩ restore to checkpoint state", restore)
+	writeFileGroup(&b, "✗ delete (did not exist at checkpoint)", del)
+	writeFileGroup(&b, "⚠ skipped — changed outside Smith since the snapshot (not overwritten)", conflict)
+	writeFileGroup(&b, "⚠ skipped — too large to snapshot", large)
+	writeFileGroup(&b, "⚠ no snapshot — cannot restore", noSnap)
+	if len(restore)+len(del)+len(conflict)+len(large)+len(noSnap) == 0 {
+		b.WriteString("\n  (no snapshotted file changes to restore)")
+	}
+	return b.String()
+}
+
+// renderRestoreResult summarizes what a file restore actually did, reusing the
+// plan's conflict/large/no-snapshot classification for the files it skipped.
+func renderRestoreResult(res snapshot.Result, actions []snapshot.FileAction, planFiles []string) string {
+	noSnap := uncoveredFiles(actions, planFiles)
+	var b strings.Builder
+	b.WriteString("File restore:")
+	writeFileGroup(&b, "↩ restored", res.Restored)
+	writeFileGroup(&b, "✗ deleted", res.Deleted)
+	writeFileGroup(&b, "⚠ skipped — changed outside Smith (not overwritten)", res.Conflicts)
+	writeFileGroup(&b, "⚠ skipped — too large to snapshot", res.Skipped)
+	writeFileGroup(&b, "⚠ no snapshot — not restored", noSnap)
+	if len(res.Restored)+len(res.Deleted)+len(res.Conflicts)+len(res.Skipped)+len(noSnap) == 0 {
+		b.WriteString("\n  (no snapshotted file changes to restore)")
+	}
+	return b.String()
+}
+
+// groupActions splits restore actions by kind into project-relative path lists.
+func groupActions(actions []snapshot.FileAction) (restore, del, conflict, large []string) {
+	for _, a := range actions {
+		switch a.Kind {
+		case snapshot.ActionRestore:
+			restore = append(restore, a.Path)
+		case snapshot.ActionDelete:
+			del = append(del, a.Path)
+		case snapshot.ActionConflict:
+			conflict = append(conflict, a.Path)
+		case snapshot.ActionLargeSkip:
+			large = append(large, a.Path)
+		}
+	}
+	return restore, del, conflict, large
+}
+
+// uncoveredFiles returns the modified files the restore plan did not cover — the
+// ones with no snapshot to restore from.
+func uncoveredFiles(actions []snapshot.FileAction, planFiles []string) []string {
+	covered := make(map[string]bool, len(actions))
+	for _, a := range actions {
+		covered[a.Path] = true
+	}
+	var out []string
+	for _, f := range planFiles {
+		if !covered[f] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// writeFileGroup appends a labeled, indented list of files to b, skipping an
+// empty group so the preview shows only the categories that apply.
+func writeFileGroup(b *strings.Builder, label string, files []string) {
+	if len(files) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n  %s:", label)
+	for _, f := range files {
+		fmt.Fprintf(b, "\n    %s", f)
+	}
 }
 
 // cmdCompact summarizes the older conversation into one derived block (AS-038

@@ -205,7 +205,7 @@ func (t *writeTool) Def() tool.Def {
 	}
 }
 
-func (t *writeTool) Run(_ context.Context, args json.RawMessage) (tool.Output, error) {
+func (t *writeTool) Run(ctx context.Context, args json.RawMessage) (tool.Output, error) {
 	var in struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
@@ -232,6 +232,7 @@ func (t *writeTool) Run(_ context.Context, args json.RawMessage) (tool.Output, e
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return errResult("cannot create directory for %s: %v", t.fs.rel(abs), err), nil
 	}
+	t.fs.snapshot(ctx, abs, []byte(in.Content)) // capture pre-state for /rewind --restore-files (AS-084)
 	if err := atomicWrite(abs, []byte(in.Content), 0o644); err != nil {
 		return errResult("cannot write %s: %v", t.fs.rel(abs), err), nil
 	}
@@ -264,7 +265,7 @@ func (t *editTool) Def() tool.Def {
 	}
 }
 
-func (t *editTool) Run(_ context.Context, args json.RawMessage) (tool.Output, error) {
+func (t *editTool) Run(ctx context.Context, args json.RawMessage) (tool.Output, error) {
 	var in struct {
 		Path       string `json:"path"`
 		OldString  string `json:"old_string"`
@@ -313,6 +314,7 @@ func (t *editTool) Run(_ context.Context, args json.RawMessage) (tool.Output, er
 	if info, statErr := os.Stat(abs); statErr == nil {
 		mode = info.Mode().Perm() // preserve the existing file's permissions
 	}
+	t.fs.snapshot(ctx, abs, []byte(content)) // capture pre-state for /rewind --restore-files (AS-084)
 	if err := atomicWrite(abs, []byte(content), mode); err != nil {
 		return errResult("cannot write %s: %v", t.fs.rel(abs), err), nil
 	}

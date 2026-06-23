@@ -127,9 +127,11 @@ func (r *Runtime) SelectProviderModel(pricing *cost.Table, providers map[string]
 }
 
 // BuiltinTools builds the common built-in file and shell tools for Smith faces.
-func (r *Runtime) BuiltinTools(wd string) (*tool.Registry, error) {
+// fsOpts configure the file tools' shared FS — e.g. WithSnapshotter to capture
+// pre-mutation file content for /rewind --restore-files (AS-084).
+func (r *Runtime) BuiltinTools(wd string, fsOpts ...builtin.Option) (*tool.Registry, error) {
 	reg := tool.NewRegistry()
-	fs, err := builtin.NewFS(wd)
+	fs, err := builtin.NewFS(wd, fsOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("init file tools: %w", err)
 	}

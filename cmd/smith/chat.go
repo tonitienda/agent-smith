@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/term"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
+	"github.com/tonitienda/agent-smith/internal/snapshot"
 	"github.com/tonitienda/agent-smith/internal/tool"
 	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
@@ -80,7 +82,20 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 	defer func() { _ = debugLog.Close() }()
 	debugLog.Printf("interactive session start id=%s project=%q cwd=%q", sess.ID, wd, wd)
 
-	reg, err := appRuntime.BuiltinTools(wd)
+	// Per-session file snapshots (AS-084): the write/edit tools capture each
+	// file's pre-mutation content here so /rewind --restore-files can put the
+	// working tree back. Stored under the session directory; a store-open failure
+	// degrades to no file restore rather than aborting the session.
+	snaps, snapErr := snapshot.Open(filepath.Join(sess.Dir, "snapshots"))
+	if snapErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: file snapshots disabled: %v\n", snapErr)
+	}
+	var fsOpts []builtin.Option
+	if snaps != nil {
+		fsOpts = append(fsOpts, builtin.WithSnapshotter(snaps))
+		defer func() { _ = snaps.Close() }()
+	}
+	reg, err := appRuntime.BuiltinTools(wd, fsOpts...)
 	if err != nil {
 		return err
 	}
@@ -122,6 +137,7 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 	provName, model := appRuntime.SelectProviderModel(pricing, providers, model)
 
 	ctl := newChatSession(store, reg, pricing, providers, sess, provName, model, wd, skills, hooks)
+	ctl.setSnapshots(snaps) // AS-084: lets /rewind --restore-files reach the file snapshot store
 	// Apply the configured budget defaults (AS-041): a default ceiling for new
 	// sessions and the warning fraction, both overridable per session by /budget.
 	// The typed view (AS-093) owns the `budget.*` paths and validates them.
@@ -361,7 +377,7 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	mustRegisterCommand(reg, command.Command{
 		Name:          "rewind",
 		Summary:       "Rewind the conversation to an earlier turn or mark",
-		Args:          `[<handle> | --mark "<label>" | --apply | --undo | --cancel]`,
+		Args:          `[<handle> [--restore-files] | --mark "<label>" | --apply | --undo | --cancel]`,
 		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
@@ -370,8 +386,9 @@ func chatCommands(ctl *chatSession) *command.Registry {
 			fs.Bool("apply", false, "confirm the staged rewind")
 			fs.Bool("undo", false, "reverse the most recent rewind")
 			fs.Bool("cancel", false, "discard the staged preview")
+			fs.Bool("restore-files", false, "also restore files modified after the checkpoint (AS-084)")
 		},
-		Examples: []string{"smith rewind", `smith rewind --mark "before refactor"`},
+		Examples: []string{"smith rewind", `smith rewind --mark "before refactor"`, "smith rewind <handle> --restore-files"},
 		Run:      ctl.cmdRewind,
 	})
 	mustRegisterCommand(reg, command.Command{
