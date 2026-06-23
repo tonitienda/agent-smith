@@ -198,29 +198,28 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	// delegates a scoped prompt to a child agent running its own isolated, persisted
 	// session (linked to this one) and summarizes the result back into this context.
 	// The child reuses the parent's provider and permission gate and the cheap
-	// routing tier for fan-out; its tool set is the builtin file/search/shell set
-	// with no `task`, so delegation does not recurse. Registered before start so the
-	// first engine offers it, and after setPolicy so the child inherits the gate.
-	spawner := delegate.New(store, providers,
-		func() (*tool.Registry, error) { return appRuntime.BuiltinTools(wd) },
-		func() delegate.Parent {
-			ctl.mu.Lock()
-			defer ctl.mu.Unlock()
-			// policy is set by setPolicy above for the interactive face, but guard
-			// the nil case (a face that skips the gate) rather than dereference it.
-			var perm tool.PermissionFunc
-			if ctl.policy != nil {
-				perm = ctl.policy.Func()
-			}
-			return delegate.Parent{
-				Log:        ctl.sess.Log,
-				SessionID:  ctl.sess.ID,
-				ProvName:   ctl.provName,
-				Model:      ctl.model,
-				Permission: perm,
-				Router:     ctl.router,
-			}
-		})
+	// routing tier for fan-out; its tool set inherits the parent's skills (AS-034)
+	// and live MCP tools (AS-036) but omits `task`, so delegation does not recurse
+	// (AS-119). Registered before start so the first engine offers it, and after
+	// setPolicy so the child inherits the gate.
+	spawner := taskSpawner(store, wd, skills, mcpClients, func() delegate.Parent {
+		ctl.mu.Lock()
+		defer ctl.mu.Unlock()
+		// policy is set by setPolicy above for the interactive face, but guard
+		// the nil case (a face that skips the gate) rather than dereference it.
+		var perm tool.PermissionFunc
+		if ctl.policy != nil {
+			perm = ctl.policy.Func()
+		}
+		return delegate.Parent{
+			Log:        ctl.sess.Log,
+			SessionID:  ctl.sess.ID,
+			ProvName:   ctl.provName,
+			Model:      ctl.model,
+			Permission: perm,
+			Router:     ctl.router,
+		}
+	})
 	if err := reg.Register(builtin.NewTask(spawner)); err != nil {
 		return fmt.Errorf("register task tool: %w", err)
 	}

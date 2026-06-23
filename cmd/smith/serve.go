@@ -13,13 +13,16 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cli"
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/delegate"
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/permission"
+	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/serve"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tool"
+	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 )
 
 // serveCommand starts the local JSON-RPC/WebSocket session server (AS-077): the
@@ -152,7 +155,7 @@ func (b *serveBackend) Open(resumeID string, conn serve.Conn) (serve.Session, er
 		_ = sess.Log.Close()
 		return nil, err
 	}
-	prov, model, err := headlessProvider(b.override)
+	prov, provName, model, err := headlessProvider(b.override)
 	if err != nil {
 		_ = sess.Log.Close()
 		return nil, err
@@ -179,6 +182,27 @@ func (b *serveBackend) Open(resumeID string, conn serve.Conn) (serve.Session, er
 		return nil, fmt.Errorf("load permission policy: %w", err)
 	}
 	policy := permission.New(permCfg, permission.WithAsker(serveAsker{conn: conn}))
+
+	// User-delegated subagents (AS-046/AS-119): a serve session exposes the `task`
+	// tool with the same isolation, linking, and cost rollup as the TUI. The child
+	// inherits this session's gate, so a child tool call in ask mode is forwarded to
+	// the connected client (never a hang). A serve session loads no skills or MCP
+	// servers, so the child gets the builtin tool set.
+	router, _ := routing.ConfigFrom(cfg)
+	taskParent := func() delegate.Parent {
+		return delegate.Parent{
+			Log:        sess.Log,
+			SessionID:  sess.ID,
+			ProvName:   provName,
+			Model:      model,
+			Permission: policy.Func(),
+			Router:     router,
+		}
+	}
+	if err := tools.Register(builtin.NewTask(taskSpawner(b.store, b.wd, nil, nil, taskParent))); err != nil {
+		_ = sess.Log.Close()
+		return nil, fmt.Errorf("register task tool: %w", err)
+	}
 
 	rtOpts := append([]tool.Option{tool.WithPermission(policy.Func())}, hookToolOptions(hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
