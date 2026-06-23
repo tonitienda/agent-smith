@@ -88,6 +88,55 @@ func TestNameMapOverridesAndIntensity(t *testing.T) {
 	}
 }
 
+func TestIntensityResolution(t *testing.T) {
+	// AS-126: default is medium (rain + renaming on), "full" is a medium alias,
+	// and unknown values fall back to medium rather than failing.
+	cases := []struct {
+		in   string
+		want Intensity
+	}{
+		{"", IntensityMedium},
+		{"full", IntensityMedium}, // legacy AS-053 alias
+		{"medium", IntensityMedium},
+		{" Medium ", IntensityMedium},
+		{"subtle", IntensitySubtle},
+		{"bold", IntensityBold},
+		{"nonsense", IntensityMedium},
+	}
+	for _, c := range cases {
+		p := New(Settings{Theme: "matrix", Intensity: c.in, SeriousMode: ptr(false)}, true)
+		if got := p.Intensity(); got != c.want {
+			t.Errorf("Intensity(%q) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}
+
+func TestIntensityMutedWhenSeriousOrThemeOff(t *testing.T) {
+	// Serious mode and theme "none" must drive the effective intensity to subtle so
+	// the rain/phrase chrome goes quiet even if bold was configured (AS-126).
+	serious := New(Settings{Theme: "matrix", Intensity: "bold", SeriousMode: ptr(true)}, true)
+	if got := serious.Intensity(); got != IntensitySubtle {
+		t.Fatalf("serious Intensity() = %d, want subtle", got)
+	}
+	none := New(Settings{Theme: "none", Intensity: "bold", SeriousMode: ptr(false)}, true)
+	if got := none.Intensity(); got != IntensitySubtle {
+		t.Fatalf("theme-none Intensity() = %d, want subtle", got)
+	}
+	// Toggling serious back on a medium config restores the configured intensity.
+	p := New(Settings{Theme: "matrix", SeriousMode: ptr(false)}, true)
+	if p.Intensity() != IntensityMedium {
+		t.Fatalf("default Intensity() = %d, want medium", p.Intensity())
+	}
+	p.SetSerious(true)
+	if p.Intensity() != IntensitySubtle {
+		t.Fatalf("after SetSerious(true) Intensity() = %d, want subtle", p.Intensity())
+	}
+	p.SetSerious(false)
+	if p.Intensity() != IntensityMedium {
+		t.Fatalf("after SetSerious(false) Intensity() = %d, want medium restored", p.Intensity())
+	}
+}
+
 func TestThemeNoneIsPlain(t *testing.T) {
 	p := New(Settings{Theme: "none", SeriousMode: ptr(false)}, true)
 	if got := p.Name(RoleUser); got != plainNames[RoleUser] {

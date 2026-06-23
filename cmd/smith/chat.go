@@ -40,7 +40,7 @@ func isTerminal(f *os.File) bool {
 // (active provider/model, current log) lives in chatSession, which the TUI drives
 // through the Runner/Meta/Meter seams, so all of this provider/tool wiring stays
 // here in the command, never in internal/tui.
-func startChat(resumeID string, noSplash bool, override string) error {
+func startChat(resumeID string, noSplash bool, override, intensity string) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve working directory: %w", err)
@@ -170,6 +170,11 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		// aborting the session, but is surfaced so a syntax/type error is diagnosable.
 		fmt.Fprintf(os.Stderr, "warning: ignoring personality config: %v\n", err)
 	}
+	// A --intensity flag overrides the configured/default flavor dial for this run
+	// (AS-126); an empty flag leaves the config value (which defaults to medium).
+	if intensity != "" {
+		persSettings.Intensity = intensity
+	}
 	ctl.setPersonality(personality.New(persSettings, true))
 	// Build the slash-command registry, then layer custom commands (AS-033) over
 	// the built-ins. rescanCustom re-reads them so a file dropped into the commands
@@ -181,7 +186,7 @@ func startChat(resumeID string, noSplash bool, override string) error {
 	builtins := builtinNames(cmds)
 	rescanCustom := func() { registerCustomCommands(cmds, builtins, wd) }
 	rescanCustom()
-	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate), tui.WithCommandRefresh(rescanCustom), tui.WithWorkingLine(ctl.workingLine)}
+	opts := []tui.Option{tui.WithRehydrate(ctl.rehydrate), tui.WithCommandRefresh(rescanCustom), tui.WithWorkingLine(ctl.workingLine), tui.WithPersonality(ctl.pers)}
 	if noSplash {
 		opts = append(opts, tui.WithoutSplash())
 	}

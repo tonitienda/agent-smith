@@ -1,7 +1,7 @@
 ---
 id: AS-126
 title: TUI Matrix rain — implement medium intensity as default, /serious disables
-status: ready-to-implement
+status: done
 github_issue: 391
 depends_on: [AS-121, AS-053]
 area: tui

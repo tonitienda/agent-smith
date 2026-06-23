@@ -40,6 +40,38 @@ const (
 	themeNone   = "none"
 )
 
+// Intensity is the personality flavor dial (Appendix D, AS-126). Levels are
+// additive: each adds chrome flavor on top of the one below it. The default is
+// IntensityMedium — the full phosphor-rain effect on splash/idle is the most
+// memorable demo moment and is instantly reversible via /serious.
+type Intensity int
+
+const (
+	// IntensitySubtle themes status/loading lines only — no renaming, no rain.
+	IntensitySubtle Intensity = iota
+	// IntensityMedium adds digital rain on idle/splash, rotating idle phrases,
+	// Matrix role names, and the one-shot logo glitch-in.
+	IntensityMedium
+	// IntensityBold layers on scanlines/CRT sweep/darker canvas (render-side,
+	// reserved for later TUI tickets).
+	IntensityBold
+)
+
+// parseIntensity resolves the config string to an Intensity, defaulting to
+// medium. "full" is kept as an accepted alias for "medium" so configs written
+// against the AS-053 two-value (full|subtle) field still parse (PRD D2); any
+// unrecognized value also resolves to the medium default rather than failing.
+func parseIntensity(s string) Intensity {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "subtle":
+		return IntensitySubtle
+	case "bold":
+		return IntensityBold
+	default: // medium, full (alias), empty, or anything unrecognized
+		return IntensityMedium
+	}
+}
+
 // statusRotateSeconds is how long each themed status line shows before the next
 // is picked. Rotating on a few-second bucket changes the line while the agent
 // works without per-render flicker and without storing any rotation state.
@@ -79,6 +111,10 @@ var matrixStatusLines = []string{
 	"there is no spoon…",
 	"asking the Oracle…",
 	"bending the spoon…",
+	"the matrix has you…",
+	"knock, knock, neo…",
+	"free your mind…",
+	"what is real?",
 }
 
 // Settings is the Appendix D personality config, decoded from the `personality`
@@ -89,7 +125,7 @@ var matrixStatusLines = []string{
 type Settings struct {
 	Theme       string            `json:"theme"`        // matrix | none (default matrix)
 	SeriousMode *bool             `json:"serious_mode"` // nil => face default
-	Intensity   string            `json:"intensity"`    // full | subtle (default full)
+	Intensity   string            `json:"intensity"`    // subtle | medium | bold (default medium; "full" = medium)
 	Names       map[string]string `json:"names"`        // role -> override display-name
 }
 
@@ -100,7 +136,7 @@ type Personality struct {
 	mu        sync.RWMutex
 	serious   bool
 	theme     string
-	subtle    bool // intensity: subtle => status/loading only, no renaming
+	intensity Intensity // subtle => status/loading only; medium/bold add renaming + rain
 	overrides map[Role]string
 }
 
@@ -111,7 +147,7 @@ type Personality struct {
 func New(s Settings, interactive bool) *Personality {
 	p := &Personality{
 		theme:     normalizeTheme(s.Theme),
-		subtle:    strings.EqualFold(strings.TrimSpace(s.Intensity), "subtle"),
+		intensity: parseIntensity(s.Intensity),
 		overrides: map[Role]string{},
 	}
 	for k, v := range s.Names {
@@ -150,8 +186,9 @@ func (p *Personality) Name(r Role) string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	// Subtle intensity confines flavor to status/loading lines — no renaming — so
-	// names stay plain even when the theme is otherwise on (Appendix D).
-	if p.themed() && !p.subtle {
+	// names stay plain even when the theme is otherwise on (Appendix D). Renaming
+	// is gated to medium/bold.
+	if p.themed() && p.intensity >= IntensityMedium {
 		if n, ok := p.overrides[r]; ok {
 			return n
 		}
@@ -183,6 +220,20 @@ func (p *Personality) StatusLine() string {
 		bucket = -bucket
 	}
 	return matrixStatusLines[int(bucket%int64(len(matrixStatusLines)))]
+}
+
+// Intensity returns the effective flavor intensity for chrome render decisions
+// (digital rain, idle phrases, glitch-in). While the theme is muted — serious
+// mode on, or theme "none" — it resolves to IntensitySubtle so chrome that gates
+// those effects on >= IntensityMedium goes quiet instantly, matching the kill
+// switch's reach over names and status lines.
+func (p *Personality) Intensity() Intensity {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if !p.themed() {
+		return IntensitySubtle
+	}
+	return p.intensity
 }
 
 // Serious reports whether the kill switch is on (all flavor muted).

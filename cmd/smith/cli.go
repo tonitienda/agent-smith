@@ -72,13 +72,14 @@ func registryLeaf(reg *command.Registry, regName, cliName string, pickArgs func(
 }
 
 // bareTUI launches the interactive TUI for a bare `smith` on a terminal (D-CLI-2).
-func bareTUI(c *cli.Context) error { return startChat("", false, c.Globals.Config) }
+func bareTUI(c *cli.Context) error { return startChat("", false, c.Globals.Config, "") }
 
 // tuiCommand is the explicit TUI launch, with the prior --resume/--no-splash
 // affordances preserved.
 func tuiCommand() *cli.Command {
 	var resume string
 	var noSplash bool
+	var intensity string
 	return &cli.Command{
 		Name:          "tui",
 		Summary:       "Launch the interactive TUI explicitly",
@@ -87,8 +88,9 @@ func tuiCommand() *cli.Command {
 		Flags: func(fs *flag.FlagSet) {
 			fs.StringVar(&resume, "resume", "", "resume a session by ID")
 			fs.BoolVar(&noSplash, "no-splash", false, "hide the startup header")
+			fs.StringVar(&intensity, "intensity", "", "Matrix theme intensity: subtle | medium | bold (default medium)")
 		},
-		Run: func(c *cli.Context) error { return startChat(resume, noSplash, c.Globals.Config) },
+		Run: func(c *cli.Context) error { return startChat(resume, noSplash, c.Globals.Config, intensity) },
 	}
 }
 

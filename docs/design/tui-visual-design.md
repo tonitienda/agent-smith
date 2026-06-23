@@ -152,11 +152,13 @@ diffs, file contents, tool output, and every data panel (`/context`, `/agents`,
 any of these.
 
 ### Intensity dial (additive)
-- **`subtle`** *(default — ships on)* — phosphor accent + soft glow on chrome, ASCII
+- **`subtle`** — phosphor accent + soft glow on chrome, ASCII
   logo, blinking caret. Names stay plain: `you`, `sub-agents`. No rain.
-- **`medium`** — adds: digital rain on idle/empty/splash **only**; subtle glitch-in on
-  the logo; Matrix-flavored names in chrome (`Mr. Anderson`); rotating idle phrases
-  ("following the white rabbit…", "there is no spoon…").
+- **`medium`** *(default — ships on, AS-126)* — adds: digital rain on idle/empty/splash
+  **only**; subtle glitch-in on the logo; Matrix-flavored names in chrome
+  (`Mr. Anderson`); rotating idle phrases ("following the white rabbit…", "there is no
+  spoon…"). The rain is the signature demo moment and is instantly reversible via
+  `/serious`; `"full"` is accepted as a legacy alias for `medium`.
 - **`bold`** — adds: scanlines + a slow CRT sweep, stronger rain/glow, darker canvas
   `#060906`, operator glyph + presence line ("the system has you.").
 
