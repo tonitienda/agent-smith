@@ -76,6 +76,21 @@ The enforced contracts (guard test) are the corners most prone to drift:
   tools in; a tool never reaches back into them.
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
+- **User-delegated subagents** (AS-046, the `task` tool): the tool itself
+  (`internal/tool/builtin/task.go`) stays a leaf — it depends only on the small
+  `builtin.Spawner` consumer seam, never on the loop. The concrete spawner lives
+  in `internal/delegate`, an orchestration package (same layer as `benchmark`)
+  that may depend on the loop, providers, tools, session store, and cost but must
+  not import a face or composition root. It builds a child agent loop over its own
+  isolated, persisted `session.CreateChild` log (linked to the parent), runs it,
+  and rolls the child's usage onto the parent log as a sidechain so `/cost` and
+  the budget guard see the spend. The composition root (`cmd/smith`) wires it:
+  it builds the spawner with a `parent func() delegate.Parent` closure (read under
+  the controller lock so a mid-session model/session swap is reflected) and
+  registers `builtin.NewTask` on the parent registry; the child's tool registry
+  deliberately omits `task`, so delegation does not recurse. Both contracts are
+  guarded by `internal/archtest` (builtin tools and `delegate` must not import a
+  face).
 - **A new orchestration/dev tool** (e.g. the benchmark suite, AS-030): a
   consumer package like `internal/benchmark` may depend on the loop, providers,
   cost, projection, and tools — it sits at the same layer as a face/composition

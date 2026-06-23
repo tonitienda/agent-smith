@@ -54,6 +54,12 @@ type Metadata struct {
 	ProjectPath string    `json:"project_path"`
 	CreatedAt   time.Time `json:"created_at"`
 	Title       string    `json:"title,omitempty"`
+	// Parent is the ID of the session that delegated this one (AS-046). It is set
+	// only on child sessions a `task` delegation spawns, linking a child back to
+	// the parent that ran it so the delegation tree is reconstructable from disk
+	// and a child is discoverable as belonging to its parent. Empty for a normal,
+	// user-started session. Additive and omitempty (D2): older logs simply lack it.
+	Parent string `json:"parent,omitempty"`
 }
 
 // Summary is the project-scoped listing view for a stored session. Every field
@@ -108,6 +114,32 @@ func (s *Store) Create(title string) (*Session, error) {
 		return nil, fmt.Errorf("session: create dir: %w", err)
 	}
 	meta := Metadata{ID: id, ProjectPath: s.projectDir, CreatedAt: time.Now().UTC(), Title: title}
+	if err := writeMetadata(dir, meta); err != nil {
+		return nil, err
+	}
+	log, err := eventlog.Open(filepath.Join(dir, eventLogFile))
+	if err != nil {
+		return nil, err
+	}
+	return &Session{ID: id, Dir: dir, Metadata: meta, Log: log}, nil
+}
+
+// CreateChild creates a new session linked to parentID (AS-046): a `task`
+// delegation spawns a child agent with its own isolated event log, and the link
+// records which session delegated it. The child is an ordinary session in every
+// other respect — discoverable by List, resumable by Open — so a delegated run
+// is inspectable and resumable like any other. A blank parentID behaves exactly
+// like Create.
+func (s *Store) CreateChild(title, parentID string) (*Session, error) {
+	if parentID == "" {
+		return s.Create(title)
+	}
+	id := newID()
+	dir := filepath.Join(s.ProjectSessionsDir(), id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("session: create dir: %w", err)
+	}
+	meta := Metadata{ID: id, ProjectPath: s.projectDir, CreatedAt: time.Now().UTC(), Title: title, Parent: parentID}
 	if err := writeMetadata(dir, meta); err != nil {
 		return nil, err
 	}

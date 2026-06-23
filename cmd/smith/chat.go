@@ -13,12 +13,15 @@ import (
 	"github.com/tonitienda/agent-smith/internal/compact"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/customcmd"
+	"github.com/tonitienda/agent-smith/internal/delegate"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/smithapp"
+	"github.com/tonitienda/agent-smith/internal/tool"
+	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/internal/tui"
 	"github.com/tonitienda/agent-smith/internal/version"
 )
@@ -191,6 +194,36 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		return fmt.Errorf("load permission policy: %w", err)
 	}
 	ctl.setPolicy(policy)
+	// User-delegated subagents (AS-046, PRD §7.17): register the `task` tool, which
+	// delegates a scoped prompt to a child agent running its own isolated, persisted
+	// session (linked to this one) and summarizes the result back into this context.
+	// The child reuses the parent's provider and permission gate and the cheap
+	// routing tier for fan-out; its tool set is the builtin file/search/shell set
+	// with no `task`, so delegation does not recurse. Registered before start so the
+	// first engine offers it, and after setPolicy so the child inherits the gate.
+	spawner := delegate.New(store, providers,
+		func() (*tool.Registry, error) { return appRuntime.BuiltinTools(wd) },
+		func() delegate.Parent {
+			ctl.mu.Lock()
+			defer ctl.mu.Unlock()
+			// policy is set by setPolicy above for the interactive face, but guard
+			// the nil case (a face that skips the gate) rather than dereference it.
+			var perm tool.PermissionFunc
+			if ctl.policy != nil {
+				perm = ctl.policy.Func()
+			}
+			return delegate.Parent{
+				Log:        ctl.sess.Log,
+				SessionID:  ctl.sess.ID,
+				ProvName:   ctl.provName,
+				Model:      ctl.model,
+				Permission: perm,
+				Router:     ctl.router,
+			}
+		})
+	if err := reg.Register(builtin.NewTask(spawner)); err != nil {
+		return fmt.Errorf("register task tool: %w", err)
+	}
 	if err := ctl.start(app.Observer()); err != nil {
 		return fmt.Errorf("build engine: %w", err)
 	}
