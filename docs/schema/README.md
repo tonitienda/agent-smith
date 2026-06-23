@@ -15,7 +15,30 @@ From this V1 freeze onward the schema is **additive-only, forever**:
 - **Consumers MUST tolerate missing and unknown data.** An absent optional field is normal (it means "not reported"/"not applicable", *never* an implied zero). Unknown fields and unknown block kinds MUST deserialize without error and be preserved or passed through, not rejected.
 - **There are no deprecation windows.** Nothing is ever scheduled for removal, because nothing is ever removed.
 
-Pre-V1 the draft was malleable (union spike §15); at V1 it locks. Mechanical enforcement of these rules (golden-file corpus + schema-diff CI) is **AS-004**, which also publishes the contributor process in `docs/schema/EVOLUTION.md`. A language-neutral **JSON Schema** for non-Go clients — plus a Go↔schema divergence guard, with enums/`additionalProperties` reconciled against the tolerate-unknown rule above — is **AS-061**, scheduled for the V1-freeze window (after the AS-060 real-capture pass settles the shape).
+Pre-V1 the draft was malleable (union spike §15); at V1 it locks. Mechanical enforcement of these rules (golden-file corpus + schema-diff CI) is **AS-004**, which also publishes the contributor process in `docs/schema/EVOLUTION.md`. A language-neutral **JSON Schema** for non-Go clients — plus a Go↔schema divergence guard — is **AS-061** (see below).
+
+## JSON Schema (language-neutral contract) — [`block.schema.json`](block.schema.json)
+
+Non-Go clients (TypeScript, Python, Rust, downstream CI validators) validate against the published **JSON Schema** (draft 2020-12): [`docs/schema/block.schema.json`](block.schema.json). It mirrors the Go reference types above — the envelope plus the five content kinds — and is versioned to schema v1.
+
+### How enums and `additionalProperties` reconcile with additive-only
+
+A naive JSON Schema (`additionalProperties: false` + closed `enum`s) would **reject** any document written by a newer, additively-evolved version — the opposite of "consumers tolerate missing and unknown" (D2). The published schema therefore deliberately:
+
+- **Leaves `additionalProperties` open everywhere** (the JSON Schema default). Unknown envelope, body, and sub-object fields — the whole point of the `ext` escape hatch and forward-compat — validate, not fail.
+- **Treats `kind`, `role`, `stop_reason`, and the other vocabularies as non-exhaustive.** They are typed `string`, not closed `enum`s; the known values are documented in each field's `description`. Adding a new `kind` or `stop_reason` is additive, so an unknown value validates. An unknown `kind` carries **no body constraint** (it may legitimately use a body shape v1 does not model) — mirroring the Go `Validate`, which imposes no body rule on non-content kinds.
+
+It still enforces the constraints that are **invariant forever**: the five required envelope keys (`id`, `kind`, `seq`, `ts`, `role`); the required body keys on a **known** `kind` (`tool_call` → `tool_use_id` + `name`; `tool_result` → `tool_use_id`; `file_read` → `path`); that the body present matches the discriminator `kind` (an `if`/`then` per known kind); and the types of known fields (e.g. token counts are non-negative integers).
+
+### Divergence guard (Go ↔ JSON Schema)
+
+[`internal/schemajson`](../../internal/schemajson) is a small stdlib-only validator for the JSON Schema subset the contract uses; its guard test (`go test ./...`, so CI) keeps the two artifacts honest:
+
+- every document the Go types marshal — including the **maximal full-coverage session** and the permanently-kept golden corpus (AS-004) — **validates** against the published schema (a Go change that emits a shape the schema rejects fails CI);
+- a document with **unknown fields and an unknown block `kind`** still validates (forward-compat);
+- a curated **invalid** corpus (mismatched body/`kind`, missing `tool_use_id`/`name`/`path`, wrong field types, negative token counts) is **rejected**, proving the schema actually constrains.
+
+The schema is **hand-authored** and kept honest by the round-trip guard above (rather than generated), since the Go-derived descriptor that the AS-004 baseline already maintains makes a second generator redundant.
 
 ## The event envelope
 
