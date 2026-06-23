@@ -80,7 +80,7 @@ func ParseOverride(content string) Override {
 	}
 	var o Override
 	for _, line := range strings.Split(body, "\n") {
-		key, val, found := strings.Cut(line, ":")
+		key, val, found := strings.Cut(stripComment(line), ":")
 		if !found {
 			continue
 		}
@@ -98,6 +98,25 @@ func ParseOverride(content string) Override {
 		}
 	}
 	return o
+}
+
+// stripComment drops a trailing `#` comment from a directive line — a `#` that is
+// at the line start or preceded by whitespace AND followed by whitespace or
+// end-of-line, the `# comment` convention the example syntax advertises
+// (`phases: think, plan   # reorder`). A `#` that is glued to a token (e.g. an
+// issue ref like "#123" inside a rule) is preserved.
+func stripComment(line string) string {
+	for i := 0; i < len(line); i++ {
+		if line[i] != '#' {
+			continue
+		}
+		beforeOK := i == 0 || line[i-1] == ' ' || line[i-1] == '\t'
+		afterOK := i+1 >= len(line) || line[i+1] == ' ' || line[i+1] == '\t'
+		if beforeOK && afterOK {
+			return line[:i]
+		}
+	}
+	return line
 }
 
 // methodBlock returns the inner text of the first fenced block whose info string
@@ -151,7 +170,7 @@ func dropPhases(phases, skip []string) []string {
 	if len(skip) == 0 {
 		return phases
 	}
-	out := phases[:0:0]
+	out := make([]string, 0, len(phases))
 	for _, p := range phases {
 		if PhaseIndex(skip, p) < 0 {
 			out = append(out, p)

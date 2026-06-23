@@ -70,10 +70,23 @@ func TestParseOverrideAccumulatesSkipAndRules(t *testing.T) {
 	}
 }
 
-func TestParseOverrideTildeFenceAndCaseInsensitiveTag(t *testing.T) {
+func TestParseOverrideCaseInsensitiveTag(t *testing.T) {
 	memo := "```SMITH-METHOD\nphases: Think, Plan\n```\n"
 	o := ParseOverride(memo)
 	if !slices.Equal(o.Phases, []string{"think", "plan"}) {
 		t.Fatalf("phases = %v, want lowercased think,plan", o.Phases)
+	}
+}
+
+func TestParseOverrideStripsInlineComments(t *testing.T) {
+	// Comments (the example syntax advertises them) are stripped, but a mid-token
+	// '#' such as an issue ref in a rule is preserved.
+	memo := "```smith-method\nphases: think, plan   # reorder / skip\nrule: require ticket #123 first\n```\n"
+	o := ParseOverride(memo)
+	if !slices.Equal(o.Phases, []string{"think", "plan"}) {
+		t.Fatalf("phases = %v, want think,plan with the comment stripped", o.Phases)
+	}
+	if !slices.Equal(o.Rules, []string{"require ticket #123 first"}) {
+		t.Fatalf("rules = %v, want the #123 ref preserved", o.Rules)
 	}
 }
