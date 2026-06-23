@@ -17,7 +17,7 @@ package will fail `make test`.
 | **Executable / composition** | `cmd/...` (e.g. `cmd/smith`) | Yes — process-edge wiring (terminal setup, the TUI face). |
 | **Face** | `internal/tui` | Yes — the interactive terminal UI builds on Bubble Tea / Lip Gloss / Glamour. |
 | **OS secret store** | `internal/credential` | Yes — the OS-keychain adapter wraps `go-keyring` (macOS Keychain / Linux Secret Service / Windows Credential Manager); there is no stdlib equivalent (AS-017, D9). |
-| **Core** | everything else: `schema`, `internal/eventlog`, `internal/projection`, `internal/provider` (+ adapters), `internal/loop`, `internal/cost`, `internal/budget`, `internal/config`, `internal/permission`, `internal/tool` (+ `builtin`), `internal/command`, capability packages (`memory`, `skill`, `customcmd`, `hook`, `mcp`, `subagent`), `internal/compact`, `internal/clean`, `internal/rewind`, `internal/session`, `internal/smithapp`, `internal/cli`, … | **No** — Go standard library and this module only. |
+| **Core** | everything else: `schema`, `internal/eventlog`, `internal/projection`, `internal/provider` (+ adapters), `internal/loop`, `internal/cost`, `internal/budget`, `internal/config`, `internal/permission`, `internal/tool` (+ `builtin`), `internal/command`, capability packages (`memory`, `skill`, `customcmd`, `hook`, `mcp`, `subagent`), `internal/compact`, `internal/clean`, `internal/rewind`, `internal/snapshot`, `internal/session`, `internal/smithapp`, `internal/cli`, … | **No** — Go standard library and this module only. |
 
 The **provider adapter** packages (`internal/provider/anthropic`,
 `internal/provider/openai`) are core: they speak HTTPS with `net/http` and the

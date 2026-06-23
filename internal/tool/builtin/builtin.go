@@ -18,6 +18,7 @@
 package builtin
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,19 @@ type FS struct {
 	root         string
 	maxReadBytes int
 	reads        *readSet
+	snap         Snapshotter
+}
+
+// Snapshotter records the pre-mutation content of a file the write/edit tools
+// are about to change, keyed by the executing call's tool_use id, so
+// `/rewind --restore-files` (AS-084) can put the working tree back. The tools
+// pass the path and the content about to be written; the snapshotter reads the
+// current file itself (guarding its own size cap), so a huge overwrite is never
+// read into memory here. It is wired in optionally via WithSnapshotter; when
+// absent the tools behave exactly as before. Capture is best-effort — the tools
+// ignore its error so a snapshot failure never aborts a write.
+type Snapshotter interface {
+	Capture(toolUseID, relPath, absPath string, post []byte) error
 }
 
 // ignoredDirs are directory names the glob and grep walks skip by default:
@@ -65,6 +79,17 @@ func WithMaxReadBytes(n int) Option {
 	return func(f *FS) {
 		if n > 0 {
 			f.maxReadBytes = n
+		}
+	}
+}
+
+// WithSnapshotter wires a snapshot recorder the write/edit tools call before
+// they mutate a file (AS-084). A nil snapshotter is ignored, leaving snapshots
+// off.
+func WithSnapshotter(s Snapshotter) Option {
+	return func(f *FS) {
+		if s != nil {
+			f.snap = s
 		}
 	}
 }
@@ -118,6 +143,22 @@ func (f *FS) resolve(p string) (string, error) {
 		return "", fmt.Errorf("path %q escapes the project root", p)
 	}
 	return abs, nil
+}
+
+// snapshot captures the pre-mutation content of the file at abs (about to be
+// overwritten with post) for /rewind --restore-files (AS-084). The snapshotter
+// reads the current file itself — the caller has not yet mutated it. It is a
+// no-op when no snapshotter is wired or the call carries no tool_use id. Capture
+// errors are swallowed: a failed snapshot must never abort the user's write.
+func (f *FS) snapshot(ctx context.Context, abs string, post []byte) {
+	if f.snap == nil {
+		return
+	}
+	id := tool.ToolUseID(ctx)
+	if id == "" {
+		return
+	}
+	_ = f.snap.Capture(id, f.rel(abs), abs, post)
 }
 
 // rel renders an absolute path inside the root as a clean, slash-separated path

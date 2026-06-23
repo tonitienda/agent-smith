@@ -1,7 +1,7 @@
 ---
 id: AS-084
 title: Rewind file-system snapshot & restore
-status: ready-to-implement
+status: done
 github_issue: 143
 depends_on: [AS-037]
 area: commands
@@ -11,7 +11,7 @@ source: PRD.md §7.16
 
 # AS-084 · Rewind file-system snapshot & restore
 
-**Status: ready to implement** — spun out of AS-037, whose v1 scope decision rewinds *conversation state only*.
+**Status: done** — spun out of AS-037, whose v1 scope decision rewinds *conversation state only*. Engine in `internal/snapshot` (capture + content-addressed store + restore planning); the write/edit tools capture pre-mutation content via a `Snapshotter` wired onto the builtin `FS`, keyed to the call's tool_use id (threaded on the context by the tool runtime); `/rewind --restore-files` (in `cmd/smith`) re-plans against the working tree and restores, deleting files that did not exist at the checkpoint and refusing to touch externally-changed or too-large files.
 
 ## Description
 
@@ -28,10 +28,10 @@ The mechanism is open: per-checkpoint content snapshots of touched files, a shad
 
 ## Acceptance criteria
 
-- [ ] File snapshots are captured before any file write/edit tool execution and stored under the session data directory.
-- [ ] Running `/rewind --restore-files` restores the file state to the selected checkpoint.
-- [ ] If a file has been modified externally since the snapshot, the rewind preview flags a conflict and refuses to silently overwrite it.
-- [ ] Large files exceeding the size cap are skipped, and the skip is reported in the preview.
+- [x] File snapshots are captured before any file write/edit tool execution and stored under the session data directory. — `TestSnapshotOnWriteNewFile`, `TestSnapshotOnEditExistingFile` (capture before mutation); store rooted at `{session}/snapshots`.
+- [x] Running `/rewind --restore-files` restores the file state to the selected checkpoint. — `TestRestoreExistingFile`, `TestRestoreDeletesNewFile`, `TestEarliestPreStateRestored`.
+- [x] If a file has been modified externally since the snapshot, the rewind preview flags a conflict and refuses to silently overwrite it. — `TestConflictDetected`; surfaced in the preview/result via `renderRestorePlan`.
+- [x] Large files exceeding the size cap are skipped, and the skip is reported in the preview. — `TestLargeFileSkipped`; cap is `snapshot.DefaultMaxBytes` (5 MiB).
 
 ## Dependencies
 
