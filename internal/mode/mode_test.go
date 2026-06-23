@@ -181,8 +181,8 @@ func TestPanelRendersGoalTrackerAndTrail(t *testing.T) {
 	id := enter(t, l)
 	mustAppend(t, l, SetPhase(id, "analyse"))
 
-	got := Panel(l.Events(), DefaultPhases(), "ship the thing")
-	for _, want := range []string{"Mode: coding", "Goal: ship the thing", "[analyse]", "Visited:", "think → analyse"} {
+	got := Panel(l.Events(), DefaultPhases(), "ship the thing", []string{"require a ticket before any code"})
+	for _, want := range []string{"Mode: coding", "Goal: ship the thing", "[analyse]", "Visited:", "think → analyse", "Project rules:", "require a ticket before any code"} {
 		if !contains(got, want) {
 			t.Fatalf("Panel missing %q:\n%s", want, got)
 		}
@@ -190,7 +190,7 @@ func TestPanelRendersGoalTrackerAndTrail(t *testing.T) {
 }
 
 func TestPanelWithoutModeIsInert(t *testing.T) {
-	if got := Panel(eventlog.New().Events(), DefaultPhases(), ""); !contains(got, "No coding mode active") {
+	if got := Panel(eventlog.New().Events(), DefaultPhases(), "", nil); !contains(got, "No coding mode active") {
 		t.Fatalf("Panel on empty log = %q", got)
 	}
 }

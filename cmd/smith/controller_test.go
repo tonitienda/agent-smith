@@ -11,6 +11,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/mode"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
@@ -761,6 +762,47 @@ func TestCmdFeatureModePhase(t *testing.T) {
 	// /phase with no active mode is an error, not a silent no-op.
 	if _, err := ctl.cmdPhase(ctx, []string{"next"}); err == nil {
 		t.Error("cmdPhase ran with no active mode")
+	}
+}
+
+// TestProjectMethodOverride covers AS-075: a memory file's smith-method block
+// reorders/skips phases and adds a project rule, and that customised method flows
+// through entry, /phase, and the mode panel.
+func TestProjectMethodOverride(t *testing.T) {
+	ctl := newTestController(t)
+	ctx := context.Background()
+
+	// Seed a project memory block the way seedMemory would, carrying an override
+	// that reorders to a three-phase method and adds a rule.
+	memo := "# House rules\n\n```smith-method\nphases: plan, implement, verify\nrule: require a ticket before any code\n```\n"
+	if _, err := ctl.sess.Log.Append(memory.Block("CLAUDE.md", memo)); err != nil {
+		t.Fatalf("seed memory: %v", err)
+	}
+
+	// Entry starts at the overridden first phase, not the baked-in "think".
+	if _, err := ctl.cmdFeature(ctx, []string{"add", "OAuth"}); err != nil {
+		t.Fatalf("cmdFeature: %v", err)
+	}
+	if cur, ok := mode.Current(ctl.sess.Log.Events()); !ok || cur.Phase != "plan" {
+		t.Fatalf("entry phase = %+v, want plan", cur)
+	}
+
+	// /phase next walks the overridden order (plan → implement), and the dropped
+	// default phase "think" is no longer a valid jump target.
+	if _, err := ctl.cmdPhase(ctx, []string{"next"}); err != nil {
+		t.Fatalf("cmdPhase next: %v", err)
+	}
+	if cur, _ := mode.Current(ctl.sess.Log.Events()); cur.Phase != "implement" {
+		t.Errorf("phase after next = %q, want implement", cur.Phase)
+	}
+	if _, err := ctl.cmdPhase(ctx, []string{"think"}); err == nil {
+		t.Error("cmdPhase accepted a phase the override removed")
+	}
+
+	// The rule is surfaced in the mode panel.
+	_, _, panel := ctl.currentModeChrome("add OAuth")
+	if !strings.Contains(panel, "require a ticket before any code") {
+		t.Errorf("panel missing project rule:\n%s", panel)
 	}
 }
 

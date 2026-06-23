@@ -295,9 +295,11 @@ func PhaseHistory(events []schema.Block, instanceID string) []string {
 // Like Render it is plain text — flavor and layout live in the face (D-CODE-4) —
 // so headless callers can reuse it verbatim. goal is the active session
 // objective (AS-040), passed in so this package does not reach into goal state;
-// empty is simply omitted. Phase-produced artifacts (AS-076) attach here once
-// that ticket records them on the log.
-func Panel(events []schema.Block, phases []string, goal string) string {
+// empty is simply omitted. rules are the project's method rules (AS-075),
+// surfaced so the customised method is visible; nil omits the section.
+// Phase-produced artifacts (AS-076) attach here once that ticket records them on
+// the log.
+func Panel(events []schema.Block, phases []string, goal string, rules []string) string {
 	cur, ok := Current(events)
 	if !ok {
 		return `No coding mode active. Use /feature "<prompt>" or /mode coding to enter.`
@@ -310,6 +312,12 @@ func Panel(events []schema.Block, phases []string, goal string) string {
 	fmt.Fprintf(&b, "\nPhases:\n  %s\n", Tracker(phases, cur.Phase))
 	if hist := PhaseHistory(events, cur.InstanceID); len(hist) > 0 {
 		fmt.Fprintf(&b, "\nVisited:\n  %s\n", strings.Join(hist, " → "))
+	}
+	if len(rules) > 0 {
+		b.WriteString("\nProject rules:\n")
+		for _, r := range rules {
+			fmt.Fprintf(&b, "  · %s\n", r)
+		}
 	}
 	return b.String()
 }

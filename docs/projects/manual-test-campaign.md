@@ -30,11 +30,11 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-008–AS-012 | Implemented | Run a scripted Anthropic and OpenAI-compatible smoke with test credentials, then provider fixture tests. | Provider stream events normalize consistently; conformance tests pass without live network. |
 | AS-013–AS-016, AS-024, AS-062 | Implemented | Ask the agent to read, edit, search, and run a shell command in a disposable repo. | Tools validate arguments, request/obey permissions, show transparent calls/diffs, and log results. |
 | AS-020, AS-025, AS-026, AS-063, AS-086 | Implemented | Use `/cost`, `/context`, and budget settings after a few turns. | Token/cost totals, per-block estimates, context meter, and conservative budget enforcement are visible and coherent. |
-| AS-021–AS-023, AS-033, AS-037–AS-041, AS-053, AS-064, AS-066–AS-068, AS-072–AS-074 | Implemented | Drive the TUI command palette and slash commands. | Built-ins and custom commands appear, panels work, command metadata matches CLI help, and coding-mode UI state is visible. |
+| AS-021–AS-023, AS-033, AS-037–AS-041, AS-053, AS-064, AS-066–AS-068, AS-072–AS-075 | Implemented | Drive the TUI command palette and slash commands. | Built-ins and custom commands appear, panels work, command metadata matches CLI help, and coding-mode UI state is visible. |
 | AS-031, AS-071, AS-093 | Implemented | Set config through env, user config, project config, and flags. | Precedence is flag > project > user > env > default; typed consumers agree. |
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
-| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-084, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-076–AS-081, AS-084, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -105,7 +105,7 @@ Covers AS-020, AS-025 through AS-028, AS-041, AS-042, AS-063, AS-068, AS-085, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-074, AS-114.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-075, AS-114.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -114,6 +114,7 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.3 | Add `.agent-smith/commands/review.md` with frontmatter and `$ARGUMENTS`; reopen the palette. | Custom command appears with description/argument hint; built-ins still win name conflicts. |
 | 6.4 | Enter Coding Mode with `/feature`; advance through phases. | Phase tracker panel and phase-as-block state are visible; process skill blocks are scoped to the active phase. |
 | 6.5 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
+| 6.6 | Add a ` ```smith-method ` block to `CLAUDE.md` (`phases: plan, implement, verify` + a `rule:`), start a new session, and `/feature`. | Entry starts at the overridden first phase, `/phase` walks the custom order, removed phases are rejected, and the rule shows in the mode panel (AS-075). |
 
 ### 7. Configuration, memory, skills, hooks, MCP, and living-skills substrate
 

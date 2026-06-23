@@ -161,6 +161,18 @@ The enforced contracts (guard test) are the corners most prone to drift:
   deduped per `(instance, phase)` and skipped entirely when the mode is off. A
   user/project skill of the same name shadows the bundled one; the grounding
   discipline (D-CODE-8) is the `codingskills.IsGrounded` predicate.
+- **Coding Mode project method override** (AS-075): the third opinion layer
+  (D-CODE-5.3). A project's memory files (AS-032) may carry a fenced
+  ` ```smith-method ` block that reorders phases (`phases:`), drops one (`skip:`),
+  or adds a project rule (`rule:`). `mode.ResolveMethod` folds these over
+  `mode.DefaultPhases` — string-only, so the lifecycle core still never imports
+  `memory` or skill content; the composition root passes the memory block texts
+  in. Overrides ride on the log as ordinary memory blocks, so resolution stays
+  log-derived (D3) and precedence-ordered (most-specific memory wins). Parsing is
+  tolerant and additive (D2): an unrecognised directive is ignored and the
+  unspecified parts fall back to the default, so a partial override never fails the
+  mode. The resolved phase order drives entry, `/phase`, and the tracker; rules
+  surface in the `mode.Panel`.
 - **Session retrospective** (`/insights`, AS-045): `internal/insights` analyzes a
   session's blocks into measured signals (cost, costliest turns, repeated reads /
   commands, oversized tool outputs, error loops, live-vs-stale context health) and
