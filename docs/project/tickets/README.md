@@ -88,7 +88,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-051](AS-051-headless-cli.md) | Headless CLI mode | faces | done | 018, 031 |
 | [AS-052](AS-052-acp-server.md) | ACP server | faces | ready | 018, 051 |
 | [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |
-| [AS-054](AS-054-async-runner.md) | Background/async runner | async | ready | 007, 041, 051 |
+| [AS-054](AS-054-async-runner.md) | Background/async runner | async | done | 007, 041, 051 |
 | [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | ready | 005, 007, 020 |
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | done | 005 |
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | ready | 007, 020, 045 |
@@ -148,6 +148,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-118](AS-118-json-root-help-output.md) | Root help ignores `--output json` | faces | done | 065, 070 |
 | [AS-119](AS-119-task-faces-and-tool-inheritance.md) | `task` delegation across faces + child tool inheritance (spun out of AS-046) | subagents | done | 046, 051, 077 |
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
+| [AS-121](AS-121-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | ready | 054 |
 
 ## Suggested build order
 

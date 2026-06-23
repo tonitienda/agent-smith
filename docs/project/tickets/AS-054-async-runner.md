@@ -1,7 +1,7 @@
 ---
 id: AS-054
 title: Background/async runner (queue, scheduled, resumable, budget-capped)
-status: ready-to-implement
+status: done
 github_issue: 54
 depends_on: [AS-007, AS-041, AS-051]
 area: async
@@ -11,7 +11,7 @@ source: PRD.md §7.22, §3 (Async Ana)
 
 # AS-054 · Background/async runner
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -27,10 +27,43 @@ source: PRD.md §7.22, §3 (Async Ana)
 
 ## Acceptance criteria
 
-- [ ] `smith run --queue <task>` enqueues; the runner executes unattended within its budget ceiling and records a normal, auditable session (AS-007/AS-055).
-- [ ] Hard budget stop on a background run halts cleanly and is reported in run status.
-- [ ] A killed runner resumes or cleanly reports interrupted runs per the chosen policy.
-- [ ] `smith runs list/status` shows queue and outcomes machine-readably.
+- [x] `smith run --queue <task>` enqueues; the runner executes unattended within its budget ceiling and records a normal, auditable session (AS-007/AS-055).
+- [x] Hard budget stop on a background run halts cleanly and is reported in run status.
+- [x] A killed runner resumes or cleanly reports interrupted runs per the chosen policy.
+- [x] `smith runs list/status` shows queue and outcomes machine-readably.
+
+## Implementation notes
+
+- **Queue store (`internal/run`):** a project-scoped, stdlib-only durable store
+  rooted at `~/.agent-smith/runs/<project-hash>/<run-id>/run.json` — the same
+  data-dir layout as the session store, so a run's records sit beside the sessions
+  it creates. Records carry the prompt, budget/auto posture, status, and the
+  outcome (session id, stop reason, cost, exit code, error). Writes are atomic
+  (temp file + rename + dir fsync); the package is execution-free and offline-
+  testable (AS-095, PRD D6).
+- **Enqueue:** `smith run --queue "<task>"` records a queued run and prints its ID
+  instead of building an engine. `--budget`/`--auto` are captured on the record.
+- **Worker:** `smith runs work` drains the queue FIFO, one run at a time (the V1
+  one-concurrent-worker model), executing each through the shared headless core
+  (`executeRun`, extracted from `runHeadless` so `smith run` and the worker
+  classify outcomes identically). It maps the headless exit-code taxonomy
+  (D-CLI-7) to a durable status: `done`/`budget`/`failed`/`interrupted`. Ctrl+C
+  cancels the in-flight run cleanly (marked `interrupted`) and stops the worker.
+- **Interrupted/resume:** on start the worker reclaims any record left `running`
+  by a dead worker as `interrupted` (single-worker assumption); `smith runs
+  resume <id>` re-queues an interrupted/failed/budget/canceled run. No automatic
+  daemon restart (clarified decision).
+- **Transient retries** are handled *inside* the turn by the loop's backoff policy
+  (AS-018), so there is no redundant run-level retry: a run that still ends in a
+  provider error has exhausted those retries, is recorded as failed, and is
+  recoverable via `runs resume` — avoiding a double-spend and a forked session.
+- **Inspection:** `smith runs list` (newest-first table / JSON array) and `smith
+  runs status <id>` (key:value block / JSON object) are scriptable and emit
+  machine-readable JSON under `--output json`.
+- **Deferred (documented, not silent):** recurring schedules are delegated to
+  cron/CI; a long-running worker daemon + concurrency > 1 is spun out as a
+  follow-on (AS-121); webhooks/desktop notifications remain deferred per the
+  clarified decisions above.
 
 ## Dependencies
 
