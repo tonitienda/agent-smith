@@ -133,37 +133,56 @@ func (s *Store) load() error {
 			s.recs[r.ToolUseID] = r
 		}
 	}
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("snapshot: scan manifest: %w", err)
+	}
 	return nil
 }
 
 // Capture records the pre-mutation state of the file at absPath about to be
-// written by a write/edit call identified by toolUseID. pre is the file's
-// current content and preExists reports whether it existed; post is the content
-// the tool is about to write. It is best-effort: an empty toolUseID is a no-op,
-// and a file exceeding the size cap is recorded as skipped (it cannot be
-// restored) rather than stored. The returned error is for tests/callers that
-// care; the file tools ignore it so a snapshot failure never aborts the write.
-func (s *Store) Capture(toolUseID, relPath, absPath string, pre []byte, preExists bool, post []byte, mode os.FileMode) error {
+// written by a write/edit call identified by toolUseID; post is the content the
+// tool is about to write. The Store reads the file's current content itself,
+// guarded by a stat-then-size check so a very large file (a big log or SQL dump
+// the agent overwrites) is recorded as skipped without ever being read into
+// memory — it cannot be restored, but the rewind preview reports the skip. It is
+// best-effort: an empty toolUseID is a no-op. The returned error is for
+// tests/callers that care; the file tools ignore it so a snapshot failure never
+// aborts the write.
+func (s *Store) Capture(toolUseID, relPath, absPath string, post []byte) error {
 	if toolUseID == "" {
 		return nil
 	}
-	rec := Record{
-		ToolUseID: toolUseID,
-		Path:      relPath,
-		AbsPath:   absPath,
-		PreExists: preExists,
-		Mode:      uint32(mode),
+	rec := Record{ToolUseID: toolUseID, Path: relPath, AbsPath: absPath}
+
+	info, statErr := os.Stat(absPath)
+	preExists := statErr == nil && !info.IsDir()
+	rec.PreExists = preExists
+	var preSize int64
+	if preExists {
+		preSize = info.Size()
+		rec.Mode = uint32(info.Mode().Perm())
 	}
-	if len(pre) > s.maxBytes || len(post) > s.maxBytes {
+
+	// Decide skip from the on-disk size, never from bytes read into memory.
+	if preSize > int64(s.maxBytes) || len(post) > s.maxBytes {
 		rec.Skipped = true
-		rec.Size = max(len(pre), len(post))
+		rec.PreExists = preExists
+		rec.Size = int(max(preSize, int64(len(post))))
 		return s.append(rec)
 	}
+
 	rec.PostHash = hashBytes(post)
 	if preExists {
-		rec.PreHash = hashBytes(pre)
-		if err := s.writeObject(rec.PreHash, pre); err != nil {
-			return err
+		pre, err := os.ReadFile(absPath)
+		if err != nil {
+			// The file vanished between stat and read (a race): record no
+			// pre-state rather than fail the caller's write.
+			rec.PreExists = false
+		} else {
+			rec.PreHash = hashBytes(pre)
+			if err := s.writeObject(rec.PreHash, pre); err != nil {
+				return err
+			}
 		}
 	}
 	return s.append(rec)
@@ -201,14 +220,32 @@ func (s *Store) append(r Record) error {
 }
 
 // writeObject stores data under its hash, deduplicating: an object already
-// present (a file written with the same content before) is left as is.
+// present (a file written with the same content before) is left as is. The write
+// is atomic — a sibling temp file renamed into place — so an interrupted write
+// (crash, power loss, disk full) never leaves a partial object that the Stat
+// dedup check would later mistake for a complete one. Two concurrent tool calls
+// writing the same hash race only on the final rename, which is safe: both hold
+// identical bytes.
 func (s *Store) writeObject(hash string, data []byte) error {
 	p := filepath.Join(s.objects, hash)
 	if _, err := os.Stat(p); err == nil {
 		return nil
 	}
-	if err := os.WriteFile(p, data, 0o644); err != nil {
-		return fmt.Errorf("snapshot: write object: %w", err)
+	tmp, err := os.CreateTemp(s.objects, ".tmp-*")
+	if err != nil {
+		return fmt.Errorf("snapshot: create temp object: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // a no-op once the rename succeeds
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("snapshot: write temp object: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("snapshot: close temp object: %w", err)
+	}
+	if err := os.Rename(tmpName, p); err != nil {
+		return fmt.Errorf("snapshot: rename object: %w", err)
 	}
 	return nil
 }

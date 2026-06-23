@@ -7,11 +7,11 @@ import (
 )
 
 // capture is a tiny helper: snapshot the current state of abs before writing
-// post, then perform the write, mirroring what the write/edit tools do.
+// post, then perform the write, mirroring what the write/edit tools do. The
+// store reads abs itself for the pre-state, so this captures before the write.
 func capture(t *testing.T, s *Store, id, rel, abs, post string) {
 	t.Helper()
-	pre, readErr := os.ReadFile(abs)
-	if err := s.Capture(id, rel, abs, pre, readErr == nil, []byte(post), 0o644); err != nil {
+	if err := s.Capture(id, rel, abs, []byte(post)); err != nil {
 		t.Fatalf("capture %s: %v", rel, err)
 	}
 	if err := os.WriteFile(abs, []byte(post), 0o644); err != nil {
@@ -84,6 +84,32 @@ func TestRestoreDeletesNewFile(t *testing.T) {
 	}
 	if _, err := os.Stat(abs); !os.IsNotExist(err) {
 		t.Fatalf("file should have been deleted, stat err = %v", err)
+	}
+}
+
+// TestCreatedThenExternallyDeleted: a file Smith created after the checkpoint
+// that is already gone from disk is a no-op delete, not a conflict — restoring
+// to "absent" is exactly the on-disk state.
+func TestCreatedThenExternallyDeleted(t *testing.T) {
+	proj := t.TempDir()
+	abs := filepath.Join(proj, "gone.txt")
+	s, err := Open(filepath.Join(proj, ".snap"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+
+	capture(t, s, "tu1", "gone.txt", abs, "created") // new file
+	if err := os.Remove(abs); err != nil {           // deleted outside Smith
+		t.Fatal(err)
+	}
+
+	actions := s.PlanRestore([]Mutation{{ToolUseID: "tu1", Seq: 1}})
+	if len(actions) != 1 || actions[0].Kind != ActionDelete {
+		t.Fatalf("want delete (no-op) action, got %+v", actions)
+	}
+	if _, err := s.ApplyRestore(actions); err != nil {
+		t.Fatalf("apply: %v", err)
 	}
 }
 

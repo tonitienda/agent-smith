@@ -20,8 +20,11 @@ type capturedCall struct {
 
 type fakeSnapshotter struct{ calls []capturedCall }
 
-func (f *fakeSnapshotter) Capture(id, rel, abs string, pre []byte, preExists bool, post []byte, _ os.FileMode) error {
-	f.calls = append(f.calls, capturedCall{id, rel, string(pre), preExists, string(post)})
+// Capture reads abs itself — as the real store does — which also proves the hook
+// fires before the tool mutates the file (it still sees the pre-state).
+func (f *fakeSnapshotter) Capture(id, rel, abs string, post []byte) error {
+	pre, err := os.ReadFile(abs)
+	f.calls = append(f.calls, capturedCall{id, rel, string(pre), err == nil, string(post)})
 	return nil
 }
 

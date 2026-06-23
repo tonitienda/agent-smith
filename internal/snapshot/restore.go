@@ -80,10 +80,16 @@ func (s *Store) PlanRestore(muts []Mutation) []FileAction {
 		sortBySeq(es)
 		earliest, latest := es[0].rec, es[len(es)-1].rec
 		fa := FileAction{Path: earliest.Path, AbsPath: abs, mode: os.FileMode(earliest.Mode)}
+		matches, exists := diskMatches(abs, latest)
 		switch {
 		case earliest.Skipped || latest.Skipped:
 			fa.Kind = ActionLargeSkip
-		case !diskMatches(abs, latest):
+		case !earliest.PreExists && !exists:
+			// A file Smith created that is already gone: restoring to "absent" is a
+			// no-op, not a conflict (it only looks like a mismatch because the read
+			// failed with ErrNotExist).
+			fa.Kind = ActionDelete
+		case !matches:
 			fa.Kind = ActionConflict
 		case !earliest.PreExists:
 			fa.Kind = ActionDelete
@@ -117,7 +123,7 @@ func (s *Store) ApplyRestore(actions []FileAction) (Result, error) {
 			if mode == 0 {
 				mode = 0o644
 			}
-			if err := os.WriteFile(a.AbsPath, data, mode); err != nil {
+			if err := atomicWrite(a.AbsPath, data, mode); err != nil {
 				return res, fmt.Errorf("snapshot: restore %s: %w", a.Path, err)
 			}
 			res.Restored = append(res.Restored, a.Path)
@@ -136,12 +142,39 @@ func (s *Store) ApplyRestore(actions []FileAction) (Result, error) {
 }
 
 // diskMatches reports whether the file at abs currently holds the content Smith
-// last wrote (latest.PostHash). A missing or unreadable file, or any other
-// content, counts as an external change — the restore treats it as a conflict.
-func diskMatches(abs string, latest Record) bool {
+// last wrote (latest.PostHash) and whether it exists at all. The exists flag lets
+// PlanRestore tell an externally-deleted file (a conflict) apart from a
+// Smith-created file that is already gone (a no-op delete). A read error other
+// than "not exist" counts as not-matching but still existing, so it is treated
+// conservatively as a conflict.
+func diskMatches(abs string, latest Record) (matches, exists bool) {
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		return false
+		return false, !errors.Is(err, fs.ErrNotExist)
 	}
-	return hashBytes(data) == latest.PostHash
+	return hashBytes(data) == latest.PostHash, true
+}
+
+// atomicWrite writes data to abs atomically via a sibling temp file and rename,
+// so an interrupted restore (crash, power loss, disk full) leaves the file
+// untouched rather than half-written.
+func atomicWrite(abs string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".smith-restore-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // a no-op once the rename succeeds
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, abs)
 }

@@ -1947,14 +1947,20 @@ func (s *chatSession) rewindApply() (command.Output, error) {
 	}
 	// File restore (AS-084): re-plan against the current working tree so conflict
 	// detection is fresh, then restore the unambiguous files and report the rest.
-	// A restore error is surfaced but the conversation rewind already stands.
-	if restoreFiles && s.snapshots != nil {
-		actions := s.snapshots.PlanRestore(droppedFileMutations(events, plan.DropIDs))
-		res, err := s.snapshots.ApplyRestore(actions)
+	// The blocking disk I/O runs without s.mu held — matching initApply — so the
+	// status-line refresh (Meta/Meter) is not frozen while files are written. A
+	// restore error still renders the partial result so the user sees which files
+	// changed before the failure; the conversation rewind already stands.
+	snaps := s.snapshots
+	if restoreFiles && snaps != nil {
+		muts := droppedFileMutations(events, plan.DropIDs)
+		s.mu.Unlock()
+		actions := snaps.PlanRestore(muts)
+		res, err := snaps.ApplyRestore(actions)
+		s.mu.Lock()
+		text += "\n\n" + renderRestoreResult(res, actions, plan.Files)
 		if err != nil {
-			text += fmt.Sprintf("\n\n⚠ File restore failed: %v", err)
-		} else {
-			text += "\n\n" + renderRestoreResult(res, actions, plan.Files)
+			text += fmt.Sprintf("\n⚠ File restore stopped early: %v", err)
 		}
 	}
 	text += "\nRestore the conversation with /rewind --undo."
