@@ -313,6 +313,13 @@ func (m *model) emptyState() string {
 	if phrase := m.idlePhrase(); phrase != "" {
 		fg = append(fg, "", dimStyle.Render(phrase))
 	}
+	// Build (or resize) the rain here, not only on the tick, so the first frame and
+	// every post-resize frame already carry correctly-sized rain — no 60ms startup
+	// flash or one-frame layout glitch (Gemini review). ensureRain is gated on
+	// rainActive so a muted theme stays plain.
+	if m.rainActive() {
+		m.ensureRain()
+	}
 	if m.rain == nil {
 		return strings.Join(fg, "\n")
 	}
