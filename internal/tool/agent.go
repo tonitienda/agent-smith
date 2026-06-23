@@ -22,6 +22,9 @@ func WithAgent(ctx context.Context, id string) context.Context {
 // AgentFromContext returns the delegated-agent id tagged on ctx, or "" when the
 // call is the main (non-delegated) agent's own.
 func AgentFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
 	id, _ := ctx.Value(agentKey{}).(string)
 	return id
 }
