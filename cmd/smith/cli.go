@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/delegate"
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/loop"
 	"github.com/tonitienda/agent-smith/internal/provider"
@@ -24,6 +25,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/smithapp"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tool"
+	"github.com/tonitienda/agent-smith/internal/tool/builtin"
 	"github.com/tonitienda/agent-smith/schema"
 )
 
@@ -426,7 +428,7 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 	if err != nil {
 		return err
 	}
-	prov, model, err := headlessProvider(c.Globals.Config)
+	prov, provName, model, err := headlessProvider(c.Globals.Config)
 	if err != nil {
 		return err
 	}
@@ -452,6 +454,26 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 	// Capture-time redaction (AS-115): a headless run honors the same `redaction`
 	// opt-in an interactive session does, scrubbing secrets before the log.
 	applyRedaction(cfg, sess.Log, c.Stderr)
+
+	// User-delegated subagents (AS-046/AS-119): a headless run exposes the `task`
+	// tool with the same isolation, linking, and cost rollup as the TUI. The child
+	// inherits this run's permission gate (allowlist-then-deny), so a child tool
+	// call that would prompt is denied rather than hanging (D-CLI-9). A headless run
+	// loads no skills or MCP servers, so the child gets the builtin tool set.
+	router, _ := routing.ConfigFrom(cfg)
+	taskParent := func() delegate.Parent {
+		return delegate.Parent{
+			Log:        sess.Log,
+			SessionID:  sess.ID,
+			ProvName:   provName,
+			Model:      model,
+			Permission: gate.decide,
+			Router:     router,
+		}
+	}
+	if err := tools.Register(builtin.NewTask(taskSpawner(store, wd, nil, nil, taskParent))); err != nil {
+		return fmt.Errorf("register task tool: %w", err)
+	}
 
 	rtOpts := append([]tool.Option{tool.WithPermission(gate.decide)}, hookToolOptions(hooks, sess.Log, sess.ID)...)
 	rt := tool.NewRuntime(tools, sess.Log, rtOpts...)
@@ -507,18 +529,18 @@ func runHeadless(ctx context.Context, c *cli.Context, prompt string, opts headle
 // to its vendor through the pricing table — the same resolution readonlyController
 // uses — so `smith run` with an OpenAI SMITH_MODEL talks to the OpenAI provider
 // rather than failing against a hardcoded Anthropic one.
-func headlessProvider(override string) (provider.Provider, string, error) {
+func headlessProvider(override string) (prov provider.Provider, provName, model string, err error) {
 	pricing, err := sessionPricing(override)
 	if err != nil {
-		return nil, "", fmt.Errorf("load pricing table: %w", err)
+		return nil, "", "", fmt.Errorf("load pricing table: %w", err)
 	}
 	providers := appRuntime.Providers()
-	provName, model := appRuntime.SelectProviderModel(pricing, providers, appRuntime.ChatModel())
+	provName, model = appRuntime.SelectProviderModel(pricing, providers, appRuntime.ChatModel())
 	prov, ok := providers[provName]
 	if !ok {
-		return nil, "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
+		return nil, "", "", fmt.Errorf("no provider configured for model %q (vendor %q)", model, provName)
 	}
-	return prov, model, nil
+	return prov, provName, model, nil
 }
 
 // configCommand reads and writes layered config (D-CLI-6). `get` resolves a key

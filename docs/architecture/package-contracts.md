@@ -84,13 +84,18 @@ The enforced contracts (guard test) are the corners most prone to drift:
   not import a face or composition root. It builds a child agent loop over its own
   isolated, persisted `session.CreateChild` log (linked to the parent), runs it,
   and rolls the child's usage onto the parent log as a sidechain so `/cost` and
-  the budget guard see the spend. The composition root (`cmd/smith`) wires it:
-  it builds the spawner with a `parent func() delegate.Parent` closure (read under
-  the controller lock so a mid-session model/session swap is reflected) and
-  registers `builtin.NewTask` on the parent registry; the child's tool registry
-  deliberately omits `task`, so delegation does not recurse. Both contracts are
-  guarded by `internal/archtest` (builtin tools and `delegate` must not import a
-  face).
+  the budget guard see the spend. The composition root (`cmd/smith`) wires it on
+  every face — interactive, headless (`smith run`), and `serve` (AS-119) — through
+  the shared `taskSpawner`/`childTools` helpers (`cmd/smith/delegate.go`): it builds
+  the spawner with a `parent func() delegate.Parent` closure (read under the
+  controller lock so a mid-session model/session swap is reflected) and registers
+  `builtin.NewTask` on the parent registry. The child inherits the parent's
+  permission gate per that face's policy (forwarded on the interactive/serve faces,
+  fail-fast denied under the headless allowlist-then-deny posture) and its tool
+  registry includes the parent's skills (AS-034) and live MCP tools (AS-036,
+  borrowed not re-dialled) but deliberately omits `task`, so delegation does not
+  recurse. Both contracts are guarded by `internal/archtest` (builtin tools and
+  `delegate` must not import a face).
 - **A new orchestration/dev tool** (e.g. the benchmark suite, AS-030): a
   consumer package like `internal/benchmark` may depend on the loop, providers,
   cost, projection, and tools — it sits at the same layer as a face/composition

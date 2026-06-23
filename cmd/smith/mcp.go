@@ -40,9 +40,21 @@ func connectMCPServers(ctx context.Context, cfg *config.Config, reg *tool.Regist
 			continue
 		}
 		clients = append(clients, client)
+	}
+	registerMCPTools(reg, clients, stderr)
+	return clients
+}
+
+// registerMCPTools registers the namespaced tools (and resource tools, AS-083) of
+// already-connected MCP clients onto reg. It is split out of connectMCPServers so a
+// delegated child (AS-119) can be given the same live tools over the parent's
+// clients — borrowed, never re-dialled or closed by the child. A tool whose
+// namespaced name collides is warned about and skipped (§7.4 isolation).
+func registerMCPTools(reg *tool.Registry, clients []*mcp.Client, stderr io.Writer) {
+	for _, client := range clients {
 		for _, info := range client.Tools() {
 			if err := reg.Register(mcpTool(client, info)); err != nil {
-				_, _ = fmt.Fprintf(stderr, "warning: mcp: server %q tool %q: %v\n", spec.Name, info.Name, err)
+				_, _ = fmt.Fprintf(stderr, "warning: mcp: server %q tool %q: %v\n", client.Name(), info.Name, err)
 			}
 		}
 		// A resource-capable server (AS-083) gets two synthetic tools so the model
@@ -51,12 +63,11 @@ func connectMCPServers(ctx context.Context, cfg *config.Config, reg *tool.Regist
 		if client.HasResources() {
 			for _, t := range mcpResourceTools(client) {
 				if err := reg.Register(t); err != nil {
-					_, _ = fmt.Fprintf(stderr, "warning: mcp: server %q resource tool: %v\n", spec.Name, err)
+					_, _ = fmt.Fprintf(stderr, "warning: mcp: server %q resource tool: %v\n", client.Name(), err)
 				}
 			}
 		}
 	}
-	return clients
 }
 
 // closeMCPClients tears down every connected MCP client (and its subprocess).

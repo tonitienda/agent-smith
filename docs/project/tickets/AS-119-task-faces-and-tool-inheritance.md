@@ -1,7 +1,7 @@
 ---
 id: AS-119
 title: User-delegated subagents — headless/serve wiring + child tool inheritance
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-046, AS-051, AS-077]
 area: subagents
@@ -37,13 +37,18 @@ builtin file/search/shell tool set only. Two gaps remain:
 
 ## Acceptance criteria
 
-- [ ] `smith run` and `serve` sessions expose the `task` tool with the same
+- [x] `smith run` and `serve` sessions expose the `task` tool with the same
       isolation, linking, cheap-tier default, and cost rollup as the TUI.
-- [ ] A child's permission prompt on a non-interactive face is handled per that
-      face's documented policy (no hang).
-- [ ] A child can invoke the parent's skills and MCP tools; the `task` tool is
-      still absent from the child registry (no recursion).
-- [ ] MCP client lifecycle is unaffected by delegation (no double-close / leak).
+- [x] A child's permission prompt on a non-interactive face is handled per that
+      face's documented policy (no hang): the child inherits the run/session gate,
+      so headless denies (allowlist-then-deny) and serve forwards to the client.
+- [x] A child can invoke the parent's skills and MCP tools; the `task` tool is
+      still absent from the child registry (no recursion). The interactive face
+      passes its skills + live MCP clients to `childTools`; headless/serve load
+      neither, so their children get the builtin set.
+- [x] MCP client lifecycle is unaffected by delegation (no double-close / leak):
+      `childTools` registers fresh tool wrappers over the parent's live clients
+      (borrow), and never dials or closes them.
 
 ## Dependencies
 
