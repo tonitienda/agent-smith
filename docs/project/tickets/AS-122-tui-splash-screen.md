@@ -3,7 +3,7 @@ id: AS-122
 title: TUI splash / startup screen — logo, context line, invite text, blinking caret
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-121]
+depends_on: [AS-121, AS-126]
 area: tui
 priority: P0
 source: docs/design/tui-visual-design.md §7.1
@@ -68,5 +68,5 @@ Ask Agent Smith anything to begin.
   before any message is sent.
 - The `┃` glyph blinks when the input is empty and stops when the user types.
 - `--no-splash` still suppresses everything above the input bar (existing behaviour).
-- At `medium`/`bold` Matrix intensity the invite copy may be replaced by the idle phrase
-  rotation (AS-053 already owns that path; this ticket just provides the foundation).
+- At `medium`/`bold` Matrix intensity (default) the rain from AS-126 renders behind
+  the invite copy and the idle phrase rotation replaces the static hint after 3 s.
