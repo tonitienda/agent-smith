@@ -1,6 +1,6 @@
 # Hosting a Live Agent for Strangers — design spike (AS-080)
 
-> Status: **accepted as design input — recommendation: do not host a live agent for strangers; ship AS-079 (read-only inspector) as the public demo.** · Owner: Agent Smith · Spike for PRD **§9, §10 Q12**, grounded in **D9**; sibling of the plugin-trust spike (AS-059, [plugin-trust.md](plugin-trust.md)).
+> Status: **accepted as design input — recommendation: do not host a live agent for strangers; ship AS-079 (read-only inspector) as the public demo.** · Owner: Agent Smith · Spike for PRD **§8 (Out of Scope), §10 Q12**, grounded in **D9**; sibling of the plugin-trust spike (AS-059, [plugin-trust.md](plugin-trust.md)).
 > Retrieval date for external references: **2026-06-23** (US).
 
 This document answers the question the GUI grilling surfaced: should we stand up a

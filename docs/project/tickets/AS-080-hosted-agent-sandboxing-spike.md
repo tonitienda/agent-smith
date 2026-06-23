@@ -6,7 +6,7 @@ github_issue: 135
 depends_on: [AS-077, AS-059]
 area: security
 priority: P3
-source: PRD.md §9, D9, §10 Q12; GUI grilling session 2026-06
+source: PRD.md §8, D9, §10 Q12; GUI grilling session 2026-06
 ---
 
 # AS-080 · Spike — hosting a live agent for strangers
