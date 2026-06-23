@@ -131,19 +131,23 @@ func (s *Store) Create(title string) (*Session, error) {
 // is inspectable and resumable like any other. A blank parentID behaves exactly
 // like Create.
 func (s *Store) CreateChild(title, parentID string) (*Session, error) {
-	sess, err := s.Create(title)
+	if parentID == "" {
+		return s.Create(title)
+	}
+	id := newID()
+	dir := filepath.Join(s.ProjectSessionsDir(), id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("session: create dir: %w", err)
+	}
+	meta := Metadata{ID: id, ProjectPath: s.projectDir, CreatedAt: time.Now().UTC(), Title: title, Parent: parentID}
+	if err := writeMetadata(dir, meta); err != nil {
+		return nil, err
+	}
+	log, err := eventlog.Open(filepath.Join(dir, eventLogFile))
 	if err != nil {
 		return nil, err
 	}
-	if parentID == "" {
-		return sess, nil
-	}
-	sess.Metadata.Parent = parentID
-	if err := writeMetadata(sess.Dir, sess.Metadata); err != nil {
-		_ = sess.Log.Close()
-		return nil, err
-	}
-	return sess, nil
+	return &Session{ID: id, Dir: dir, Metadata: meta, Log: log}, nil
 }
 
 // Open loads an existing project-scoped session by ID and replays its log.

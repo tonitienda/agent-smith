@@ -108,7 +108,13 @@ func (s *Spawner) Spawn(ctx context.Context, req builtin.TaskRequest) (builtin.T
 	if err != nil {
 		return builtin.TaskResult{}, fmt.Errorf("delegate: create child session: %w", err)
 	}
-	defer func() { _ = child.Log.Close() }()
+	// Roll up usage in the defer, before closing, so spend the child already
+	// incurred is accounted for on the parent log even when the run errors or is
+	// cancelled partway through.
+	defer func() {
+		rollUpUsage(p.Log, child.Log.Events(), child.ID, p.SessionID)
+		_ = child.Log.Close()
+	}()
 
 	reg, err := s.childTools()
 	if err != nil {
@@ -130,9 +136,6 @@ func (s *Spawner) Spawn(ctx context.Context, req builtin.TaskRequest) (builtin.T
 	if err != nil {
 		return builtin.TaskResult{}, err
 	}
-
-	rollUpUsage(p.Log, child.Log.Events(), child.ID, p.SessionID)
-
 	return builtin.TaskResult{Summary: res.FinalText, SessionID: child.ID}, nil
 }
 

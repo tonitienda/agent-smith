@@ -206,12 +206,18 @@ func startChat(resumeID string, noSplash bool, override string) error {
 		func() delegate.Parent {
 			ctl.mu.Lock()
 			defer ctl.mu.Unlock()
+			// policy is set by setPolicy above for the interactive face, but guard
+			// the nil case (a face that skips the gate) rather than dereference it.
+			var perm tool.PermissionFunc
+			if ctl.policy != nil {
+				perm = ctl.policy.Func()
+			}
 			return delegate.Parent{
 				Log:        ctl.sess.Log,
 				SessionID:  ctl.sess.ID,
 				ProvName:   ctl.provName,
 				Model:      ctl.model,
-				Permission: ctl.policy.Func(),
+				Permission: perm,
 				Router:     ctl.router,
 			}
 		})
