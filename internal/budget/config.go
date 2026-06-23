@@ -26,6 +26,11 @@ type Config struct {
 	// HaltUnpriced (AS-086) decides whether a budgeted session stops, rather than
 	// spending blind, when the active model has no pricing entry.
 	HaltUnpriced bool
+	// PerChildLimitUSD (AS-120) is the default dollar ceiling applied to each
+	// delegated sub-agent (`task` tool), enforced against that child's own spend
+	// independent of the session ceiling. Zero (the default / unset) means no extra
+	// per-child ceiling — a child is then bounded only by the loop's max-iterations.
+	PerChildLimitUSD float64
 }
 
 // ConfigFrom reads the `budget` section out of the layered config into a
@@ -36,9 +41,10 @@ type Config struct {
 // composition root.
 func ConfigFrom(c configReader) (Config, []string) {
 	var raw struct {
-		LimitUSD     float64 `json:"limit_usd"`
-		WarnFraction float64 `json:"warn_fraction"`
-		HaltUnpriced bool    `json:"halt_unpriced"`
+		LimitUSD         float64 `json:"limit_usd"`
+		WarnFraction     float64 `json:"warn_fraction"`
+		HaltUnpriced     bool    `json:"halt_unpriced"`
+		PerChildLimitUSD float64 `json:"per_child_limit_usd"`
 	}
 	if _, err := c.Decode("budget", &raw); err != nil {
 		return Config{}, []string{fmt.Sprintf("ignoring budget config: %v", err)}
@@ -52,9 +58,14 @@ func ConfigFrom(c configReader) (Config, []string) {
 		warns = append(warns, fmt.Sprintf("budget.warn_fraction %g is out of range (0,1); using the default", raw.WarnFraction))
 		raw.WarnFraction = 0
 	}
+	if raw.PerChildLimitUSD < 0 {
+		warns = append(warns, fmt.Sprintf("budget.per_child_limit_usd is negative (%g); ignoring", raw.PerChildLimitUSD))
+		raw.PerChildLimitUSD = 0
+	}
 	return Config{
-		DefaultLimitUSD: raw.LimitUSD,
-		WarnFraction:    raw.WarnFraction,
-		HaltUnpriced:    raw.HaltUnpriced,
+		DefaultLimitUSD:  raw.LimitUSD,
+		WarnFraction:     raw.WarnFraction,
+		HaltUnpriced:     raw.HaltUnpriced,
+		PerChildLimitUSD: raw.PerChildLimitUSD,
 	}, warns
 }

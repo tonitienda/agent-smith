@@ -1,7 +1,7 @@
 ---
 id: AS-120
 title: User-delegated subagents — per-child cost itemization, prompt attribution, budget ceiling
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-046, AS-020, AS-041]
 area: cost
@@ -37,12 +37,17 @@ acceptance criteria:
 
 ## Acceptance criteria
 
-- [ ] `/cost` shows delegated spend itemized per child session, and the grand
-      total still matches the rolled-up sum.
-- [ ] A child's permission prompt in the TUI is attributed to the delegating
-      agent.
-- [ ] A delegation halts when its own spend reaches the configured per-child
+- [x] `/cost` shows delegated spend itemized per child session, and the grand
+      total still matches the rolled-up sum. (`cost.Summary.Delegated`, rendered
+      as a "Delegated spend (per child, included above)" section; the children's
+      turns stay in the flat list and grand total.)
+- [x] A child's permission prompt in the TUI is attributed to the delegating
+      agent. (`permission.Request.AgentID`, threaded through `tool.WithAgent` on
+      the child's gate; the TUI card/modal show "delegated agent <id>".)
+- [x] A delegation halts when its own spend reaches the configured per-child
       ceiling; the default and a `0`/unset value (no extra ceiling) are documented.
+      (`budget.per_child_limit_usd`, default `0` = no extra ceiling; wired onto the
+      child loop via `delegate.Parent.ChildBudgetUSD` + `Pricing`.)
 
 ## Dependencies
 

@@ -218,6 +218,9 @@ type PermissionPrompt struct {
 	Subject     string
 	Detail      string
 	Destructive bool
+	// Agent names the delegated sub-agent that raised this call (AS-120); when
+	// set the card attributes the prompt to it. Empty for the main agent.
+	Agent string
 }
 
 // PermissionDecision is the user's answer to a PermissionPrompt. Allow gates this

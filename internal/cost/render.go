@@ -49,6 +49,23 @@ func Render(s Summary) string {
 	fmt.Fprintf(&b, "\nCache savings: %s tokens read from cache · %s\n",
 		render.Commas(s.CacheReadTokens), savings)
 
+	// Delegated-spend breakdown (AS-120): one row per child session, itemizing the
+	// sidechain turns already included in the totals above. Shown only when a
+	// delegation ran, so a session with no `task` calls is unchanged.
+	if len(s.Delegated) > 0 {
+		fmt.Fprint(&b, "\nDelegated spend (per child, included above)\n\n")
+		dtw, drow := render.Tab(&b, tabwriter.AlignRight)
+		drow("  Child\tTurns\tInput\tOutput\tCache rd\tCache wr\tCost\t\n")
+		for _, c := range s.Delegated {
+			drow("  %s\t%d\t%s\t%s\t%s\t%s\t%s\t\n",
+				c.AgentID, c.Turns,
+				render.Commas(c.Tokens.Input), render.Commas(c.Tokens.Output),
+				render.Commas(c.Tokens.CacheRead), render.Commas(c.Tokens.CacheWrite),
+				money(c.TotalUSD, c.AllPriced, sym))
+		}
+		_ = dtw.Flush()
+	}
+
 	if !s.AllPriced {
 		fmt.Fprintf(&b, "\nNote: some turns ran on a model with no pricing entry (shown as %s);\n"+
 			"their tokens are exact but the dollar totals above are a lower bound.\n"+
