@@ -46,6 +46,7 @@ var (
 	ColorBorderActive = lipgloss.Color("#1c3322")
 	ColorBorderSelect = lipgloss.Color("#1f6b3f")
 	ColorTree         = lipgloss.Color("#314a3a")
+	ColorDividerLogo  = lipgloss.Color("#1d2c22") // splash logo underrule (AS-122)
 
 	// Diff — the desaturated red is the only non-phosphor hue in the system.
 	ColorDiffAddedText   = lipgloss.Color("#7dffa8")
@@ -74,4 +75,5 @@ var (
 	StyleMuted        = lipgloss.NewStyle().Foreground(ColorMuted)
 	StyleDim          = lipgloss.NewStyle().Foreground(ColorDim)
 	StyleBanner       = lipgloss.NewStyle().Bold(true).Foreground(ColorBrand)
+	StyleDividerLogo  = lipgloss.NewStyle().Foreground(ColorDividerLogo) // splash underrule (AS-122)
 )

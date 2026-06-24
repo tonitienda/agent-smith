@@ -139,6 +139,13 @@ type model struct {
 	// is the one-shot logo glitch-in shown for the first ~80ms after launch.
 	rain   *rain
 	glitch bool
+	// caretVisible drives the splash input caret blink (AS-122): toggled on a 525ms
+	// tick, it colors the input gutter ┃ brand vs dim while the input is empty. It
+	// is forced solid (no blink) as soon as the user types.
+	caretVisible bool
+	// launched stamps construction time; the empty-state invite swaps its static
+	// hint for the rotating idle phrase 3s after launch (AS-122 §7.1).
+	launched time.Time
 	// expandTools, when set, shows tool results in full rather than a preview; the
 	// leader chord Ctrl+G then t toggles it (AS-024 AC1).
 	expandTools bool
@@ -200,6 +207,8 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 		curAssistant: -1,
 		curReasoning: -1,
 		histIdx:      0,
+		caretVisible: true,
+		launched:     time.Now(),
 	}
 	if meta != nil {
 		m.meta = meta()
@@ -215,7 +224,7 @@ func newModel(runner Runner, meta MetaFunc, events <-chan loop.UIEvent, newRend 
 }
 
 func (m model) Init() tea.Cmd {
-	cmds := []tea.Cmd{textarea.Blink, waitForEvent(m.events)}
+	cmds := []tea.Cmd{textarea.Blink, waitForEvent(m.events), caretBlink()}
 	if m.rainConfigured() {
 		// The rain ticker runs while the transcript is empty; the handler gates the
 		// actual animation on rainActive() so /serious pauses and resumes it without
@@ -252,6 +261,21 @@ func (m *model) ensureRain() {
 	if m.rain == nil || m.rain.w != w || m.rain.h != h {
 		m.rain = newRain(w, h, time.Now().UnixNano())
 	}
+}
+
+// caretBlinkInterval is the half-period of the splash input caret: a 1.05s on/off
+// cycle (AS-122) toggles every 525ms. A distinct cadence from the rain/typewriter
+// tickers per the colors.go shared-tick contract.
+const caretBlinkInterval = 525 * time.Millisecond
+
+// caretBlinkMsg toggles the input gutter caret.
+type caretBlinkMsg struct{}
+
+// caretBlink schedules the next caret toggle. It runs for the life of the program
+// (cheap, one timer); the handler only flips visibility, and the View forces the
+// caret solid whenever the input is non-empty so typing reads as a steady cursor.
+func caretBlink() tea.Cmd {
+	return tea.Tick(caretBlinkInterval, func(time.Time) tea.Msg { return caretBlinkMsg{} })
 }
 
 // glitchClearMsg ends the one-shot startup logo glitch-in.
@@ -330,6 +354,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.rain = nil // muted (/serious) or input non-empty: drain and go quiet
 		}
 		return m, rainTick()
+
+	case caretBlinkMsg:
+		// Only the visibility flag flips; the View re-renders on the returned model
+		// and recolors the gutter. Re-arm unconditionally so the blink resumes the
+		// moment the input clears back to empty.
+		m.caretVisible = !m.caretVisible
+		return m, caretBlink()
 
 	case glitchClearMsg:
 		if m.glitch {
@@ -765,8 +796,20 @@ func (m model) View() string {
 	if m.statusRows() > 0 {
 		sections = append(sections, m.statusLine())
 	}
+	m.applyCaret()
 	sections = append(sections, m.textarea.View())
 	return strings.Join(sections, "\n")
+}
+
+// applyCaret colors the input gutter ┃ for the splash blink (AS-122): solid brand
+// while the user is typing (input non-empty), otherwise it blinks brand/dim on the
+// caret tick. Just the prompt glyph color — no cursor-escape tricks.
+func (m *model) applyCaret() {
+	col := ColorDim
+	if m.caretVisible || m.textarea.Value() != "" {
+		col = ColorBrand
+	}
+	m.textarea.FocusedStyle.Prompt = m.textarea.FocusedStyle.Prompt.Foreground(col)
 }
 
 // statusLine renders provider · model · session on the left and, on the right,
