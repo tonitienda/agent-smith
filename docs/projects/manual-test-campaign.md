@@ -107,7 +107,7 @@ Covers AS-020, AS-025 through AS-028, AS-041, AS-042, AS-063, AS-068, AS-085, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-075, AS-114.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-075, AS-114, AS-121, AS-122, AS-126.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -117,6 +117,7 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.4 | Enter Coding Mode with `/feature`; advance through phases. | Phase tracker panel and phase-as-block state are visible; process skill blocks are scoped to the active phase. |
 | 6.5 | Add a ```` ```smith-method ```` block (`phases: think, plan, implement, verify`) to the project `CLAUDE.md`/`AGENTS.md`, start a session, and `/feature`. | The phase tracker reflects the overridden phase sequence (reordered/skipped); a malformed block degrades to the default (AS-075). |
 | 6.6 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
+| 6.7 | Launch `./smith tui` and look at the empty startup screen, then type a character and clear it (AS-122). | Logo `▞▞ AGENT SMITH`, a full-width underrule, and the `path · model · mode` context line render; the invite headline and command-hint row show below; at default (medium) Matrix intensity the rain renders behind the copy and the idle phrase replaces the hint after ~3s; the `┃` gutter caret blinks while empty and goes solid the instant you type. `--no-splash` shows nothing above the input bar. |
 
 ### 7. Configuration, memory, skills, hooks, MCP, and living-skills substrate
 

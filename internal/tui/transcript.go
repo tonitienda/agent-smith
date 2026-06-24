@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -304,14 +305,20 @@ func (m *model) renderTranscript() string {
 // over substance (internal/tui/CLAUDE.md invariant 3) — there is none here, but
 // the same discipline keeps the copy legible.
 func (m *model) emptyState() string {
-	var fg []string
-	if m.splash {
-		fg = append(fg, strings.Split(m.headerView(), "\n")...)
-		fg = append(fg, "")
+	// --no-splash suppresses everything above the input bar (AS-122): no header, no
+	// invite, no rain. The transcript stays blank until the first turn lands.
+	if !m.splash {
+		return ""
 	}
-	fg = append(fg, dimStyle.Render("Ask Agent Smith anything to begin."))
-	if phrase := m.idlePhrase(); phrase != "" {
-		fg = append(fg, "", dimStyle.Render(phrase))
+	fg := append(strings.Split(m.headerView(), "\n"), "")
+	fg = append(fg, StyleNeutral.Render("Ask Agent Smith anything to begin."), "")
+	// The static command hint is the default invite; at medium+ intensity the
+	// rotating idle phrase takes its place after a 3s beat (AS-122 §7.1). The rain
+	// ticker re-renders the empty state every frame, so the swap happens on its own.
+	if phrase := m.idlePhrase(); phrase != "" && time.Since(m.launched) >= 3*time.Second {
+		fg = append(fg, StyleDim.Render("  "+phrase))
+	} else {
+		fg = append(fg, StyleDim.Render("  type / for commands · Ctrl+G c context · /serious mute theme"))
 	}
 	// Build (or resize) the rain here, not only on the tick, so the first frame and
 	// every post-resize frame already carry correctly-sized rain — no 60ms startup
@@ -354,7 +361,18 @@ func (m *model) headerView() string {
 	if m.glitch {
 		logo = glitchLogo(logo)
 	}
-	return bannerStyle.Render(logo) + "\n" + dimStyle.Render(meta)
+	rule := StyleDividerLogo.Render(strings.Repeat("─", m.ruleWidth()))
+	return StyleBanner.Render(logo) + "\n" + rule + "\n" + StyleMuted.Render(meta)
+}
+
+// ruleWidth is the cell width of the splash underrule: the full transcript width,
+// falling back to the logo width before the first resize so the rule is never
+// zero-length (AS-122 §7.1).
+func (m *model) ruleWidth() int {
+	if w := m.viewport.Width; w > 0 {
+		return w
+	}
+	return lipglossWidth("▞▞ AGENT SMITH")
 }
 
 // glitchLogo replaces two glyphs in the banner with block noise for the one-shot
@@ -569,7 +587,6 @@ var (
 	commandLabelStyle   = StyleSlashCommand.Bold(true)
 	errorStyle          = StyleError
 	dimStyle            = StyleDim
-	bannerStyle         = StyleBanner
 	statusBarStyle      = lipgloss.NewStyle().Foreground(ColorFgDefault).Background(BgStatusLine)
 	// modeBarStyle dresses the pinned Coding Mode phase tracker (AS-073) in a
 	// distinct color from the status bar so entering the mode reads as crossing a
