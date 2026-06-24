@@ -3,7 +3,7 @@ id: AS-133
 title: Recorded vendor simulators for Anthropic, OpenAI, and compatible providers
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-008, AS-009, AS-010, AS-012, AS-060]
+depends_on: [AS-008, AS-009, AS-010, AS-012, AS-060, AS-135]
 area: provider
 priority: P0
 source: AS-060 regression-testing follow-on; docs/project/PRD.md D2, D4, D5
@@ -62,3 +62,4 @@ CI.
 - AS-008 through AS-010 provide the provider interface and concrete adapters to drive.
 - AS-012 provides the conformance-test home this should extend rather than replace.
 - AS-060 supplies real captures and schema gaps that should become recorded fixtures.
+- AS-135 defines the safe capture-to-fixture workflow and metadata shape this harness consumes.

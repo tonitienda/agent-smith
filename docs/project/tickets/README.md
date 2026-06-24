@@ -154,9 +154,9 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-133](AS-133-recorded-vendor-simulators.md) | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | provider | ready | 008, 009, 010, 012, 060 |
+| [AS-133](AS-133-recorded-vendor-simulators.md) | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | provider | ready | 008, 009, 010, 012, 060, 135 |
 | [AS-134](AS-134-offline-e2e-regression-suite.md) | Offline E2E regression suite over recorded providers, TUI, and append-only logs | quality | ready | 005, 018, 021, 024, 046, 119, 120, 133 |
-| [AS-135](AS-135-capture-to-fixture-workflow.md) | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | schema | ready | 056, 060, 115, 133 |
+| [AS-135](AS-135-capture-to-fixture-workflow.md) | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | schema | ready | 056, 060, 115 |
 
 ## Index — TUI visual polish (AS-121 … AS-131) — demo-priority
 
