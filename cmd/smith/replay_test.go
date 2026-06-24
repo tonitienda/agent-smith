@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -154,6 +155,23 @@ func TestReplayOTelExportsToConfiguredCollector(t *testing.T) {
 	if !strings.Contains(string(gotBody), "\"traceId\"") {
 		t.Fatalf("collector did not receive a trace; body=%q stderr=%q", gotBody, errb.String())
 	}
+}
+
+// TestExportTelemetryNilConfigNoPanic guards the Gemini-flagged nil-config path:
+// a failed config load leaves cfg nil, which must be a safe no-op, not a panic.
+func TestExportTelemetryNilConfigNoPanic(t *testing.T) {
+	id := seedReplaySession(t)
+	store, err := session.NewStore("", ".")
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	sess, err := store.Open(id)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = sess.Log.Close() }()
+	// Must not panic and must export nothing (no endpoint without config).
+	exportTelemetry(context.Background(), sess, nil, nil, io.Discard)
 }
 
 func TestReplayUnknownSessionErrors(t *testing.T) {

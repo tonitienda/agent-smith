@@ -62,6 +62,12 @@ func persistRunArtifacts(ctx context.Context, sess *session.Session, cfg *config
 // exportTelemetry ships the session trace to the configured OTLP endpoint when
 // export is enabled. A disabled config is a silent no-op.
 func exportTelemetry(ctx context.Context, sess *session.Session, cfg *config.Config, pricing *cost.Table, stderr io.Writer) {
+	// A failed config load (replayRun ignores the error) leaves cfg nil; a nil
+	// *config.Config in the configReader interface would panic in Decode. No config
+	// means no endpoint, so treat it as export disabled.
+	if cfg == nil {
+		return
+	}
 	telemetry, warns := otelexport.ConfigFrom(cfg)
 	if stderr != nil {
 		for _, w := range warns {
