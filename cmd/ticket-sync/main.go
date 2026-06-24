@@ -1,8 +1,9 @@
 // Command ticket-sync pushes ticket markdown files to GitHub issues.
 //
 // The files in tickets/ are the source of truth. For each selected ticket:
-//   - github_issue: null  -> a new issue is created and the number is written
-//     back into the file's frontmatter
+//   - github_issue: null  -> an existing issue with the same ticket ID in its
+//     title is reused, or a new issue is created and the number is written back
+//     into the file's frontmatter
 //   - github_issue: <n>   -> issue #n is overwritten from the file
 //
 // There is no merging: title, body, and labels on GitHub are replaced with
@@ -29,6 +30,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,6 +60,8 @@ type ticket struct {
 	issue    int // 0 = not created yet
 	body     string
 }
+
+var ghAPI = runGHAPI
 
 func main() {
 	repoFlag := flag.String("repo", "", "GitHub repo as owner/name (default: $TICKET_SYNC_REPO, then the current git remote)")
@@ -373,6 +377,26 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 	}
 
 	if t.issue == 0 {
+		existing, err := findExistingIssue(repo, t)
+		if err != nil {
+			return err
+		}
+		if existing != 0 {
+			if err := writeIssueNumber(t.path, existing); err != nil {
+				return fmt.Errorf("issue #%d found but writing the number back failed: %w", existing, err)
+			}
+			t.issue = existing
+			body, err := payload(t, payloadOptions{includeState: true})
+			if err != nil {
+				return err
+			}
+			if _, err := ghAPI(fmt.Sprintf("repos/%s/issues/%d", repo, t.issue), "PATCH", body); err != nil {
+				return err
+			}
+			_, err = fmt.Printf("%s: linked and updated existing issue #%d\n", t.id, t.issue)
+			return err
+		}
+
 		body, err := payload(t, payloadOptions{})
 		if err != nil {
 			return err
@@ -410,6 +434,30 @@ func syncTicket(repo string, t *ticket, opts syncOptions) error {
 	}
 	_, err = fmt.Printf("%s: updated issue #%d\n", t.id, t.issue)
 	return err
+}
+
+func findExistingIssue(repo string, t *ticket) (int, error) {
+	query := fmt.Sprintf("%s in:title repo:%s type:issue", t.id, repo)
+	resp, err := ghAPI("search/issues?q="+url.QueryEscape(query), "GET", nil)
+	if err != nil {
+		return 0, err
+	}
+	var res struct {
+		Items []struct {
+			Number int    `json:"number"`
+			Title  string `json:"title"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(resp, &res); err != nil {
+		return 0, fmt.Errorf("could not search existing GitHub issues for %s: %w", t.id, err)
+	}
+	wantPrefix := "[" + t.id + "] "
+	for _, item := range res.Items {
+		if item.Number != 0 && strings.HasPrefix(item.Title, wantPrefix) {
+			return item.Number, nil
+		}
+	}
+	return 0, nil
 }
 
 func closeIssue(repo string, issue int) error {
@@ -465,7 +513,7 @@ func resolveRepo(flagVal string) (string, error) {
 	return "", errors.New("cannot determine GitHub repo: pass -repo owner/name, set TICKET_SYNC_REPO, or add a GitHub remote")
 }
 
-func ghAPI(endpoint, method string, input []byte) ([]byte, error) {
+func runGHAPI(endpoint, method string, input []byte) ([]byte, error) {
 	cmd := exec.Command("gh", "api", endpoint, "--method", method, "--input", "-")
 	cmd.Stdin = bytes.NewReader(input)
 	var stdout, stderr bytes.Buffer
