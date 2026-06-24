@@ -1,6 +1,6 @@
 # Agent Smith manual test campaign
 
-_Last updated: 2026-06-24._
+_Last updated: 2026-06-24 (added section 2A: AS-060 vendor session captures)._
 
 This campaign is the human smoke/regression pass to run after a burst of ticket work when nobody has recently driven the application end-to-end. It covers every ticket in the backlog: completed tickets have concrete actions and expected results; not-yet-implemented tickets are explicitly marked so testers do not mistake absence for a regression.
 
@@ -35,7 +35,8 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
-| AS-017, AS-050, AS-052, AS-054, AS-058, AS-060–AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-136 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-060 | Manual capture | Follow section "AS-060 vendor session captures": grab a handful of redacted session artifacts (offline ones first, then one cheap live turn per vendor), run each through the `schema` types, record dispositions. | Each surface has at least one redacted capture round-tripped through AS-003; fields-without-a-home are classified promote / `ext` / out-of-scope; proposed additive deltas linked to AS-003. No CI keys needed. |
+| AS-017, AS-050, AS-052, AS-054, AS-058, AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-136 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -66,6 +67,22 @@ Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-055, AS-056, AS-084, AS
 | 2.6 | After file edits past a checkpoint, run `/rewind <handle> --restore-files` (AS-084). Repeat after hand-editing a Smith-written file outside the session. | Restored/deleted files match the checkpoint; externally-changed files are flagged as conflicts and never overwritten; the log still only grows. |
 | 2.7 | Run `./smith replay <session>` for a stored session (AS-055), then `./smith replay <session> --output json`. | A manifest header (models, tools, token/cost totals) plus the transcript renders offline with no API keys; JSON mode emits `{manifest, blocks}`. No provider/tool runs (re-display, not re-execution). A `manifest.json` appears next to the log. |
 | 2.8 | Set `telemetry.otel_endpoint` to a local OTLP/HTTP collector and run `./smith replay <session> --otel` (or a headless `smith run`). | `session → turn → model.call/tool.call` spans with token/cost attributes arrive at the collector. With no endpoint configured (default), nothing is exported and no network call is made. |
+
+### 2A. AS-060 vendor session captures (manual, one-time, pre-V1 schema validation)
+
+Covers AS-060. This is a **one-time capture pass**, not a per-build CI test — it needs no keys in CI. Do the offline rows first; they cover most surfaces with zero API spend. Only steps marked _(live key)_ need a vendor credential, and each is a single cheap turn done by hand. Redact secrets/PII before saving anything (the AS-115 scrub helps; review by eye too). Drop captures under `docs/design/captures/` (or reference them if too large/sensitive to commit).
+
+For every capture: parse it into the `schema` block types, re-emit, and record whether the round-trip is lossless (block-schema-union §14 checklist). Log each field with no home except `ext`, and mark it **promote to first-class optional**, **leave in `ext`**, or **out-of-scope** (with reason).
+
+| Step | Action | Expected result |
+| --- | --- | --- |
+| A.1 | **Claude Code L3 (offline).** Copy a real `~/.claude/projects/<proj>/<sid>.jsonl`, ideally one that spawned a sub-agent (`isSidechain`) and loaded a skill/MCP (`attribution*`). Redact paths/prompts. Run through the `schema` types. | Round-trip lossless or gaps logged; sub-agent/thread links and per-iteration usage are representable or flagged. |
+| A.2 | **Codex CLI L3 (offline).** Copy a `$CODEX_HOME/sessions/.../rollout-*.jsonl`. Redact, round-trip. | Disposition recorded for every field; no Codex-specific field silently dropped. |
+| A.3 | **Gemini CLI L2+L3 (offline).** Capture a `gemini --output-format json` result (with `stats`) and a `~/.gemini/history/<proj>/` log. Redact, round-trip. | `stats`/usage fields mapped or classified. |
+| A.4 | **Anthropic L1** _(live key)_. One `smith run` (or raw `curl`) against an Anthropic model that emits thinking + a tool call/result; capture the Messages turn incl. cache fields. Redact, round-trip. | thinking/tool/cache fields map to `reasoning`/`tool_call`/`tool_result`/usage or are flagged. |
+| A.5 | **OpenAI L1** _(live key)_. One Responses API turn with a typed `output[]` incl. a `reasoning` item, plus one Chat Completions turn (the compat projection). Redact, round-trip. | Both representation layers round-trip or log gaps. |
+| A.6 | **xAI/Grok L1** _(live key)_. One OpenAI-compatible turn; capture `reasoning_content` and any Live Search citations. Redact, round-trip. | `reasoning_content`/citation fields classified. |
+| A.7 | **Roll up.** Annex a comparison report (extend `docs/design/block-schema-union.md` or a sibling `*-validation.md`) and list proposed **additive** deltas; link them from AS-003 so they land before the V1 freeze. Any change that cannot be expressed additively is flagged loudly as a pre-V1 breaking change to make now. | Report + delta list exist and are linked from AS-003; redaction confirmed on every committed/referenced artifact. |
 
 ### 3. Providers, prompt caching, and provider conformance
 
@@ -236,7 +253,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-057 | Cross-session analytics (portfolio dashboard) | Not implemented (`ready-to-implement`) |
 | AS-058 | Self-improving config (aggregated insights propose memory/skill/command edits) | Not implemented (`ready-to-implement`) |
 | AS-059 | Design spike: third-party sub-agent plugin trust, permissions, and sandboxing | Implemented (`done`) |
-| AS-060 | Capture & compare real vendor session files to refine the block schema before V1 freeze | Not implemented (`ready-to-implement`) |
+| AS-060 | Capture & compare real vendor session files to refine the block schema before V1 freeze | Manual capture (`ready-to-implement`) — see section 2A; deps AS-002/AS-003 done, no CI keys needed |
 | AS-061 | Publish the block schema as JSON Schema (language-neutral contract + Go↔schema divergence guard) | Not implemented (`ready-to-implement`) |
 | AS-062 | Fuller JSON-Schema validation for tool arguments | Implemented (`done`) |
 | AS-063 | Per-block token estimates for window composition pricing | Implemented (`done`) |
