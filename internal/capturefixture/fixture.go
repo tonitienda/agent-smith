@@ -175,6 +175,35 @@ func (n *normalizer) block(b schema.Block, i int) schema.Block {
 		t.AgentID = n.id("agent", t.AgentID)
 		b.Thread = &t
 	}
+	// Tool-use IDs share the "toolu" namespace so a file read's produced_by maps to
+	// the same placeholder as the tool call that produced it (referential integrity).
+	if b.ToolCall != nil {
+		tc := *b.ToolCall
+		tc.ToolUseID = n.id("toolu", tc.ToolUseID)
+		b.ToolCall = &tc
+	}
+	if b.ToolResult != nil {
+		tr := *b.ToolResult
+		tr.ToolUseID = n.id("toolu", tr.ToolUseID)
+		b.ToolResult = &tr
+	}
+	if b.FileRead != nil {
+		fr := *b.FileRead
+		fr.ProducedBy = n.id("toolu", fr.ProducedBy)
+		b.FileRead = &fr
+	}
+	// Cache breakpoints reference block IDs — remap through the "blk" namespace so
+	// the breakpoint still points at the normalized block.
+	if b.Cache != nil && len(b.Cache.Breakpoints) > 0 {
+		c := *b.Cache
+		bps := make([]schema.CacheBreakpoint, len(c.Breakpoints))
+		for i, bp := range c.Breakpoints {
+			bp.BlockID = n.id("blk", bp.BlockID)
+			bps[i] = bp
+		}
+		c.Breakpoints = bps
+		b.Cache = &c
+	}
 	return b
 }
 

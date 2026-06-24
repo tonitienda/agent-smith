@@ -113,6 +113,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return nil
 }
 
+// isBlank reports whether b is empty or only ASCII whitespace.
+func isBlank(b []byte) bool {
+	for _, c := range b {
+		if c != ' ' && c != '\t' && c != '\r' && c != '\n' {
+			return false
+		}
+	}
+	return true
+}
+
 func splitCSV(s string) []string {
 	var out []string
 	for _, p := range strings.Split(s, ",") {
@@ -142,12 +152,14 @@ func readBlocks(path string, stdin io.Reader) ([]schema.Block, error) {
 	line := 0
 	for sc.Scan() {
 		line++
-		raw := strings.TrimSpace(sc.Text())
-		if raw == "" {
+		// Read the raw bytes (no per-line string allocation); json.Unmarshal ignores
+		// surrounding whitespace, so only blank lines need skipping.
+		raw := sc.Bytes()
+		if isBlank(raw) {
 			continue
 		}
 		var b schema.Block
-		if err := json.Unmarshal([]byte(raw), &b); err != nil {
+		if err := json.Unmarshal(raw, &b); err != nil {
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
 		blocks = append(blocks, b)

@@ -85,6 +85,35 @@ func TestProcessNormalizesAndRedacts(t *testing.T) {
 	}
 }
 
+func TestProcessNormalizesToolAndCacheIDs(t *testing.T) {
+	in := []schema.Block{
+		{ID: "b1", Kind: schema.KindToolCall, Role: schema.RoleAssistant,
+			ToolCall: &schema.ToolCallBody{ToolUseID: "toolu_vendor_xyz", Name: "calc"},
+			Cache:    &schema.Cache{Breakpoints: []schema.CacheBreakpoint{{BlockID: "b1"}}}},
+		{ID: "b2", Kind: schema.KindToolResult, Role: schema.RoleTool,
+			ToolResult: &schema.ToolResultBody{ToolUseID: "toolu_vendor_xyz", Stdout: "4"}},
+		{ID: "b3", Kind: schema.KindFileRead, Role: schema.RoleTool,
+			FileRead: &schema.FileReadBody{Path: "x", ProducedBy: "toolu_vendor_xyz"}},
+	}
+	out, _, verr := capturefixture.Process(in, nil)
+	if len(verr) != 0 {
+		t.Fatalf("validation errors: %v", verr)
+	}
+	// The vendor tool-use ID is gone and the same placeholder is shared across the
+	// call, its result, and the file read it produced (referential integrity).
+	id := out[0].ToolCall.ToolUseID
+	if id == "toolu_vendor_xyz" || id == "" {
+		t.Fatalf("tool_use_id not normalized: %q", id)
+	}
+	if out[1].ToolResult.ToolUseID != id || out[2].FileRead.ProducedBy != id {
+		t.Fatalf("tool_use_id not shared: %q / %q / %q", id, out[1].ToolResult.ToolUseID, out[2].FileRead.ProducedBy)
+	}
+	// Cache breakpoint points at the normalized block ID.
+	if got := out[0].Cache.Breakpoints[0].BlockID; got != out[0].ID {
+		t.Fatalf("cache breakpoint not remapped: %q vs %q", got, out[0].ID)
+	}
+}
+
 func TestProcessIsDeterministic(t *testing.T) {
 	a, _, _ := capturefixture.Process(rawCapture(), redaction.Default())
 	b, _, _ := capturefixture.Process(rawCapture(), redaction.Default())
