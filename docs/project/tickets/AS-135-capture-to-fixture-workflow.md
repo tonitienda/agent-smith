@@ -1,7 +1,7 @@
 ---
 id: AS-135
 title: Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions
-status: ready-to-implement
+status: done
 github_issue: 415
 depends_on: [AS-056, AS-060, AS-115]
 area: schema
@@ -40,16 +40,35 @@ CI-safe recorded-server fixture.
 
 ## Acceptance criteria
 
-- [ ] Contributors can produce a CI-safe fixture from a raw local capture without hand-editing
-      every field.
-- [ ] The workflow makes a clear distinction between raw private captures, redacted captures,
-      synthetic derivatives, and public CI fixtures.
-- [ ] Redaction preserves the shape needed to validate schema fields, provider streaming, tool
-      arguments/results, usage, cache data, and subagent/session links.
-- [ ] The generated metadata records source, redaction status, fixture intent, supported
-      providers, and whether live-network reproduction is possible.
-- [ ] Docs point AS-060 implementers to this workflow and explain how AS-133/AS-134 consume the
-      resulting fixtures.
+- [x] Contributors can produce a CI-safe fixture from a raw local capture without hand-editing
+      every field. (`cmd/capture-fixture` normalizes + redacts in one pass.)
+- [x] The workflow makes a clear distinction between raw private captures, redacted captures,
+      synthetic derivatives, and public CI fixtures. (`redaction_status` enum + the data-class
+      table in `docs/design/capture-to-fixture.md`.)
+- [x] Redaction preserves the shape needed to validate schema fields, provider streaming, tool
+      arguments/results, usage, cache data, and subagent/session links. (Normalize rewrites only
+      identifying *values*; bodies are scrubbed via `internal/redaction` without changing kind or
+      shape; cross-block references are remapped through a shared table.)
+- [x] The generated metadata records source, redaction status, fixture intent, supported
+      providers, and whether live-network reproduction is possible. (`Metadata` sidecar, validated.)
+- [x] Docs point AS-060 implementers to this workflow and explain how AS-133/AS-134 consume the
+      resulting fixtures. (Links from AS-060, `block-schema-union.md` §15, and `captures/README.md`.)
+
+## Implementation notes
+
+- `internal/capturefixture` — `Process` normalizes identifying envelope values
+  (IDs, seq, timestamps, request/response/turn/native/thread/agent IDs, and the
+  block-ID references in `derived_from`/`excluded_by`/thread parents) to stable
+  deterministic placeholders, then scrubs bodies through the AS-115 redactor,
+  validating every block. `Metadata` is the validated sidecar contract AS-133 reads.
+- `cmd/capture-fixture` — thin stdlib CLI over the library (JSONL in/out + sidecar
+  metadata); exits non-zero if any block fails schema validation.
+- `docs/design/capture-to-fixture.md` — the state machine, redaction review
+  checklist, when to keep an artifact out of git, and how AS-133/AS-134 consume the
+  fixtures. A worked synthetic example lives under `docs/design/captures/examples/`.
+- The auto-flag-for-manual-review wishlist item is handled by the documented review
+  checklist rather than a heuristic flagger (a brittle classifier would give false
+  confidence); the tool reports redaction-span counts and the human reviews the rest.
 
 ## Dependencies
 

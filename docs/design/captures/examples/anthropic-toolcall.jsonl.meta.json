@@ -1,0 +1,20 @@
+{
+  "source": "synthetic",
+  "redaction_status": "synthetic-derivative",
+  "intent": "Anthropic Messages tool-call round trip (text -> tool_call -> tool_result) with secret redaction",
+  "providers": [
+    "anthropic/messages"
+  ],
+  "live_reproducible": false,
+  "stats": {
+    "blocks": 3,
+    "redaction_spans": 1,
+    "normalized": {
+      "blk": 3,
+      "native": 2,
+      "req": 1,
+      "resp": 1,
+      "turn": 1
+    }
+  }
+}
