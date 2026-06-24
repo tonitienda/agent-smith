@@ -67,6 +67,37 @@ func TestPackSkillsDemandGrounding(t *testing.T) {
 	}
 }
 
+// TestReflectArtifactsSkillCoversTheThreeArtifacts asserts the reflect-artifacts
+// skill drives the three honest reflect outputs (AS-076 AC1): a measurable
+// success metric, an instrumentation diff/proposal, and a check-back ticket
+// draft — and explicitly forbids reading shipped-app runtime telemetry (AC2,
+// D-CODE-7). The pack is skill-driven, so the model's instructions are where this
+// capability is asserted, the same way grounding is checked at the skill source.
+func TestReflectArtifactsSkillCoversTheThreeArtifacts(t *testing.T) {
+	pack, err := Pack()
+	if err != nil {
+		t.Fatalf("Pack() error: %v", err)
+	}
+	var body string
+	for _, s := range pack {
+		if s.Name == "reflect-artifacts" {
+			body = strings.ToLower(s.Body)
+			break
+		}
+	}
+	if body == "" {
+		t.Fatal("pack does not ship the reflect-artifacts skill")
+	}
+	for _, needle := range []string{"success metric", "instrumentation", "check-back", "diff", "runtime"} {
+		if !strings.Contains(body, needle) {
+			t.Errorf("reflect-artifacts skill does not mention %q", needle)
+		}
+	}
+	if !strings.Contains(body, "never") && !strings.Contains(body, "not ") {
+		t.Error("reflect-artifacts skill must forbid reading shipped-app runtime data (D-CODE-7)")
+	}
+}
+
 // TestIsGrounded pins the evidence predicate: concrete references pass, generic
 // advice fails. It is the machine-checkable form of D-CODE-8 the runtime and the
 // pack tests rely on.

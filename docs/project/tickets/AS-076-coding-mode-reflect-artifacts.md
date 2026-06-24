@@ -13,9 +13,17 @@ source: coding-mode.prd.md (D-CODE-7)
 
 **Status: done**
 
-Implemented skill-driven (D-CODE-7): the bundled `reflect-artifacts` process skill (`internal/codingskills/skills/reflect-artifacts/`), mapped to the reflect phase in `internal/mode` `phaseSkills`, drives the three artifacts — a measurable success metric, an instrumentation diff/proposal, and a check-back ticket draft (house `AS-NNN` format in this repo, markdown elsewhere; draft only, never `cmd/ticket-sync` or remote issues). The skill forbids reading/claiming shipped-app runtime data.
-
-AC2's "no telemetry-ingestion path" is guarded structurally by `archtest.TestCodingModeHasNoTelemetryIngestion` (the Coding Mode subsystem may import no network client or database) and the skill's content guard in `codingskills_test.go`. Durable facts (AS-048) and the `/insights` retro (AS-045) already run session-wide and so are available in the reflect phase.
+Implemented skill-driven (D-CODE-7): the bundled `reflect-artifacts` process
+skill (`internal/codingskills/skills/reflect-artifacts/`), mapped to the reflect
+phase in `internal/mode` `phaseSkills`, drives the three artifacts — a measurable
+success metric, an instrumentation diff/proposal, and a check-back ticket draft
+(house `AS-NNN` format in this repo, markdown elsewhere; draft only, never
+`cmd/ticket-sync` or remote issues). The skill forbids reading/claiming
+shipped-app runtime data. AC2's "no telemetry-ingestion path" is guarded
+structurally by `archtest.TestCodingModeHasNoTelemetryIngestion` (the Coding Mode
+subsystem may import no network client or database) and the skill's content guard
+in `codingskills_test.go`. Durable facts (AS-048) and the `/insights` retro
+(AS-045) already run session-wide and so are available in the reflect phase.
 
 ## Description
 
