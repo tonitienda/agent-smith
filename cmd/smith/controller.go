@@ -1303,20 +1303,27 @@ func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output
 		return command.Output{}, fmt.Errorf("list sessions: %w", err)
 	}
 
-	priced := make([]stats.Session, 0, len(summaries))
-	for _, sm := range summaries {
+	// priceSession opens, prices, and closes one session. The defer keeps the log
+	// closed even if Summarize panics, and bounds open descriptors to one at a
+	// time rather than deferring every close to the end of the loop.
+	priceSession := func(sm session.Summary) (stats.Session, error) {
 		sess, err := session.OpenAt(sm.Dir)
 		if err != nil {
-			continue // a session we can't open is skipped, not fatal to the portfolio
+			return stats.Session{}, err
 		}
-		summary := cost.Summarize(sess.Log.Events(), table)
-		_ = sess.Log.Close()
-		priced = append(priced, stats.Session{
+		defer func() { _ = sess.Log.Close() }()
+		return stats.Session{
 			ID:        sm.ID,
 			Project:   sm.ProjectPath,
 			UpdatedAt: sm.UpdatedAt,
-			Cost:      summary,
-		})
+			Cost:      cost.Summarize(sess.Log.Events(), table),
+		}, nil
+	}
+	priced := make([]stats.Session, 0, len(summaries))
+	for _, sm := range summaries {
+		if ps, err := priceSession(sm); err == nil {
+			priced = append(priced, ps) // a session we can't open is skipped, not fatal
+		}
 	}
 
 	// Friction is sourced from the durable findings rollup (AS-050), which is

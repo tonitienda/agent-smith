@@ -259,7 +259,7 @@ func AllSummaries(root string) ([]Summary, error) {
 		projectDir := filepath.Join(sessionsRoot, p.Name())
 		entries, err := os.ReadDir(projectDir)
 		if err != nil {
-			return nil, fmt.Errorf("session: list project %q: %w", p.Name(), err)
+			continue // an unreadable project dir is skipped, not fatal to the portfolio
 		}
 		for _, e := range entries {
 			if !e.IsDir() || !safeID(e.Name()) {
@@ -275,7 +275,7 @@ func AllSummaries(root string) ([]Summary, error) {
 			}
 			summary, err := summarize(dir, meta)
 			if err != nil {
-				return nil, err
+				continue // a corrupted session is skipped, not fatal to the portfolio
 			}
 			out = append(out, summary)
 		}
