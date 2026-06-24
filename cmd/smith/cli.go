@@ -42,6 +42,7 @@ func commands() []*cli.Command {
 		registryLeaf(reg, "cost", "cost", nil),
 		registryLeaf(reg, "route", "route", nil),
 		registryLeaf(reg, "insights", "insights", allArgs),
+		registryLeaf(reg, "stats", "stats", allArgs),
 		registryLeaf(reg, "skills", "skills", allArgs),
 		authCommand(),
 		configCommand(),

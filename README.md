@@ -36,6 +36,7 @@ On top of that substrate sit the **five wedges** — the features none of the in
 | **Semantic context editing** (`/clean`) | `"/clean the bug we already fixed"` — preview, reclaim tokens, fully undoable |
 | **Context tidy** (`/tidy`) | Restructure a messy session — dedupe, collapse dead ends — without lossy summarization |
 | **Session insights** (`/insights`) | Model-assisted retro: what burned tokens, what to add to your memory files, what to improve |
+| **Cross-session analytics** (`/stats`) | Portfolio view across sessions: spend trend, per-model/project breakdown, top grounded ways to save, recurring friction — fully offline |
 | **Living skills** | Detect facts you keep rediscovering and offer to save them into the right skill/memory |
 
 ### Architecture at a glance

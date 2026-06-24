@@ -1,7 +1,7 @@
 ---
 id: AS-057
 title: Cross-session analytics (portfolio dashboard)
-status: ready-to-implement
+status: done
 github_issue: 57
 depends_on: [AS-007, AS-020, AS-045]
 area: insights-wedge
@@ -11,7 +11,7 @@ source: PRD.md §7.24
 
 # AS-057 · Cross-session analytics
 
-**Status: ready to implement**
+**Status: done**
 
 ## Description
 
@@ -26,11 +26,19 @@ source: PRD.md §7.24
 
 ## Acceptance criteria
 
-- [ ] Spend trend over time, per project and per model, from real session data.
-- [ ] At least one "top 3 savings" recommendation grounded in measured cross-session signals (§9 anti-generic rule applies here too).
-- [ ] Recurring-friction items link back to example sessions.
-- [ ] Works fully offline/local.
+- [x] Spend trend over time, per project and per model, from real session data.
+- [x] At least one "top 3 savings" recommendation grounded in measured cross-session signals (§9 anti-generic rule applies here too).
+- [x] Recurring-friction items link back to example sessions.
+- [x] Works fully offline/local.
 
 ## Dependencies
 
 - AS-007 (session corpus), AS-020 (cost records), AS-045/AS-050 (findings + rollup store)
+
+## Implementation notes
+
+- **Engine:** `internal/stats` is a pure, offline aggregation layer — `Build(sessions, friction, scope) → Report` and `Render(Report) → string`. Callers load the corpus and price each session through `internal/cost`; the engine folds spend per project/model/day, derives the top grounded savings, and projects recurring findings into friction items. Deterministic and unit-tested without fixtures.
+- **Read path:** `session.AllSummaries(root)` and `session.OpenAt(dir)` (plus `Summary.Dir`, `Store.Root()`) added so the analytics can reach sessions across every project under the state root, not just one project-scoped store.
+- **Surface:** delivered as a dedicated `stats` command (`smith stats` / `/stats`), the cross-session twin to single-session `/insights`. `/insights` stayed single-session (its `apply <n>` arg space is firmly per-session); overloading it was messier than a sibling command, so the "/insights cross-session view" from the clarified decision is `/stats`. `smith stats all` widens the spend view to all projects.
+- **Aggregation index:** the report is recomputed from the append-only logs on every call (disposable derived state). The persisted session-end index + on-demand rebuild from the clarified decision, and cross-project friction merge, are deferred to **AS-136** as a performance follow-on — correctness does not need them, and the corpora are small in V1.
+- **Friction linking:** `skillrollup.Group` gained an additive `Examples []string` (up to 3 session ids per finding) so recurring items link back to concrete sessions.

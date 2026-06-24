@@ -182,6 +182,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
   `/insights` it is deterministic and face-agnostic (one `Render` for the TUI panel
   and headless `smith skills`); the confirmed write happens only at the command, never
   from a sub-agent (D9, C.5).
+- **Cross-session analytics** (`/stats`, AS-057): `internal/stats` is the portfolio
+  surfacing layer over the whole session corpus. It is a pure aggregation package
+  (`Build(sessions, friction, scope) → Report`, `Render(Report) → string`) that
+  depends only on `internal/cost`, `internal/skillrollup`, and `internal/render`;
+  the composition root (`cmd/smith`) loads the corpus via `session.AllSummaries` /
+  `session.OpenAt`, prices each session with `cost.Summarize`, and feeds the result
+  in. Like `/insights` and `/skills` it is deterministic, offline, and face-agnostic
+  (one `Render` for the TUI panel and headless `smith stats`); the report is
+  recomputed from the append-only logs on every call (disposable derived state, no
+  index). The persisted index and cross-project friction merge are AS-136.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
