@@ -806,7 +806,7 @@ func (m model) View() string {
 // caret tick. Just the prompt glyph color — no cursor-escape tricks.
 func (m *model) applyCaret() {
 	col := ColorDim
-	if m.caretVisible || strings.TrimSpace(m.textarea.Value()) != "" {
+	if m.caretVisible || m.textarea.Value() != "" {
 		col = ColorBrand
 	}
 	m.textarea.FocusedStyle.Prompt = m.textarea.FocusedStyle.Prompt.Foreground(col)

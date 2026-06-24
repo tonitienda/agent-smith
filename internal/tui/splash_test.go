@@ -81,6 +81,13 @@ func TestCaretBlinkTogglesColor(t *testing.T) {
 		t.Fatalf("caret with input: foreground = %v, want solid ColorBrand", got)
 	}
 
+	// Whitespace is still a typed character: it must keep the caret solid too.
+	m.textarea.SetValue("   ")
+	m.applyCaret()
+	if got := m.textarea.FocusedStyle.Prompt.GetForeground(); got != ColorBrand {
+		t.Fatalf("caret with space input: foreground = %v, want solid ColorBrand", got)
+	}
+
 	// The blink tick flips visibility and re-arms.
 	before := m.caretVisible
 	m = update(t, m, caretBlinkMsg{})
