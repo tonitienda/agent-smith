@@ -33,7 +33,16 @@ type Group struct {
 	Resolved  bool
 	Target    string
 	Diff      string
+	// Examples lists up to maxExamples distinct session IDs that raised this
+	// finding, sorted for determinism. It lets a portfolio view link a recurring
+	// item back to concrete sessions to inspect (AS-057). Empty for findings
+	// recorded without a session id.
+	Examples []string
 }
+
+// maxExamples caps the session ids carried per group so a finding seen in many
+// sessions stays a short, linkable sample rather than an unbounded list.
+const maxExamples = 3
 
 // Pending is an unresolved finding carrying a remedy, numbered (1-based) for
 // `/skills apply <n>`. The number is stable because Rollup is deterministic.
@@ -108,6 +117,7 @@ func (s *Store) Rollup() Report {
 		a := groups[k]
 		a.g.Sessions = len(a.sessions)
 		a.g.Escalated = a.g.Sessions >= EscalateSessions
+		a.g.Examples = exampleSessions(a.sessions)
 		out.Groups = append(out.Groups, a.g)
 	}
 	sort.SliceStable(out.Groups, func(i, j int) bool {
@@ -138,6 +148,23 @@ func (s *Store) Rollup() Report {
 }
 
 func sig(kind, summary string) string { return kind + "\x00" + summary }
+
+// exampleSessions returns up to maxExamples session ids from the set, sorted so
+// the rollup stays reproducible.
+func exampleSessions(set map[string]bool) []string {
+	if len(set) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	if len(ids) > maxExamples {
+		ids = ids[:maxExamples]
+	}
+	return ids
+}
 
 // Render formats the /skills report: the current session's findings first (the
 // per-session view), then the cross-session rollup with escalations flagged, then

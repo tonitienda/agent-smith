@@ -35,7 +35,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
-| AS-017, AS-050, AS-052, AS-054, AS-057–AS-058, AS-060–AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-135 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-050, AS-052, AS-054, AS-058, AS-060–AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-136 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -138,7 +138,7 @@ Covers AS-031, AS-032, AS-034 through AS-036, AS-047, AS-048, AS-071, AS-082, AS
 
 ### 8. Subagents, insights, and plugin trust boundaries
 
-Covers AS-044, AS-045, AS-046, AS-050, AS-056, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113.
+Covers AS-044, AS-045, AS-046, AS-050, AS-056, AS-057, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -146,6 +146,7 @@ Covers AS-044, AS-045, AS-046, AS-050, AS-056, AS-059, AS-088, AS-107, AS-108, A
 | 8.1 | Run a session that should invoke built-in subagent/living-skill lifecycle hooks. | Built-in system subagents are registered by the composition root and run through the turn lifecycle. |
 | 8.2 | Run `/insights` after a session with a goal, tool use, and context churn. | Implemented dashboard summarizes cost/context/session findings; model-assisted goal anchoring is **Not implemented** until AS-109 lands. |
 | 8.2a | Across several sessions in the same project, rediscover the same fact (and/or enable the skill-expectation analyzer), then run `/skills`. | The per-session findings list plus a cross-session rollup render; a fact seen in 3+ sessions is flagged escalated; `/skills apply <n>` lands the remedy's diff into its target file and marks the finding resolved (it stops pending and survives a restart). |
+| 8.2b | After a few sessions with cost/tool activity in the project, run `/stats` (and `smith stats`); then `smith stats all` across more than one project. | Cross-session analytics render offline: spend total, per-model and (with `all`) per-project breakdowns, a per-day spend trend, the top-3 grounded "ways to save" (each citing a measured number), and recurring friction linked to example session ids. `smith stats all` widens the spend view to every project. Persisted index/rebuild + cross-project friction merge are **Not implemented** until AS-136. |
 | 8.3 | Inspect plugin/subagent registry docs and tests. | Third-party plugin boundary remains declarative-only and guarded. |
 | 8.4 | Read AS-113. | Plugin consent screen remains **Needs clarification** because plugin install/marketplace flow is not ticketed yet. |
 

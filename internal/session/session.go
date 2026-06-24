@@ -70,6 +70,11 @@ type Summary struct {
 	EventCount int
 	SizeBytes  int64
 	Models     []string
+	// Dir is the on-disk directory of the session. It lets cross-project tooling
+	// (AS-057 portfolio analytics) reopen a session's log with OpenAt without
+	// re-deriving the project hash; same-project callers can still use Store.Open
+	// by ID. Additive (D2): older callers that ignore it are unaffected.
+	Dir string
 }
 
 // NewStore returns a session store rooted at root/sessions/<project-hash>. If
@@ -98,6 +103,11 @@ func DefaultRoot() string {
 
 // ProjectDir returns the normalized project directory this store scopes.
 func (s *Store) ProjectDir() string { return s.projectDir }
+
+// Root returns the state root this store lives under (default ~/.agent-smith).
+// Cross-project tooling (AS-057) needs it to walk every project's sessions, not
+// just this store's own project.
+func (s *Store) Root() string { return s.root }
 
 // ProjectSessionsDir returns the directory containing this project's sessions.
 func (s *Store) ProjectSessionsDir() string {
@@ -208,6 +218,72 @@ func (s *Store) List() ([]Summary, error) {
 	return out, nil
 }
 
+// OpenAt loads a session directly from its on-disk directory, bypassing the
+// per-project scoping Open enforces. It is the read path for cross-project
+// portfolio analytics (AS-057), which aggregates sessions from every project
+// under the root and so cannot go through a single project-scoped Store. The
+// returned Session's Log must be closed by the caller.
+func OpenAt(dir string) (*Session, error) {
+	meta, err := readMetadata(dir)
+	if err != nil {
+		return nil, err
+	}
+	log, err := eventlog.Open(filepath.Join(dir, eventLogFile))
+	if err != nil {
+		return nil, err
+	}
+	return &Session{ID: meta.ID, Dir: dir, Metadata: meta, Log: log}, nil
+}
+
+// AllSummaries returns a summary for every stored session under root, across all
+// projects, newest first. It is the cross-project read for portfolio analytics
+// (AS-057); single-project callers use Store.List instead. A missing root yields
+// no sessions rather than an error. If root is empty, DefaultRoot is used.
+func AllSummaries(root string) ([]Summary, error) {
+	if root == "" {
+		root = DefaultRoot()
+	}
+	sessionsRoot := filepath.Join(root, "sessions")
+	projects, err := os.ReadDir(sessionsRoot)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("session: list projects: %w", err)
+	}
+	var out []Summary
+	for _, p := range projects {
+		if !p.IsDir() {
+			continue
+		}
+		projectDir := filepath.Join(sessionsRoot, p.Name())
+		entries, err := os.ReadDir(projectDir)
+		if err != nil {
+			return nil, fmt.Errorf("session: list project %q: %w", p.Name(), err)
+		}
+		for _, e := range entries {
+			if !e.IsDir() || !safeID(e.Name()) {
+				continue
+			}
+			dir := filepath.Join(projectDir, e.Name())
+			meta, err := readMetadata(dir)
+			if err != nil {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(dir, eventLogFile)); err != nil {
+				continue
+			}
+			summary, err := summarize(dir, meta)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, summary)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
+	return out, nil
+}
+
 func summarize(dir string, meta Metadata) (Summary, error) {
 	logPath := filepath.Join(dir, eventLogFile)
 	log, err := eventlog.Open(logPath)
@@ -235,7 +311,7 @@ func summarize(dir string, meta Metadata) (Summary, error) {
 		}
 	}
 	sort.Strings(models)
-	return Summary{Metadata: meta, UpdatedAt: updated, EventCount: len(events), SizeBytes: stat.Size(), Models: models}, nil
+	return Summary{Metadata: meta, UpdatedAt: updated, EventCount: len(events), SizeBytes: stat.Size(), Models: models, Dir: dir}, nil
 }
 
 func writeMetadata(dir string, meta Metadata) error {

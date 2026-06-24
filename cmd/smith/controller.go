@@ -37,6 +37,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/skill"
 	"github.com/tonitienda/agent-smith/internal/skillrollup"
 	"github.com/tonitienda/agent-smith/internal/snapshot"
+	"github.com/tonitienda/agent-smith/internal/stats"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tidy"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -1262,6 +1263,69 @@ func (s *chatSession) insightsApply(args []string) (command.Output, error) {
 		return command.Output{}, fmt.Errorf("write memory file: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Applied to %s:\n\n  + %s", edit.Target, edit.Line)}, nil
+}
+
+// cmdStats renders the cross-session portfolio analytics (AS-057, PRD §7.24):
+// spend trend over time, per-project and per-model breakdowns, the top grounded
+// ways to save, and recurring friction linked back to example sessions. It
+// defaults to this project; `/stats all` (or `smith stats all`) widens the spend
+// view to every project under the state root. The report is recomputed from the
+// append-only session logs on every call — disposable derived state, no index to
+// rebuild — so it is always consistent with the corpus and runs fully offline.
+func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output, error) {
+	allProjects := false
+	if len(args) > 0 {
+		if args[0] != "all" {
+			return command.Output{Text: "Usage: /stats [all]"}, nil
+		}
+		allProjects = true
+	}
+
+	s.mu.Lock()
+	store := s.store
+	table := s.pricing
+	rollup := s.rollup
+	s.mu.Unlock()
+	if store == nil {
+		return command.Output{Text: "No session store — analytics need persisted sessions."}, nil
+	}
+
+	scope := "this project"
+	var summaries []session.Summary
+	var err error
+	if allProjects {
+		scope = "all projects"
+		summaries, err = session.AllSummaries(store.Root())
+	} else {
+		summaries, err = store.List()
+	}
+	if err != nil {
+		return command.Output{}, fmt.Errorf("list sessions: %w", err)
+	}
+
+	priced := make([]stats.Session, 0, len(summaries))
+	for _, sm := range summaries {
+		sess, err := session.OpenAt(sm.Dir)
+		if err != nil {
+			continue // a session we can't open is skipped, not fatal to the portfolio
+		}
+		summary := cost.Summarize(sess.Log.Events(), table)
+		_ = sess.Log.Close()
+		priced = append(priced, stats.Session{
+			ID:        sm.ID,
+			Project:   sm.ProjectPath,
+			UpdatedAt: sm.UpdatedAt,
+			Cost:      summary,
+		})
+	}
+
+	// Friction is sourced from the durable findings rollup (AS-050), which is
+	// project-scoped; cross-project friction merge is a follow-on (AS-136).
+	var friction skillrollup.Report
+	if rollup != nil {
+		friction = rollup.Rollup()
+	}
+	return command.Output{Text: stats.Render(stats.Build(priced, friction, scope))}, nil
 }
 
 // containsLine reports whether content already has line as a whole line (ignoring

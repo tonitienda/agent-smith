@@ -29,5 +29,6 @@ disagree. Interactive-only commands state a reason.
 | `/route` | both |  |
 | `/serious` | interactive-only | mutes/restores interactive chrome flavor; non-interactive faces are already clean |
 | `/skills` | both |  |
+| `/stats` | both |  |
 | `/tidy` | both |  |
 | `/version` | both |  |

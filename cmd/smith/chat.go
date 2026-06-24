@@ -337,6 +337,16 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Run:           ctl.cmdInsights,
 	})
 	mustRegisterCommand(reg, command.Command{
+		Name:          "stats",
+		Summary:       "Cross-session analytics: spend trend, per-model/project, savings, friction",
+		Args:          "[all]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith stats", "smith stats all"},
+		Run:           ctl.cmdStats,
+	})
+	mustRegisterCommand(reg, command.Command{
 		Name:          "skills",
 		Summary:       "Living-skills report: per-session findings + cross-session rollup",
 		Args:          "[apply <n>]",
