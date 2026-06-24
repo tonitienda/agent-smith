@@ -1,7 +1,7 @@
 ---
 id: AS-133
 title: Recorded vendor simulators for Anthropic, OpenAI, and compatible providers
-status: ready-to-implement
+status: done
 github_issue: 413
 depends_on: [AS-008, AS-009, AS-010, AS-012, AS-060, AS-135]
 area: provider
@@ -46,16 +46,35 @@ CI.
 
 ## Acceptance criteria
 
-- [ ] Default provider tests can run against the fake servers with no network access and no
-      vendor API keys.
-- [ ] The Anthropic and OpenAI providers are exercised through their normal HTTP client path;
-      tests do not bypass adapter serialization, streaming, or error handling.
-- [ ] At least one fixture per supported vendor shape covers a tool-call round trip and a
-      large tool argument/result payload.
-- [ ] Unexpected provider requests produce a clear diff of the method/path/body mismatch.
-- [ ] Fixture metadata distinguishes redacted real captures from synthetic edge cases.
-- [ ] Docs explain the capture-redaction-review workflow and point AS-060 implementers at the
-      simulator as the preferred regression harness.
+- [x] Default provider tests can run against the fake servers with no network access and no
+      vendor API keys. *(`conformance.NewRecordedServer` on loopback; AS-012 `FileTransport`
+      replay already covered the no-network/no-key path.)*
+- [x] The Anthropic and OpenAI providers are exercised through their normal HTTP client path;
+      tests do not bypass adapter serialization, streaming, or error handling. *(Adapters point
+      at the loopback server via `WithBaseURL`/`WithHTTPClient` — real TCP/headers/serialization.)*
+- [x] At least one fixture per supported vendor shape covers a tool-call round trip and a
+      large tool argument/result payload. *(`large_tool_args` for Anthropic Messages + OpenAI
+      Responses; `large_tool_args_chat` for the OpenAI-compatible chat projection — 1 KiB args
+      preserved verbatim; existing `tool_call`/`multi_tool` cover round trips.)*
+- [x] Unexpected provider requests produce a clear diff of the method/path/body mismatch.
+      *(`RecordedServer` reports method/path/body diffs, unexpected extra requests, and
+      unconsumed exchanges; self-tested in `conformance/server_test.go`.)*
+- [x] Fixture metadata distinguishes redacted real captures from synthetic edge cases.
+      *(`fixtures.json` manifest per dir + `AssertFixtureMetadata` guard; `synthetic` vs
+      `redacted-real` sources.)*
+- [x] Docs explain the capture-redaction-review workflow and point AS-060 implementers at the
+      simulator as the preferred regression harness. *(`docs/design/capture-to-fixture.md`
+      "The recorded vendor simulator (AS-133)".)*
+
+## Implementation notes
+
+Built on the AS-012 conformance harness rather than duplicating it: `FileTransport`
+already replays raw `.http` fixtures through the real adapters with no network. The
+new surface is the **request-validating** loopback server (`RecordedServer`) that
+fails loudly on a method/path/body mismatch — the exfil/regression channel
+`FileTransport` could not guard — plus large-payload fixtures and real-vs-synthetic
+fixture metadata. AS-060's manual capture pass is still the source of `redacted-real`
+fixtures; this harness is ready to consume them.
 
 ## Dependencies
 
