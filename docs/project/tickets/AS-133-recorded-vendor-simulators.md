@@ -2,7 +2,7 @@
 id: AS-133
 title: Recorded vendor simulators for Anthropic, OpenAI, and compatible providers
 status: ready-to-implement
-github_issue: null
+github_issue: 413
 depends_on: [AS-008, AS-009, AS-010, AS-012, AS-060, AS-135]
 area: provider
 priority: P0

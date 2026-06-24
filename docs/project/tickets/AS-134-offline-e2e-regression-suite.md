@@ -2,7 +2,7 @@
 id: AS-134
 title: Offline E2E regression suite over recorded providers, TUI, and append-only logs
 status: ready-to-implement
-github_issue: null
+github_issue: 414
 depends_on: [AS-005, AS-018, AS-021, AS-024, AS-046, AS-119, AS-120, AS-133]
 area: quality
 priority: P0

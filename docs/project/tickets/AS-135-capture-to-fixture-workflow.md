@@ -2,7 +2,7 @@
 id: AS-135
 title: Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions
 status: ready-to-implement
-github_issue: null
+github_issue: 415
 depends_on: [AS-056, AS-060, AS-115]
 area: schema
 priority: P1
