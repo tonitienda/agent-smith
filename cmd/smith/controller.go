@@ -1385,11 +1385,16 @@ func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output
 // friction can span projects (AS-136), degrading to the current project if the
 // merge can't be read.
 func (s *chatSession) frictionReport(allProjects bool, store *session.Store, rollup *skillrollup.Store) skillrollup.Report {
-	if !allProjects {
+	projectFriction := func() skillrollup.Report {
 		if rollup != nil {
 			return rollup.Rollup()
 		}
 		return skillrollup.Report{}
+	}
+	// store is non-nil from cmdStats, but guard it so a future caller can't panic
+	// on store.Root(); without a store there are no project logs to merge anyway.
+	if !allProjects || store == nil {
+		return projectFriction()
 	}
 	paths, err := filepath.Glob(filepath.Join(store.Root(), "sessions", "*", skillFindingsName))
 	if err == nil {
@@ -1397,10 +1402,7 @@ func (s *chatSession) frictionReport(allProjects bool, store *session.Store, rol
 			return merged.Rollup()
 		}
 	}
-	if rollup != nil {
-		return rollup.Rollup()
-	}
-	return skillrollup.Report{}
+	return projectFriction()
 }
 
 // containsLine reports whether content already has line as a whole line (ignoring
