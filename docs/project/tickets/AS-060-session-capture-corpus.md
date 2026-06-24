@@ -13,6 +13,29 @@ source: PRD.md D2, D4; docs/design/block-schema-union.md §14–§15
 
 **Status: ready to implement**
 
+## Why this keeps getting skipped (and why it is already unblocked)
+
+This ticket is repeatedly passed over on the assumption that it needs live vendor
+API keys wired into CI. It does not. AS-060 is a **one-time, manual capture +
+analysis pass**, not an automated test that runs on every CI build:
+
+- Its only dependencies — AS-002 and AS-003 — are both `done`, so it is **already
+  unblocked**. No new ticket is required to start it.
+- **The fakes cannot substitute for it.** AS-133/AS-134/AS-135 (recorded vendor
+  simulators / offline E2E / capture-to-fixture) *depend on* AS-060 — they replay
+  fixtures derived from the captures this ticket produces. Using self-authored
+  fakes to validate the schema is circular: synthetic data only contains fields we
+  already anticipated, so it cannot reveal the **unanticipated** gaps that justify
+  doing this before the V1 freeze (D0 — no silent punts).
+- **Most of it needs zero API keys.** Capture offline-obtainable artifacts first:
+  Claude Code L3 `~/.claude/projects/.../*.jsonl`, Codex/Gemini CLI persisted
+  session files, and published example payloads from vendor docs. Only the L1 raw
+  wire turns (Anthropic Messages, OpenAI Responses, xAI/Grok) need a live key, and
+  those are one cheap call each — done by hand once, redacted, and committed. The
+  capture procedure is catalogued for manual execution in
+  [`docs/projects/manual-test-campaign.md`](../../projects/manual-test-campaign.md)
+  (section "AS-060 vendor session captures").
+
 ## Description
 
 The block-schema union ([docs/design/block-schema-union.md](../../design/block-schema-union.md)) is the up-front design (D4) for the immutable substrate, but it is a **draft until AS-003 ships in V1**. Per D2, the schema becomes additive-only *from V1* — so the cheap, high-value window to find gaps is **now, before the freeze**. The union was derived largely from documentation and a single primary-source capture (this repo's own Claude Code `.jsonl`); §15 of the design doc commits us to validating it against **real captured sessions across vendors and representation layers** before V1.
