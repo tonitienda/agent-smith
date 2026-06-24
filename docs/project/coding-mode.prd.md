@@ -185,7 +185,12 @@ TODOs (CLAUDE.md ticket discipline).
    `plan-review`, `verify-checklist`, etc., wired to phases (D-CODE-5.2, D-CODE-6).
    *depends_on:* 034, ticket 1.
 4. **Project-level method override** — read process customisation from memory
-   files (D-CODE-5.3). *depends_on:* 032, ticket 1.
+   files (D-CODE-5.3). *depends_on:* 032, ticket 1. **Shipped (AS-075):** a
+   project reorders/skips/extends the phase sequence by embedding a fenced
+   ```` ```smith-method ```` block carrying a `phases:` list in any memory file
+   (`CLAUDE.md`/`AGENTS.md`/`AGENT.md`); resolution is declarative (no code runs),
+   most-specific memory wins, and a malformed directive degrades to the house
+   default.
 5. **Reflect-phase artifacts** — success-metric/instrumentation scaffolding +
    check-back ticket generation (D-CODE-7); hook into `/insights` and the
    rediscovered-fact detector. *depends_on:* 045, 048, ticket 1.

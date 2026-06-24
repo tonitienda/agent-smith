@@ -107,7 +107,7 @@ Covers AS-020, AS-025 through AS-028, AS-041, AS-042, AS-063, AS-068, AS-085, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-074, AS-114.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-075, AS-114.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -115,7 +115,8 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.2 | Run `/clear`, `/model`, `/resume`, `/goal`, `/init`, `/serious`, `/feature`, and `/mode` where applicable. | Each command has visible feedback and updates only its intended session state. |
 | 6.3 | Add `.agent-smith/commands/review.md` with frontmatter and `$ARGUMENTS`; reopen the palette. | Custom command appears with description/argument hint; built-ins still win name conflicts. |
 | 6.4 | Enter Coding Mode with `/feature`; advance through phases. | Phase tracker panel and phase-as-block state are visible; process skill blocks are scoped to the active phase. |
-| 6.5 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
+| 6.5 | Add a ```` ```smith-method ```` block (`phases: think, plan, implement, verify`) to the project `CLAUDE.md`/`AGENTS.md`, start a session, and `/feature`. | The phase tracker reflects the overridden phase sequence (reordered/skipped); a malformed block degrades to the default (AS-075). |
+| 6.6 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
 
 ### 7. Configuration, memory, skills, hooks, MCP, and living-skills substrate
 
@@ -244,7 +245,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-072 | Coding Mode shell — /feature & /mode entry/exit + phase-as-block | Implemented (`done`) |
 | AS-073 | Coding Mode phase tracker panel + mode presentation | Implemented (`done`) |
 | AS-074 | Coding Mode process skill pack (bundled, auto-enabled per phase) | Implemented (`done`) |
-| AS-075 | Coding Mode project-level method override (via memory files) | Not implemented (`ready-to-implement`) |
+| AS-075 | Coding Mode project-level method override (via memory files) | Implemented (`done`) |
 | AS-076 | Coding Mode reflect-phase artifacts (success metric, instrumentation, check-back ticket) | Not implemented (`ready-to-implement`) |
 | AS-077 | `smith serve` — local JSON-RPC/WebSocket session server | Implemented (`done`) |
 | AS-078 | Web GUI — thin client over `smith serve` | Not implemented (`ready-to-implement`) |

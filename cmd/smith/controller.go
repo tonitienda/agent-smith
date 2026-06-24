@@ -25,6 +25,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/initscaffold"
 	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/loop"
+	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/mode"
 	"github.com/tonitienda/agent-smith/internal/permission"
 	"github.com/tonitienda/agent-smith/internal/personality"
@@ -227,6 +228,14 @@ type chatSession struct {
 	modeName    string
 	modeTracker string
 	modePanel   string
+
+	// mode method memo: the resolved Coding Mode phase list (AS-075), after any
+	// project method override read from the memory blocks on the log (AS-032).
+	// Memory blocks only change at session start/resume/clear, so the resolution
+	// is cached and re-derived only when the active log or its length changes.
+	modePhasesLog   *eventlog.Log
+	modePhasesLen   int
+	modePhasesCache []string
 }
 
 // newChatSession builds the controller over an already-opened session, wiring
@@ -581,7 +590,7 @@ func (s *chatSession) currentModeChrome(goal string) (name, tracker, panel strin
 	events := log.Events()
 	name, tracker, panel = "", "", ""
 	if cur, ok := mode.Current(events); ok {
-		phases := mode.DefaultPhases()
+		phases := s.modePhases()
 		name = cur.Mode
 		tracker = mode.Tracker(phases, cur.Phase)
 		panel = mode.Panel(events, phases, goal)
@@ -589,6 +598,27 @@ func (s *chatSession) currentModeChrome(goal string) (name, tracker, panel strin
 	s.modeLog, s.modeLen = log, log.Len()
 	s.modeName, s.modeTracker, s.modePanel = name, tracker, panel
 	return name, tracker, panel
+}
+
+// modePhases returns the active Coding Mode phase list for this session: the
+// house default (AS-072) after any project method override declared in the
+// memory files loaded onto the log (AS-075/AS-032). It is memoized on the active
+// log + length like the other status-line projections, since the memory blocks
+// it reads only change at session start/resume/clear. Callers hold s.mu.
+func (s *chatSession) modePhases() []string {
+	log := s.sess.Log
+	if log == s.modePhasesLog && log.Len() == s.modePhasesLen && s.modePhasesCache != nil {
+		return s.modePhasesCache
+	}
+	var texts []string
+	for _, b := range log.Events() {
+		if _, ok := memory.Source(b); ok && b.Text != nil {
+			texts = append(texts, b.Text.Text)
+		}
+	}
+	phases := mode.ResolvePhases(texts)
+	s.modePhasesLog, s.modePhasesLen, s.modePhasesCache = log, log.Len(), phases
+	return phases
 }
 
 // currentGoal returns the active session objective for the status line (AS-040),
@@ -750,7 +780,7 @@ func (s *chatSession) cmdFeature(_ context.Context, args []string) (command.Outp
 	if err := s.enterMode(); err != nil {
 		return command.Output{}, err
 	}
-	return command.Output{Text: fmt.Sprintf("Entered coding mode · goal: %s\n%s", prompt, mode.Render(s.sess.Log.Events(), mode.DefaultPhases()))}, nil
+	return command.Output{Text: fmt.Sprintf("Entered coding mode · goal: %s\n%s", prompt, mode.Render(s.sess.Log.Events(), s.modePhases()))}, nil
 }
 
 // cmdMode enters or exits Coding Mode, or shows its status (AS-072 /mode). The
@@ -766,7 +796,7 @@ func (s *chatSession) cmdMode(_ context.Context, args []string) (command.Output,
 	events := s.sess.Log.Events()
 
 	if len(args) == 0 {
-		return command.Output{Text: mode.Render(events, mode.DefaultPhases())}, nil
+		return command.Output{Text: mode.Render(events, s.modePhases())}, nil
 	}
 
 	switch arg := strings.ToLower(strings.TrimSpace(strings.Join(args, " "))); arg {
@@ -786,7 +816,7 @@ func (s *chatSession) cmdMode(_ context.Context, args []string) (command.Output,
 		if err := s.enterMode(); err != nil {
 			return command.Output{}, err
 		}
-		return command.Output{Text: "Entered coding mode.\n" + mode.Render(s.sess.Log.Events(), mode.DefaultPhases())}, nil
+		return command.Output{Text: "Entered coding mode.\n" + mode.Render(s.sess.Log.Events(), s.modePhases())}, nil
 	default:
 		return command.Output{}, fmt.Errorf("unknown mode %q; use `coding` or `off`", arg)
 	}
@@ -809,7 +839,7 @@ func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output
 	if !ok {
 		return command.Output{}, fmt.Errorf("no coding mode active; start one with /feature or /mode coding")
 	}
-	phases := mode.DefaultPhases()
+	phases := s.modePhases()
 	if len(args) == 0 {
 		return command.Output{Text: mode.Render(events, phases)}, nil
 	}
@@ -852,7 +882,7 @@ func (s *chatSession) cmdPhase(_ context.Context, args []string) (command.Output
 // phase-change) and auto-loads the first phase's process skills. Callers hold
 // s.mu and have already checked no mode is active.
 func (s *chatSession) enterMode() error {
-	for _, b := range mode.Enter(mode.Coding, mode.DefaultPhases()) {
+	for _, b := range mode.Enter(mode.Coding, s.modePhases()) {
 		if _, err := s.sess.Log.Append(b); err != nil {
 			return fmt.Errorf("enter coding mode: %w", err)
 		}
