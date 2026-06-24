@@ -103,7 +103,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-073](AS-073-coding-mode-phase-tracker.md) | Coding Mode phase tracker panel + presentation | coding-mode | done | 067, 072 |
 | [AS-074](AS-074-coding-mode-process-skill-pack.md) | Coding Mode process skill pack (bundled, auto-enabled) | coding-mode | done | 034, 072 |
 | [AS-075](AS-075-coding-mode-method-override.md) | Coding Mode project-level method override (memory files) | coding-mode | done | 032, 072 |
-| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | ready | 045, 048, 072 |
+| [AS-076](AS-076-coding-mode-reflect-artifacts.md) | Coding Mode reflect-phase artifacts | coding-mode | done | 045, 048, 072 |
 | [AS-077](AS-077-serve-jsonrpc-session-server.md) | `smith serve` — local JSON-RPC/WebSocket session server | faces | done | 018, 051, 066 |
 | [AS-078](AS-078-web-gui-thin-client.md) | Web GUI — thin client over `smith serve` | faces | ready | 077 |
 | [AS-079](AS-079-wasm-session-inspector.md) | WASM observability core + static session inspector | observability | ready | 005, 006, 020, 061, 038 |

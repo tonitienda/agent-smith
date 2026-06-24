@@ -57,7 +57,7 @@ var phaseSkills = map[string][]string{
 	"analyse": {"grill-gaps", "find-side-effects"},
 	"plan":    {"plan-review"},
 	"verify":  {"verify-checklist"},
-	"reflect": {"reflect-notes"},
+	"reflect": {"reflect-notes", "reflect-artifacts"},
 }
 
 // PhaseSkills returns the names of the process skills auto-enabled for phase
@@ -295,8 +295,12 @@ func PhaseHistory(events []schema.Block, instanceID string) []string {
 // Like Render it is plain text — flavor and layout live in the face (D-CODE-4) —
 // so headless callers can reuse it verbatim. goal is the active session
 // objective (AS-040), passed in so this package does not reach into goal state;
-// empty is simply omitted. Phase-produced artifacts (AS-076) attach here once
-// that ticket records them on the log.
+// empty is simply omitted. Reflect-phase artifacts (AS-076) — the success
+// metric, the instrumentation diff, and the check-back ticket draft — are
+// produced by the bundled reflect skills (reflect-notes, reflect-artifacts) as
+// ordinary reflect-phase output and tool diffs, so they ride on the log as
+// normal blocks and need no special attachment here; Coding Mode never reads
+// shipped-app runtime data (D-CODE-7).
 func Panel(events []schema.Block, phases []string, goal string) string {
 	cur, ok := Current(events)
 	if !ok {
