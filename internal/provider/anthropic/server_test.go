@@ -21,6 +21,7 @@ func TestRecordedServerLargeToolArgs(t *testing.T) {
 		conformance.FixtureExchange(t, path, messagesPath, `"model"`, `"read_file"`),
 	)
 	defer srv.Close()
+	defer srv.AssertConsumed(t)
 
 	p := New("test-key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 	s, err := p.Stream(t.Context(), provider.Request{
@@ -42,7 +43,6 @@ func TestRecordedServerLargeToolArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	srv.AssertConsumed(t)
 
 	wantArgs := `{"path":"` + strings.Repeat("A", 1024) + `"}`
 	if len(got.Blocks) != 1 {

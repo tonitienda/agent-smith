@@ -19,6 +19,7 @@ func TestRecordedServerLargeToolArgs(t *testing.T) {
 		conformance.FixtureExchange(t, path, responsesPath, `"model"`, `"read_file"`),
 	)
 	defer srv.Close()
+	defer srv.AssertConsumed(t)
 
 	p := New("test-key", WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 	s, err := p.Stream(t.Context(), provider.Request{
@@ -40,8 +41,6 @@ func TestRecordedServerLargeToolArgs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	srv.AssertConsumed(t)
-
 	assertLargeToolArgs(t, got)
 }
 
@@ -54,6 +53,7 @@ func TestRecordedServerLargeToolArgsChat(t *testing.T) {
 		conformance.FixtureExchange(t, path, chatCompletionsPath, `"model"`, `"read_file"`),
 	)
 	defer srv.Close()
+	defer srv.AssertConsumed(t)
 
 	p := New("test-key", WithSurface(SurfaceChatCompletions), WithBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 	s, err := p.Stream(t.Context(), provider.Request{
@@ -75,7 +75,6 @@ func TestRecordedServerLargeToolArgsChat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	srv.AssertConsumed(t)
 	assertLargeToolArgs(t, got)
 }
 

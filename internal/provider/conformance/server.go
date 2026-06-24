@@ -123,7 +123,7 @@ func methodOr(m string) string {
 	if m == "" {
 		return http.MethodPost
 	}
-	return m
+	return strings.ToUpper(m)
 }
 
 // Check returns every validation failure: request mismatches and unexpected
