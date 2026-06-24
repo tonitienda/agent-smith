@@ -36,6 +36,7 @@ func commands() []*cli.Command {
 	return []*cli.Command{
 		runCommand(),
 		runsCommand(),
+		replayCommand(),
 		sessionCommand(reg),
 		contextCommand(reg),
 		registryLeaf(reg, "cost", "cost", nil),
@@ -520,7 +521,7 @@ func formatConfigValue(v any) string {
 var knownConfigSections = []string{
 	"model", "provider", "permissions", "pricing",
 	"subagents", "personality", "hooks", "mcp", "tools",
-	"budget", "compact",
+	"budget", "compact", "telemetry",
 }
 
 // configShow loads the layered JSON config (built-in defaults < user < project)

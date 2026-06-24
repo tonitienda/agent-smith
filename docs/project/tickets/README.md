@@ -96,7 +96,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-052](AS-052-acp-server.md) | ACP server | faces | ready | 018, 051 |
 | [AS-053](AS-053-matrix-personality-layer.md) | Matrix personality layer + `/serious` | polish | done | 021, 022, 031 |
 | [AS-054](AS-054-async-runner.md) | Background/async runner | async | done | 007, 041, 051 |
-| [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | ready | 005, 007, 020 |
+| [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | done | 005, 007, 020 |
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | done | 005 |
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | ready | 007, 020, 045 |
 | [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | ready | 032, 045, 050 |

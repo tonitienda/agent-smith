@@ -100,6 +100,18 @@ func TestLayeringContracts(t *testing.T) {
 			forbidden: []string{"internal/tui", "internal/serve"},
 			reason:    "delegate is orchestration: it may use the loop, providers, tools, and session store but never a face (AS-046)",
 		},
+		{
+			name:      "manifest does not import provider, loop, faces, or composition roots",
+			pkgDir:    "internal/manifest",
+			forbidden: []string{"internal/provider", "internal/loop", "internal/tui", "internal/serve", "cmd"},
+			reason:    "the run manifest (AS-055) is a derived view over the log and cost accounting; it must not depend on orchestration, providers, or faces",
+		},
+		{
+			name:      "otelexport does not import provider, loop, projection, faces, or composition roots",
+			pkgDir:    "internal/otelexport",
+			forbidden: []string{"internal/provider", "internal/loop", "internal/projection", "internal/tui", "internal/serve", "cmd"},
+			reason:    "the OpenTelemetry exporter (AS-055) projects the log + cost into a trace; it must not depend on orchestration, providers, or faces",
+		},
 	}
 
 	for _, tc := range cases {

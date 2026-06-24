@@ -136,5 +136,9 @@ func executeRun(ctx context.Context, configOverride, wd, prompt string, opts hea
 
 	res, runErr := eng.Run(ctx, prompt)
 	totalUSD := cost.Summarize(sess.Log.Events(), pricing).TotalUSD
+	// Persist the replay manifest and (if configured) export the OpenTelemetry
+	// trace (AS-055). A fresh context so a Ctrl+C-canceled run still records its
+	// manifest; failures are warned, never fatal, to the run.
+	persistRunArtifacts(context.Background(), sess, cfg, pricing, stderr)
 	return runOutcome{sessionID: sess.ID, res: res, costUSD: totalUSD, denied: gate.denied(), runErr: runErr}, nil
 }

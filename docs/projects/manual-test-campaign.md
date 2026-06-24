@@ -35,7 +35,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
-| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-135 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-050, AS-052, AS-054, AS-057–AS-058, AS-060–AS-061, AS-077–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-135 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -54,7 +54,7 @@ Covers AS-001, AS-065, AS-066, AS-069, AS-070, AS-089, AS-090, AS-104, AS-105.
 
 ### 2. Schema, event log, projection, persistence, and replay substrate
 
-Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-056, AS-084, AS-115.
+Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-055, AS-056, AS-084, AS-115.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -64,6 +64,8 @@ Covers AS-002 through AS-007, AS-027, AS-037, AS-038, AS-056, AS-084, AS-115.
 | 2.4 | Add prompts containing fake secrets/PII such as `sk-test-secret` or an email address and inspect captured log text. | Best-effort redaction occurs before capture where AS-115 applies; debug logs do not reveal more than intended. |
 | 2.5 | Exercise `/compact` preview/apply/undo and `/rewind` checkpoint/restore. | Derived compact blocks and restore events are visible and reversible. |
 | 2.6 | After file edits past a checkpoint, run `/rewind <handle> --restore-files` (AS-084). Repeat after hand-editing a Smith-written file outside the session. | Restored/deleted files match the checkpoint; externally-changed files are flagged as conflicts and never overwritten; the log still only grows. |
+| 2.7 | Run `./smith replay <session>` for a stored session (AS-055), then `./smith replay <session> --output json`. | A manifest header (models, tools, token/cost totals) plus the transcript renders offline with no API keys; JSON mode emits `{manifest, blocks}`. No provider/tool runs (re-display, not re-execution). A `manifest.json` appears next to the log. |
+| 2.8 | Set `telemetry.otel_endpoint` to a local OTLP/HTTP collector and run `./smith replay <session> --otel` (or a headless `smith run`). | `session → turn → model.call/tool.call` spans with token/cost attributes arrive at the collector. With no endpoint configured (default), nothing is exported and no network call is made. |
 
 ### 3. Providers, prompt caching, and provider conformance
 
@@ -228,7 +230,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-052 | ACP server (editor / programmatic protocol face) | Not implemented (`ready-to-implement`) |
 | AS-053 | The Matrix layer — personality theme + /serious kill switch | Implemented (`done`) |
 | AS-054 | Background/async runner (queue, scheduled, resumable, budget-capped) | Not implemented (`ready-to-implement`) |
-| AS-055 | Replayable run logs + OpenTelemetry export | Not implemented (`ready-to-implement`) |
+| AS-055 | Replayable run logs + OpenTelemetry export | Implemented (`done`) |
 | AS-056 | Design spike: compliance archiving — immutability vs right-to-erasure | Implemented (`done`) |
 | AS-057 | Cross-session analytics (portfolio dashboard) | Not implemented (`ready-to-implement`) |
 | AS-058 | Self-improving config (aggregated insights propose memory/skill/command edits) | Not implemented (`ready-to-implement`) |
