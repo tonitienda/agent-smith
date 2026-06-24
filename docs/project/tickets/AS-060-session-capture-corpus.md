@@ -53,6 +53,15 @@ Capture (a handful each is enough — breadth over volume), covering all three r
 
 For each captured artifact: parse → into union blocks → re-emit, and record whether the round-trip is lossless (the §14 checklist). Log every field that has **no home** in the AS-003 types except the `ext` escape hatch, and decide per field: **promote to a first-class optional**, **leave in `ext`**, or **out of scope** (with rationale, per D0 — no silent punts).
 
+## Capture-to-fixture workflow (AS-135)
+
+Once a capture is redacted and reviewed, run it through `cmd/capture-fixture` to
+emit a deterministic, CI-safe fixture + metadata under `docs/design/captures/`.
+The full workflow — state machine, redaction review checklist, and how the
+fixtures feed AS-133/AS-134 — is documented in
+[`docs/design/capture-to-fixture.md`](../../design/capture-to-fixture.md). Use it
+so each capture becomes a lasting regression fixture instead of a one-off report.
+
 ## Deliverables
 
 - A small, redacted capture corpus checked in under `docs/design/captures/` (or referenced if artifacts can't be committed for size/privacy — strip secrets and PII either way).
