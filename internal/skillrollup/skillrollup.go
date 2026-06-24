@@ -99,6 +99,26 @@ func Open(path string) (*Store, error) {
 // session store is present, and the seam tests use.
 func NewMem() *Store { return &Store{seen: map[string]bool{}} }
 
+// OpenMerged loads several per-project findings logs into one in-memory store so a
+// single Rollup can span projects — the cross-project friction view (AS-136): a
+// fact rediscovered across projects, not just sessions, is the broader signal a
+// single project's log can never show. The merged store is read-only (no path);
+// it is for reporting, so Record/Resolve would not persist. A missing log is an
+// empty contribution, not an error (Open already tolerates it).
+func OpenMerged(paths ...string) (*Store, error) {
+	m := NewMem()
+	for _, p := range paths {
+		s, err := Open(p)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range s.all {
+			m.add(r)
+		}
+	}
+	return m, nil
+}
+
 // Record files a finding into memory and appends it to the durable log. A finding
 // identical to one already recorded this process (same session/kind/summary/
 // detail) is dropped, so a teardown that re-runs on an engine rebuild does not

@@ -1,7 +1,7 @@
 ---
 id: AS-136
 title: Persisted cross-session stats index + cross-project friction merge
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-050, AS-057]
 area: insights-wedge
