@@ -7,10 +7,10 @@
 // here touches disk or the network, so the analytics are fully offline and the
 // aggregation is deterministic and unit-testable without fixtures.
 //
-// The Report is disposable derived state: it is recomputed from the append-only
-// session logs on every invocation rather than cached, so there is no index to
-// rebuild or invalidate. A persisted rollup index updated at session end is a
-// performance follow-on (AS-136), not a correctness requirement.
+// The Report itself is pure derived state. A disposable on-disk index of the
+// priced per-session rows (internal/statsindex, AS-136) lets callers skip
+// re-pricing unchanged sessions, but it is never load-bearing: a missing or stale
+// index degrades to pricing the whole corpus, exactly the behaviour here.
 package stats
 
 import (

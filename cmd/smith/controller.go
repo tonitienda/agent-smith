@@ -31,6 +31,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/projection"
 	"github.com/tonitienda/agent-smith/internal/provider"
+	"github.com/tonitienda/agent-smith/internal/render"
 	"github.com/tonitienda/agent-smith/internal/rewind"
 	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
@@ -38,6 +39,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/skillrollup"
 	"github.com/tonitienda/agent-smith/internal/snapshot"
 	"github.com/tonitienda/agent-smith/internal/stats"
+	"github.com/tonitienda/agent-smith/internal/statsindex"
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/internal/tidy"
 	"github.com/tonitienda/agent-smith/internal/tool"
@@ -1265,20 +1267,33 @@ func (s *chatSession) insightsApply(args []string) (command.Output, error) {
 	return command.Output{Text: fmt.Sprintf("Applied to %s:\n\n  + %s", edit.Target, edit.Line)}, nil
 }
 
+// statsIndexName is the disposable, derived stats cache (AS-136) kept under the
+// state root so `smith stats` reads pre-priced session rows instead of re-pricing
+// the whole corpus every call. It is never load-bearing: deleting it degrades to
+// a full recompute, and `stats rebuild` reconstructs it from the session logs.
+const statsIndexName = "stats-index.json"
+
 // cmdStats renders the cross-session portfolio analytics (AS-057, PRD §7.24):
 // spend trend over time, per-project and per-model breakdowns, the top grounded
 // ways to save, and recurring friction linked back to example sessions. It
 // defaults to this project; `/stats all` (or `smith stats all`) widens the spend
-// view to every project under the state root. The report is recomputed from the
-// append-only session logs on every call — disposable derived state, no index to
-// rebuild — so it is always consistent with the corpus and runs fully offline.
+// view to every project under the state root and merges every project's findings
+// log so recurring friction can span projects (AS-136); `/stats rebuild`
+// reconstructs the derived stats index from the append-only logs.
+//
+// Pricing reads through a disposable index (AS-136): an unchanged session is
+// served from the cache and only new or modified sessions are re-priced, so the
+// report is measurably cheaper on a large corpus while staying fully offline and
+// always reproducible from the logs.
 func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output, error) {
-	allProjects := false
+	sub := ""
 	if len(args) > 0 {
-		if args[0] != "all" {
-			return command.Output{Text: "Usage: /stats [all]"}, nil
-		}
-		allProjects = true
+		sub = args[0]
+	}
+	switch sub {
+	case "", "all", "rebuild":
+	default:
+		return command.Output{Text: "Usage: /stats [all|rebuild]"}, nil
 	}
 
 	s.mu.Lock()
@@ -1290,18 +1305,8 @@ func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output
 		return command.Output{Text: "No session store — analytics need persisted sessions."}, nil
 	}
 
-	scope := "this project"
-	var summaries []session.Summary
-	var err error
-	if allProjects {
-		scope = "all projects"
-		summaries, err = session.AllSummaries(store.Root())
-	} else {
-		summaries, err = store.List()
-	}
-	if err != nil {
-		return command.Output{}, fmt.Errorf("list sessions: %w", err)
-	}
+	idxPath := filepath.Join(store.Root(), statsIndexName)
+	idx := statsindex.Load(idxPath, statsindex.PricingFingerprint(table.Models()))
 
 	// priceSession opens, prices, and closes one session. The defer keeps the log
 	// closed even if Summarize panics, and bounds open descriptors to one at a
@@ -1319,20 +1324,85 @@ func (s *chatSession) cmdStats(_ context.Context, args []string) (command.Output
 			Cost:      cost.Summarize(sess.Log.Events(), table),
 		}, nil
 	}
-	priced := make([]stats.Session, 0, len(summaries))
-	for _, sm := range summaries {
-		if ps, err := priceSession(sm); err == nil {
-			priced = append(priced, ps) // a session we can't open is skipped, not fatal
+	// pricedFrom prices each summary through the index: an unchanged session is
+	// served from the cache, a new or modified one is re-priced and cached. A
+	// session we can't open is skipped, not fatal.
+	pricedFrom := func(summaries []session.Summary) []stats.Session {
+		priced := make([]stats.Session, 0, len(summaries))
+		for _, sm := range summaries {
+			fp := statsindex.Fingerprint(sm.UpdatedAt, sm.SizeBytes, sm.EventCount)
+			if ps, ok := idx.Lookup(sm.Dir, fp); ok {
+				priced = append(priced, ps)
+				continue
+			}
+			ps, err := priceSession(sm)
+			if err != nil {
+				continue
+			}
+			idx.Put(sm.Dir, fp, ps)
+			priced = append(priced, ps)
 		}
+		return priced
 	}
 
-	// Friction is sourced from the durable findings rollup (AS-050), which is
-	// project-scoped; cross-project friction merge is a follow-on (AS-136).
-	var friction skillrollup.Report
-	if rollup != nil {
-		friction = rollup.Rollup()
+	if sub == "rebuild" {
+		summaries, err := session.AllSummaries(store.Root())
+		if err != nil {
+			return command.Output{}, fmt.Errorf("list sessions: %w", err)
+		}
+		idx.Reset()
+		priced := pricedFrom(summaries)
+		if err := idx.Save(); err != nil {
+			return command.Output{}, fmt.Errorf("save stats index: %w", err)
+		}
+		return command.Output{Text: fmt.Sprintf("Rebuilt stats index from %s across all projects.", render.Count(len(priced), "session"))}, nil
 	}
+
+	allProjects := sub == "all"
+	scope := "this project"
+	var summaries []session.Summary
+	var err error
+	if allProjects {
+		scope = "all projects"
+		summaries, err = session.AllSummaries(store.Root())
+	} else {
+		summaries, err = store.List()
+	}
+	if err != nil {
+		return command.Output{}, fmt.Errorf("list sessions: %w", err)
+	}
+
+	priced := pricedFrom(summaries)
+	_ = idx.Save() // best-effort: a cache write failure never blocks the report
+
+	friction := s.frictionReport(allProjects, store, rollup)
 	return command.Output{Text: stats.Render(stats.Build(priced, friction, scope))}, nil
+}
+
+// frictionReport sources the recurring-friction view for a stats report. The
+// project scope uses the durable per-project findings rollup (AS-050); the
+// all-projects scope merges every project's findings log under the state root so
+// friction can span projects (AS-136), degrading to the current project if the
+// merge can't be read.
+func (s *chatSession) frictionReport(allProjects bool, store *session.Store, rollup *skillrollup.Store) skillrollup.Report {
+	projectFriction := func() skillrollup.Report {
+		if rollup != nil {
+			return rollup.Rollup()
+		}
+		return skillrollup.Report{}
+	}
+	// store is non-nil from cmdStats, but guard it so a future caller can't panic
+	// on store.Root(); without a store there are no project logs to merge anyway.
+	if !allProjects || store == nil {
+		return projectFriction()
+	}
+	paths, err := filepath.Glob(filepath.Join(store.Root(), "sessions", "*", skillFindingsName))
+	if err == nil {
+		if merged, mErr := skillrollup.OpenMerged(paths...); mErr == nil {
+			return merged.Rollup()
+		}
+	}
+	return projectFriction()
 }
 
 // containsLine reports whether content already has line as a whole line (ignoring
