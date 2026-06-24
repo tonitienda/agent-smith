@@ -150,6 +150,14 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
 | [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | done | 054 |
 
+## Index — Recorded-provider regression harness (AS-133 … AS-135)
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-133](AS-133-recorded-vendor-simulators.md) | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | provider | ready | 008, 009, 010, 012, 060 |
+| [AS-134](AS-134-offline-e2e-regression-suite.md) | Offline E2E regression suite over recorded providers, TUI, and append-only logs | quality | ready | 005, 018, 021, 024, 046, 119, 120, 133 |
+| [AS-135](AS-135-capture-to-fixture-workflow.md) | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | schema | ready | 056, 060, 115, 133 |
+
 ## Index — TUI visual polish (AS-121 … AS-131) — demo-priority
 
 | ID | Title | Area | Status | Depends on |
@@ -179,6 +187,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 9. **Coding Mode** (orchestration layer, after the capability + wedge waves): 072 (shell) → 073 (phase tracker) / 074 (process skills) / 075 (method override) → 076 (reflect artifacts). 072/073/076 need their open questions answered first (see below); 074/075 are ready once 034/032 land.
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is **resolved** ([docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md)): closed in favour of 079 — `smith serve` ships for local use only and the public demo is the read-only inspector, since hosting strangers collides with D9 ("not a sandbox").
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
+12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
 
 ## Needs clarification — decisions to make
 

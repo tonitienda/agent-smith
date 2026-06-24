@@ -1,6 +1,6 @@
 # Agent Smith manual test campaign
 
-_Last updated: 2026-06-22._
+_Last updated: 2026-06-24._
 
 This campaign is the human smoke/regression pass to run after a burst of ticket work when nobody has recently driven the application end-to-end. It covers every ticket in the backlog: completed tickets have concrete actions and expected results; not-yet-implemented tickets are explicitly marked so testers do not mistake absence for a regression.
 
@@ -35,7 +35,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-032, AS-034, AS-035, AS-036, AS-047, AS-048, AS-049, AS-082, AS-083, AS-106–AS-108, AS-114 | Implemented | Add memory files, skills, hooks, MCP test server, and subagent/living-skill fixtures. | Capabilities load in the right scope, are attributed in context, and failures degrade visibly. AS-049 (skill-expectation analyzer) is opt-in via `subagents.skill-expectation-analyzer.enabled`; its grades land as findings surfaced by `/skills` (AS-050). |
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
-| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
+| AS-017, AS-050, AS-052, AS-054–AS-055, AS-057–AS-058, AS-060–AS-061, AS-075–AS-081, AS-087, AS-109, AS-111, AS-119–AS-120, AS-133–AS-135 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not advertised as complete; no manual pass/fail expected. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -75,6 +75,7 @@ Covers AS-008 through AS-012 and AS-092.
 | 3.2 | With `OPENAI_API_KEY` or OpenAI-compatible endpoint config, run the same one-turn task. | The same face-level events appear despite provider differences. |
 | 3.3 | Repeat a prompt with cache-eligible context. | Prompt-cache usage/savings appear in `/cost` when the provider reports them. |
 | 3.4 | Run provider conformance tests from the quality gate. | Recorded fixtures pass offline; no live network is needed for default tests. |
+| 3.4a | Once AS-133–AS-135 land, run the recorded-provider simulator and offline E2E suite against redacted fixtures. | Fake Anthropic/OpenAI-compatible servers replay captures deterministically; TUI-facing state and append-only JSONL assertions pass without burning tokens. Until then, these tickets remain **Not implemented**. |
 | 3.5 | `smith auth set anthropic` (paste a key at the hidden prompt), then `smith auth status`. | Key stored in the OS keychain, never a plaintext file; status shows `set (keychain)` without revealing the value. (AS-017) |
 | 3.6 | Export `ANTHROPIC_API_KEY` and re-run `smith auth status anthropic`. | Reports `set (env ANTHROPIC_API_KEY)` — the env var overrides the stored key. (AS-017) |
 | 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) |
@@ -291,6 +292,9 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Needs clarification (`needs-clarification`) |
 | AS-118 | Root help ignores `--output json` | Implemented (`done`) |
 | AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
+| AS-133 | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | Not implemented (`ready-to-implement`) |
+| AS-134 | Offline E2E regression suite over recorded providers, TUI, and append-only logs | Not implemented (`ready-to-implement`) |
+| AS-135 | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | Not implemented (`ready-to-implement`) |
 
 ## Current local smoke pass (2026-06-22)
 
