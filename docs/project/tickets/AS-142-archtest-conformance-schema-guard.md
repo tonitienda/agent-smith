@@ -37,7 +37,7 @@ parallel to `internal/render` and `internal/streamio`, which already have
 
 1. `layering_test.go` has a new test case:
    - `internal/provider/conformance` must not import `internal/loop`,
-     `internal/tui`, `internal/serve`, or `cmd`.
+     `internal/tui`, `internal/serve`, `internal/smithapp`, or `cmd`.
 2. `layering_test.go` has a new test case:
    - `schema` has `forbidModule: true` (must not import any module package).
 3. `make test` passes.
@@ -49,4 +49,9 @@ File: `internal/archtest/layering_test.go`
 Both new cases follow the existing pattern. For `schema`, set `forbidModule: true`
 (same as `internal/render` and `internal/streamio`). For
 `internal/provider/conformance`, add a `forbidden` list matching the concrete
-provider adapter cases plus `"internal/serve"` (per AS-141).
+provider adapter cases plus `"internal/serve"` (per AS-141) and
+`"internal/smithapp"`. The `internal/smithapp` entry is critical: unlike
+`cmd/*`, `smithapp` lives under `internal/` so the `"cmd"` prefix check does not
+cover it, and unlike concrete adapters (which `smithapp` imports, making a cycle
+impossible), `smithapp` does not import `conformance`, so the Go compiler would
+not catch a layering violation there.
