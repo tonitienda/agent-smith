@@ -27,7 +27,8 @@ func TestLayeringContracts(t *testing.T) {
 		// (non-recursive: only its own .go files are inspected).
 		pkgDir string
 		// forbidden lists module-relative directory prefixes the package must
-		// not import, directly or as a subpackage.
+		// not import, directly or as a subpackage. "faces" means both face
+		// packages: internal/tui and internal/serve.
 		forbidden []string
 		// forbidModule imports means the package must not import any package from
 		// this module. Use it for stdlib-only leaf packages.
@@ -43,13 +44,13 @@ func TestLayeringContracts(t *testing.T) {
 		{
 			name:      "anthropic adapter does not import loop, faces, or composition roots",
 			pkgDir:    "internal/provider/anthropic",
-			forbidden: []string{"internal/loop", "internal/tui", "cmd"},
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve", "cmd"},
 			reason:    "concrete providers are leaves: the loop, faces, and cmd/* wire them up, never the reverse",
 		},
 		{
 			name:      "openai adapter does not import loop, faces, or composition roots",
 			pkgDir:    "internal/provider/openai",
-			forbidden: []string{"internal/loop", "internal/tui", "cmd"},
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve", "cmd"},
 			reason:    "concrete providers are leaves: the loop, faces, and cmd/* wire them up, never the reverse",
 		},
 		{
@@ -67,25 +68,25 @@ func TestLayeringContracts(t *testing.T) {
 		{
 			name:      "loop does not import face packages",
 			pkgDir:    "internal/loop",
-			forbidden: []string{"internal/tui"},
+			forbidden: []string{"internal/tui", "internal/serve"},
 			reason:    "the agent loop is face-agnostic; faces drive the loop, not the reverse",
 		},
 		{
 			name:      "event log does not import projection, provider, loop, or faces",
 			pkgDir:    "internal/eventlog",
-			forbidden: []string{"internal/projection", "internal/provider", "internal/loop", "internal/tui"},
+			forbidden: []string{"internal/projection", "internal/provider", "internal/loop", "internal/tui", "internal/serve"},
 			reason:    "the event log is a lower-level storage layer; higher layers read it, not the reverse",
 		},
 		{
 			name:      "projection does not import provider, loop, or faces",
 			pkgDir:    "internal/projection",
-			forbidden: []string{"internal/provider", "internal/loop", "internal/tui"},
+			forbidden: []string{"internal/provider", "internal/loop", "internal/tui", "internal/serve"},
 			reason:    "projections are built over the event log and must not depend on orchestration or faces",
 		},
 		{
 			name:      "tools do not import loop or faces",
 			pkgDir:    "internal/tool",
-			forbidden: []string{"internal/loop", "internal/tui"},
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve"},
 			reason:    "tools are leaves the loop wires in; they must not reach back into the loop or faces",
 		},
 		{
