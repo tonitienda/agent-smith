@@ -19,6 +19,7 @@ disagree. Interactive-only commands state a reason.
 | `/feature` | both |  |
 | `/goal` | both |  |
 | `/help` | both |  |
+| `/improve` | both |  |
 | `/init` | both |  |
 | `/insights` | both |  |
 | `/mode` | both |  |

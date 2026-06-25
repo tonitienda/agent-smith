@@ -8,6 +8,7 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/factdetector"
+	"github.com/tonitienda/agent-smith/internal/improve"
 	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/session"
@@ -158,6 +159,29 @@ func openFactLedger(store *session.Store, stderr io.Writer) factdetector.Ledger 
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "warning: fact ledger unavailable, using in-memory: %v\n", err)
 		return factdetector.NewMemLedger()
+	}
+	return l
+}
+
+// improveLedgerName is the per-project durable record of the user's /improve
+// dismiss/snooze decisions (AS-058), kept alongside the project's sessions, the
+// findings rollup, and the fact ledger so a ruled-out proposal stays suppressed
+// across every session of the project.
+const improveLedgerName = "improve-ledger.json"
+
+// openImproveLedger loads the project's durable /improve decision ledger (AS-058)
+// from the session store. With no session store, or on a load failure, it
+// degrades to an in-memory ledger: a session that can't read past decisions is
+// worse than one that re-offers a dismissed proposal once.
+func openImproveLedger(store *session.Store, stderr io.Writer) *improve.Ledger {
+	if store == nil {
+		return improve.NewMemLedger()
+	}
+	path := filepath.Join(store.ProjectSessionsDir(), improveLedgerName)
+	l, err := improve.OpenLedger(path)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "warning: improve ledger unavailable, using in-memory: %v\n", err)
+		return improve.NewMemLedger()
 	}
 	return l
 }

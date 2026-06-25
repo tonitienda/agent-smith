@@ -22,6 +22,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/eventlog"
 	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/hook"
+	"github.com/tonitienda/agent-smith/internal/improve"
 	"github.com/tonitienda/agent-smith/internal/initscaffold"
 	"github.com/tonitienda/agent-smith/internal/insights"
 	"github.com/tonitienda/agent-smith/internal/loop"
@@ -141,6 +142,12 @@ type chatSession struct {
 	// its concrete type so /skills can call Rollup/Resolve; nil when the face wired
 	// a plain in-memory store, which leaves /skills on its session-only view.
 	rollup *skillrollup.Store
+
+	// improveLedger remembers the user's dismiss/snooze decisions on /improve
+	// proposals (AS-058) so a ruled-out proposal stays suppressed across sessions.
+	// nil when no session store is wired (the face opted out), which leaves
+	// /improve building proposals without a memory of past decisions.
+	improveLedger *improve.Ledger
 
 	// retro is the on-demand insights model retrospective seam (AS-137): the
 	// `/insights describe` path runs it once on the current session to add grounded,
@@ -330,6 +337,15 @@ func (s *chatSession) setSubAgents(reg *subagent.Registry, store subagent.Store)
 	if r, ok := store.(*skillrollup.Store); ok {
 		s.rollup = r
 	}
+}
+
+// setImproveLedger installs the durable dismiss/snooze ledger /improve reads and
+// writes (AS-058). A nil ledger leaves /improve without a memory of past
+// decisions, so a dismissed proposal would re-appear next session.
+func (s *chatSession) setImproveLedger(l *improve.Ledger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.improveLedger = l
 }
 
 // workingLine yields the status-line text shown while a turn runs: the themed
@@ -1636,6 +1652,140 @@ func resolveApplyTarget(wd, target string) (string, bool) {
 		return "", false
 	}
 	return path, true
+}
+
+// cmdImprove renders the self-improving config queue (AS-058, PRD §7.25) and
+// drives its accept/dismiss/snooze actions. It generalizes the living-skills
+// pattern (/skills): a remedy the analyzers surfaced becomes a *proposal* only
+// once the same actionable gap has recurred across improve.MinSessions distinct
+// sessions, so the agent adapts to the project's workflow from evidence rather
+// than noise. Proposals never auto-apply — `/improve apply <n>` lands the edit
+// through a shown diff, while dismiss/snooze are remembered across sessions via
+// the durable ledger.
+//
+//   - /improve              list the pending proposals
+//   - /improve apply <n>    apply the numbered proposal's edit (shown), mark resolved
+//   - /improve dismiss <n>  rule the proposal out indefinitely (remembered)
+//   - /improve snooze <n>   suppress the proposal for improve.DefaultSnooze
+func (s *chatSession) cmdImprove(_ context.Context, args []string) (command.Output, error) {
+	if len(args) > 0 {
+		switch args[0] {
+		case "apply":
+			return s.improveApply(args[1:])
+		case "dismiss":
+			return s.improveDecide(args[1:], improve.Dismissed)
+		case "snooze":
+			return s.improveDecide(args[1:], improve.Snoozed)
+		default:
+			return command.Output{Text: "Usage: /improve [apply <n> | dismiss <n> | snooze <n>]"}, nil
+		}
+	}
+	rollup, led := s.improveDeps()
+	if rollup == nil {
+		return command.Output{Text: "No cross-session findings store — no proposals yet."}, nil
+	}
+	props := improve.Build(rollup.Rollup(), led, time.Now())
+	return command.Output{Text: improve.Render(props)}, nil
+}
+
+// improveDeps snapshots the cross-session rollup and the decision ledger the
+// /improve handlers read, under the lock.
+func (s *chatSession) improveDeps() (*skillrollup.Store, *improve.Ledger) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.rollup, s.improveLedger
+}
+
+// improveProposal re-derives the proposal queue (deterministic, so the index is
+// stable) and returns the 1-based proposal n, or an error Output explaining why
+// it could not. ok reports whether p is usable.
+func (s *chatSession) improveProposal(args []string) (p improve.Proposal, msg command.Output, ok bool) {
+	if len(args) != 1 {
+		return improve.Proposal{}, command.Output{Text: "Usage: /improve <apply|dismiss|snooze> <n>"}, false
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil || n < 1 {
+		return improve.Proposal{}, command.Output{Text: fmt.Sprintf("Not a proposal number: %q", args[0])}, false
+	}
+	rollup, led := s.improveDeps()
+	if rollup == nil {
+		return improve.Proposal{}, command.Output{Text: "No cross-session findings store — no proposals to act on."}, false
+	}
+	props := improve.Build(rollup.Rollup(), led, time.Now())
+	if n > len(props) {
+		return improve.Proposal{}, command.Output{Text: fmt.Sprintf("No proposal #%d (the queue lists %d).", n, len(props))}, false
+	}
+	return props[n-1], command.Output{}, true
+}
+
+// improveApply lands the proposal's edit at the given 1-based index: the target
+// memory/skill file under the working directory gains the proposed line through
+// a shown diff, and the finding is resolved so it stops pending across sessions.
+// A duplicate line is reported rather than re-appended. The propose-only edit
+// becomes a confirmed write only here, never from the sub-agent (D9, C.5).
+func (s *chatSession) improveApply(args []string) (command.Output, error) {
+	p, msg, ok := s.improveProposal(args)
+	if !ok {
+		return msg, nil
+	}
+	s.mu.Lock()
+	rollup := s.rollup
+	wd := s.wd
+	s.mu.Unlock()
+	// improveProposal already returned a proposal, which it only does with a
+	// non-nil rollup — but guard defensively (matching skillsApply) so a future
+	// refactor that reorders the checks can never deref a nil store.
+	if rollup == nil {
+		return command.Output{Text: "No cross-session findings store — nothing to apply."}, nil
+	}
+	path, ok := resolveApplyTarget(wd, p.Target)
+	if !ok {
+		return command.Output{Text: fmt.Sprintf("Refusing to apply: target %q escapes the working directory.", p.Target)}, nil
+	}
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return command.Output{}, fmt.Errorf("read skill/memory file: %w", err)
+	}
+	if containsLine(existing, p.Edit) {
+		if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+			return command.Output{}, fmt.Errorf("resolve proposal: %w", err)
+		}
+		return command.Output{Text: fmt.Sprintf("Already in %s — marked resolved.", p.Target)}, nil
+	}
+	if err := appendMemoryLine(path, existing, p.Edit); err != nil {
+		return command.Output{}, fmt.Errorf("write skill/memory file: %w", err)
+	}
+	if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+		return command.Output{}, fmt.Errorf("resolve proposal: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Applied to %s and marked resolved:\n\n  %s", p.Target, p.Edit)}, nil
+}
+
+// improveDecide records a dismiss or snooze for the numbered proposal so the
+// decision is remembered across sessions (AS-058). A dismissal suppresses the
+// proposal indefinitely; a snooze suppresses it for improve.DefaultSnooze. A
+// later, superseding edit keys differently and so is offered afresh.
+func (s *chatSession) improveDecide(args []string, st improve.Status) (command.Output, error) {
+	p, msg, ok := s.improveProposal(args)
+	if !ok {
+		return msg, nil
+	}
+	_, led := s.improveDeps()
+	if led == nil {
+		return command.Output{Text: "No durable ledger — can't remember the decision."}, nil
+	}
+	now := time.Now()
+	key := improve.Key(p.Target, p.Edit)
+	if st == improve.Snoozed {
+		if err := led.Snooze(key, now.Add(improve.DefaultSnooze), now); err != nil {
+			return command.Output{}, fmt.Errorf("snooze proposal: %w", err)
+		}
+		return command.Output{Text: fmt.Sprintf("Snoozed for %s: %s", improve.DefaultSnooze, p.Summary)}, nil
+	}
+	if err := led.Dismiss(key, now); err != nil {
+		return command.Output{}, fmt.Errorf("dismiss proposal: %w", err)
+	}
+	return command.Output{Text: fmt.Sprintf("Dismissed: %s", p.Summary)}, nil
 }
 
 // cmdClean is the manual context editor (AS-028 /clean, PRD §7.12): the user
