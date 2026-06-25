@@ -5,7 +5,7 @@ status: needs-clarification
 area: orchestrator
 priority: P2
 depends_on: [AS-144, AS-145]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-146 · Daemon, scheduler, and SQLite run store
