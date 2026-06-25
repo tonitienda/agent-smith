@@ -193,10 +193,13 @@ func Build(sessions []Session, friction skillrollup.Report, scope string) Report
 // improvements projects the applied-remedy efficacy (AS-139) into the report,
 // capping the list so it stays a digest. Each item reports whether the targeted
 // friction stopped recurring after the proposal was applied (the deterministic
-// before/after proxy).
+// before/after proxy). rep.Efficacy is sorted oldest-applied first, so it is
+// walked in reverse: the digest surfaces the most recently applied remedies
+// rather than freezing on the oldest few once the cap is hit.
 func improvements(rep skillrollup.Report) []Improvement {
 	var out []Improvement
-	for _, e := range rep.Efficacy {
+	for i := len(rep.Efficacy) - 1; i >= 0; i-- {
+		e := rep.Efficacy[i]
 		out = append(out, Improvement{
 			Summary:       e.Summary,
 			Target:        e.Target,
