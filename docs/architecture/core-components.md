@@ -99,7 +99,7 @@ flowchart LR
     Loop[internal/loop] --> Interface[internal/provider\nProvider, Request, Stream, Event, Error]
     Interface --> Anthropic[anthropic adapter\nrequest assembly + SSE normalization]
     Interface --> OpenAI[openai adapter\nrequest assembly + response normalization]
-    Interface --> Mock[mock provider\ntests]
+    Interface --> Conformance[conformance suite\ninternal/provider/conformance\ntests]
     Anthropic --> AnthropicAPI[(Anthropic API)]
     OpenAI --> OpenAIAPI[(OpenAI / compatible API)]
 ```

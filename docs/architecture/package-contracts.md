@@ -29,7 +29,7 @@ those lower layers never depend back up.
 | **Tools** | `internal/tool` (+ `builtin`) | `schema` | loop, faces |
 | **Run manifest** | `internal/manifest` | `schema`, `internal/cost`, `internal/render` | provider, loop, faces, `cmd/*` |
 | **OTel export** | `internal/otelexport` | `schema`, `internal/eventlog`, `internal/cost` | provider, loop, projection, faces, `cmd/*` |
-| **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`), `cmd/*` |
+| **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`, `internal/serve`), `cmd/*` |
 | **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 
@@ -73,6 +73,16 @@ The enforced contracts (guard test) are the corners most prone to drift:
 - **A new provider**: a concrete adapter under `internal/provider/<vendor>` that
   implements the `internal/provider` contracts using the standard library. It
   must not import the loop, faces, or `cmd/*`.
+- **Provider conformance suite** (`internal/provider/conformance`, AS-012): the
+  shared behavioral test harness that every provider adapter must satisfy
+  identically. It defines canonical `Case` scenarios (streaming text, tool-call
+  normalization, multi-tool turns, reasoning, unicode, usage accounting, and typed
+  errors) and a `Run`/`Record`/`Check` API adapters call in their own
+  `TestConformance` suites. Fixtures are raw recorded HTTP responses under each
+  vendor's `testdata/conformance/`, so CI needs no API keys or network access.
+  Like concrete providers, it depends only on `internal/provider`, `schema`, and
+  the Go standard library; it must not import the loop, faces, or composition
+  roots.
 - **A new tool**: under `internal/tool` (or `internal/tool/builtin` for the
   shipped set), depending only on `schema` and stdlib. The loop and faces wire
   tools in; a tool never reaches back into them.
