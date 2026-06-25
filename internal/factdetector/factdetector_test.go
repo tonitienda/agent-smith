@@ -278,6 +278,34 @@ func TestDetectsRediscoveredConfigKey(t *testing.T) {
 	}
 }
 
+// Regression (AS-138): multiple failures naming the same var aggregate into one
+// candidate, so the config fact's confidence reflects the full flailing rather
+// than being capped at 1 by the per-fingerprint de-dupe.
+func TestConfigConfidenceAggregatesFailures(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "go run ./cmd/server", ""),
+		shellResultText("c1", "[exit code 1]\nfatal: DATABASE_URL is not set", true),
+		shellCall("c2", "go test ./cmd/server/...", ""),
+		shellResultText("c2", "[exit code 1]\nDATABASE_URL is required", true),
+		shellCall("c3", "go run ./cmd/server", ""),
+		shellResult("c3", false),
+	}
+	d := New(nil, NewMemLedger())
+	got := d.Teardown(subagent.Scope{}, blocks).Findings
+	var cfg *subagent.Finding
+	for i := range got {
+		if strings.Contains(got[i].Summary, "required config") {
+			cfg = &got[i]
+		}
+	}
+	if cfg == nil {
+		t.Fatalf("no config finding among %+v", got)
+	}
+	if cfg.Confidence != 2 {
+		t.Fatalf("config confidence = %d, want 2 (both failed attempts aggregated)", cfg.Confidence)
+	}
+}
+
 // Precision: a failed-then-fixed run whose output names no env var is not a
 // config fact, and an ordinary config read is never flagged.
 func TestOrdinaryConfigNotFlagged(t *testing.T) {

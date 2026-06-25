@@ -86,8 +86,7 @@ func Build(rep skillrollup.Report, led *Ledger, now time.Time) []Proposal {
 		// A proposal is promoted once it recurs across MinSessions distinct
 		// sessions, or — even from a single session — once it is strongly enough
 		// grounded (AS-138). A weakly grounded one-session fact still waits.
-		highConf := g.Confidence >= HighConfidence
-		if g.Sessions < MinSessions && !highConf {
+		if g.Sessions < MinSessions && g.Confidence < HighConfidence {
 			continue
 		}
 		if led != nil && led.Suppressed(Key(g.Target, g.Diff), now) {
@@ -95,14 +94,17 @@ func Build(rep skillrollup.Report, led *Ledger, now time.Time) []Proposal {
 		}
 		n++
 		out = append(out, Proposal{
-			Index:          n,
-			Kind:           g.Kind,
-			Summary:        g.Summary,
-			Target:         g.Target,
-			Edit:           g.Diff,
-			Sessions:       g.Sessions,
-			Examples:       g.Examples,
-			HighConfidence: highConf,
+			Index:    n,
+			Kind:     g.Kind,
+			Summary:  g.Summary,
+			Target:   g.Target,
+			Edit:     g.Diff,
+			Sessions: g.Sessions,
+			Examples: g.Examples,
+			// A finding that passed the gate with fewer than MinSessions distinct
+			// sessions can only have been promoted on confidence, so this both
+			// matches the field's doc and stays a single source of truth.
+			HighConfidence: g.Sessions < MinSessions,
 		})
 	}
 	return out
@@ -125,7 +127,7 @@ func Render(props []Proposal) string {
 		fmt.Fprintf(&b, "  %d. %s\n", p.Index, p.Summary)
 		fmt.Fprintf(&b, "     %s: %s\n", p.Target, p.Edit)
 		ev := "seen across " + render.Count(p.Sessions, "session")
-		if p.HighConfidence && p.Sessions < MinSessions {
+		if p.HighConfidence {
 			ev = "high-confidence single fact"
 		}
 		if len(p.Examples) > 0 {
