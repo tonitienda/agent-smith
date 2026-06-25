@@ -5,7 +5,7 @@ status: needs-clarification
 area: dogfood
 priority: P2
 depends_on: [AS-145, AS-146, AS-147, AS-149, AS-150, AS-151, AS-157]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-152 · Smith implements Smith dogfood workflow pack
