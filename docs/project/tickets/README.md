@@ -157,7 +157,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
 | [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | done | 054 |
 | [AS-136](AS-136-stats-index-and-cross-project-friction.md) | Persisted cross-session stats index + cross-project friction merge (spun out of AS-057) | insights-wedge | done | 050, 057 |
-| [AS-137](AS-137-insights-on-demand-model-retro.md) | `/insights` on-demand model retro when the writer is disabled (spun out of AS-109) | insights-wedge | ready | 109 |
+| [AS-137](AS-137-insights-on-demand-model-retro.md) | `/insights` on-demand model retro when the writer is disabled (spun out of AS-109) | insights-wedge | done | 109 |
 
 ## Index — Recorded-provider regression harness (AS-133 … AS-135)
 

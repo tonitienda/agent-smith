@@ -24,6 +24,23 @@ type Proposer interface {
 	Propose(ctx context.Context, r Report) (suggestions []Suggestion, spentUSD float64, err error)
 }
 
+// Grounded returns the subset of suggestions that cite measured evidence (§9),
+// each tagged SourceModel. It is the on-demand twin of the gate the writer applies
+// at session end (AS-137): the `/insights describe` path merges only these into the
+// rendered dashboard, so an ungrounded, model-authored suggestion never reaches the
+// user even when the model ignores the grounding instruction.
+func Grounded(suggestions []Suggestion) []Suggestion {
+	out := make([]Suggestion, 0, len(suggestions))
+	for _, s := range suggestions {
+		if !citesMeasuredEvidence(s) {
+			continue
+		}
+		s.Source = SourceModel
+		out = append(out, s)
+	}
+	return out
+}
+
 // citesMeasuredEvidence reports whether a suggestion's evidence carries a
 // jump-to-transcript anchor ("#<seq>"). It is the §9 grounding gate the writer
 // applies to every model-authored suggestion before recording it: prose with no

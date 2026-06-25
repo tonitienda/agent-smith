@@ -1,7 +1,7 @@
 ---
 id: AS-137
 title: /insights on-demand model retro when the writer is disabled (spun out of AS-109)
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-109]
 area: insights-wedge

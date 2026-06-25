@@ -64,15 +64,46 @@ var _ insights.Proposer = (*Proposer)(nil)
 // report and returns them with the dollars the call spent. It returns no error for
 // an empty/garbled model reply — it simply yields no suggestions, leaving the
 // measured dashboard untouched — and surfaces an error only when the turn itself
-// fails to run.
+// fails to run. It is the session-end seam (insights.Proposer): the writer charges
+// the returned dollars against its own sub-agent budget.
 func (m *Proposer) Propose(ctx context.Context, r insights.Report) ([]insights.Suggestion, float64, error) {
-	// Defensive: an unconfigured/unresolved provider (e.g. providers[name] == nil
-	// at the wiring site) must degrade to the measured-first dashboard, never panic
-	// the session-end teardown. router is a value type, so a zero policy is safe —
-	// Resolve falls back to baseModel.
 	if m == nil || m.p == nil {
 		return nil, 0, nil
 	}
+	suggestions, usage, model, err := m.run(ctx, r)
+	if err != nil {
+		return nil, 0, err
+	}
+	return suggestions, m.price(model, usage), nil
+}
+
+// Describe is the on-demand twin of Propose (AS-137): the `/insights describe`
+// path runs the same cheap-tier retro once, but charges the spend against the live
+// session budget by recording usage on the log (the same accounting source as
+// /cost and the meter) rather than against a sub-agent budget. So it returns the
+// usage event for the caller to append instead of a pre-priced dollar figure. The
+// returned block is the zero Block when the model reported no usage (nothing to
+// charge). A nil/unconfigured proposer yields no suggestions and no event.
+func (m *Proposer) Describe(ctx context.Context, r insights.Report) ([]insights.Suggestion, schema.Block, error) {
+	if m == nil || m.p == nil {
+		return nil, schema.Block{}, nil
+	}
+	suggestions, usage, model, err := m.run(ctx, r)
+	if err != nil {
+		return nil, schema.Block{}, err
+	}
+	if usage == nil {
+		return suggestions, schema.Block{}, nil
+	}
+	return suggestions, eventlog.NewUsage("insights-model-retro", m.p.Name(), model, "", usage, nil), nil
+}
+
+// run executes one cheap-tier retro turn and returns the parsed suggestions, the
+// turn's token usage (nil when the surface reported none), and the model that
+// served it. It returns no error for an empty/garbled reply — it simply yields no
+// suggestions — and surfaces an error only when the turn itself fails to run.
+// router is a value type, so a zero policy is safe — Resolve falls back to baseModel.
+func (m *Proposer) run(ctx context.Context, r insights.Report) ([]insights.Suggestion, *schema.Tokens, string, error) {
 	model := m.router.Resolve(routing.Cheap, m.p.Name(), m.baseModel)
 
 	req := provider.Request{
@@ -87,11 +118,11 @@ func (m *Proposer) Propose(ctx context.Context, r insights.Report) ([]insights.S
 
 	stream, err := m.p.Stream(ctx, req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("insights model pass: %w", err)
+		return nil, nil, model, fmt.Errorf("insights model pass: %w", err)
 	}
 	events, err := provider.Collect(stream)
 	if err != nil {
-		return nil, 0, fmt.Errorf("insights model pass: %w", err)
+		return nil, nil, model, fmt.Errorf("insights model pass: %w", err)
 	}
 
 	var text strings.Builder
@@ -106,7 +137,7 @@ func (m *Proposer) Propose(ctx context.Context, r insights.Report) ([]insights.S
 			}
 		}
 	}
-	return parse(text.String()), m.price(model, usage), nil
+	return parse(text.String()), usage, model, nil
 }
 
 // price values the model call's usage against the configured table, so the spend

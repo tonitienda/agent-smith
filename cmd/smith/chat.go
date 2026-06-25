@@ -182,6 +182,13 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 		return fmt.Errorf("build sub-agents: %w", err)
 	}
 	ctl.setSubAgents(subReg, subStore)
+	// AS-137: wire the on-demand `/insights describe` retro. Only offer it when a
+	// provider is resolved and the session-end model layer is *off* — when it is on,
+	// the retro already runs at session end, so the on-demand offer is suppressed.
+	if providers[provName] != nil {
+		_, _, modelEnabled := insightsModelLayer(cfg, insightsProposer, os.Stderr)
+		ctl.setInsightsRetro(insightsProposer, modelEnabled)
+	}
 	// Build the Matrix personality layer (AS-053) from config for this interactive
 	// face: themed status line + role names, on by default in the TUI, with
 	// /serious as the runtime kill switch. It is chrome-only and never touches turn
@@ -335,11 +342,11 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	mustRegisterCommand(reg, command.Command{
 		Name:          "insights",
 		Summary:       "Session retrospective: measured signals + suggestions",
-		Args:          "[apply <n>]",
+		Args:          "[apply <n> | describe]",
 		ArgSpec:       &command.ArgSpec{Min: 0, Max: 2},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith insights", "smith insights apply 1"},
+		Examples:      []string{"smith insights", "smith insights apply 1", "smith insights describe"},
 		Run:           ctl.cmdInsights,
 	})
 	mustRegisterCommand(reg, command.Command{
