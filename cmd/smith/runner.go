@@ -115,7 +115,7 @@ func executeRun(ctx context.Context, configOverride, wd, prompt string, opts hea
 			loop.WithBudgetReservation(reserve, false),
 		)
 	}
-	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, nil), openFactLedger(store, stderr), nil, stderr)
+	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, nil), openFactLedger(store, stderr), nil, nil, stderr)
 	if err != nil {
 		return runOutcome{}, fmt.Errorf("build sub-agents: %w", err)
 	}

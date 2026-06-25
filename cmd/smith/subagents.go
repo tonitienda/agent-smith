@@ -29,15 +29,18 @@ import (
 // resolver (memory/skill-aware, keeping internal/factdetector free of those
 // imports) and the durable ledger so a dismissed fact stays dismissed across
 // sessions and the precision tally survives a restart.
-func buildSubAgents(cfg *config.Config, store *session.Store, resolve factdetector.Resolve, ledger factdetector.Ledger, skills []skill.Skill, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
+func buildSubAgents(cfg *config.Config, store *session.Store, resolve factdetector.Resolve, ledger factdetector.Ledger, skills []skill.Skill, proposer insights.Proposer, stderr io.Writer) (*subagent.Registry, subagent.Store, error) {
 	reg := subagent.NewRegistry()
 	if err := reg.Register(factdetector.Factory(resolve, ledger)); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
 	}
 	// insights-writer (AS-045): the session-end retrospective that records measured
-	// suggestions as findings. Like the fact detector it makes no model calls, so it
-	// is free when idle and within budget when enabled.
-	if err := reg.Register(insights.Factory()); err != nil {
+	// suggestions as findings. Measured-first, it makes no model calls by default, so
+	// it is free when idle and within budget when enabled. The AS-109 model-assisted
+	// layer is opt-in: only when the `subagents.insights_writer.model` overlay names a
+	// tier AND a provider-backed proposer is wired does the writer add cheap-tier,
+	// budget-capped model suggestions on top of the measured ones.
+	if err := reg.Register(insightsFactory(cfg, proposer, stderr)); err != nil {
 		return nil, nil, fmt.Errorf("register sub-agent: %w", err)
 	}
 	// skill-expectation-analyzer (AS-049): grades each session's skill activations
@@ -61,6 +64,29 @@ func buildSubAgents(cfg *config.Config, store *session.Store, resolve factdetect
 		}
 	}
 	return reg, openRollupStore(store, stderr), nil
+}
+
+// insightsFactory chooses the insights-writer factory: the AS-109 model-assisted
+// layer when the `subagents.insights_writer` overlay names a model tier and a
+// provider-backed proposer is available, otherwise the measured-first writer
+// (AS-045). Reading the overlay here keeps the opt-in gate in the composition root
+// — registry.Load still applies the same overlay to the manifest, so the budget
+// guard and /cost see the declared tier and cap. An unreadable overlay degrades to
+// the measured-first writer with a warning rather than failing startup.
+func insightsFactory(cfg *config.Config, proposer insights.Proposer, stderr io.Writer) subagent.Factory {
+	if proposer == nil || cfg == nil {
+		return insights.Factory()
+	}
+	overlay := map[string]subagent.Config{}
+	if _, err := cfg.Decode("subagents", &overlay); err != nil {
+		_, _ = fmt.Fprintf(stderr, "warning: ignoring subagents config for insights model layer: %v\n", err)
+		return insights.Factory()
+	}
+	c, ok := overlay[insights.Name]
+	if !ok || c.Model == "" || (c.Enabled != nil && !*c.Enabled) {
+		return insights.Factory()
+	}
+	return insights.FactoryWithModel(proposer, c.Model, c.BudgetUSD)
 }
 
 // skillFindingsName is the per-project durable findings log (AS-050), kept

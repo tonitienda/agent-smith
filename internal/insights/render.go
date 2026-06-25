@@ -40,6 +40,14 @@ func Render(r Report) string {
 	if r.Errors > 0 {
 		fmt.Fprintf(&b, "Tool errors: %s\n", render.Count(r.Errors, "failure"))
 	}
+	if r.Goal != nil {
+		mark := "in progress"
+		if r.Goal.Met {
+			mark = "met ✓"
+		}
+		fmt.Fprintf(&b, "Goal: %s — %s\n     evidence: %s\n",
+			r.Goal.Objective, mark, r.Goal.Evidence)
+	}
 
 	if len(r.Costliest) > 0 {
 		b.WriteString("\nCostliest turns\n")
@@ -68,7 +76,11 @@ func Render(r Report) string {
 		b.WriteString("  None — this session ran clean.\n")
 	}
 	for i, s := range r.Suggestions {
-		fmt.Fprintf(&b, "  %d. %s\n     evidence: %s\n", i+1, s.Summary, s.Evidence)
+		label := s.Summary
+		if s.Source == SourceModel {
+			label += " (model)"
+		}
+		fmt.Fprintf(&b, "  %d. %s\n     evidence: %s\n", i+1, label, s.Evidence)
 		if s.Edit != nil {
 			fmt.Fprintf(&b, "     %s: + %s\n     apply: /insights apply %d\n",
 				s.Edit.Target, s.Edit.Line, i+1)

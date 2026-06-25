@@ -15,6 +15,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/delegate"
+	"github.com/tonitienda/agent-smith/internal/insightsmodel"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/personality"
 	"github.com/tonitienda/agent-smith/internal/routing"
@@ -171,7 +172,12 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 	// Inject the durable fact ledger and the memory/skill-aware save-target
 	// resolver (AS-108) so a dismissed fact stays dismissed across sessions and a
 	// fact found inside a skill scope proposes saving to that skill.
-	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, skills), openFactLedger(store, os.Stderr), skills, os.Stderr)
+	// AS-109: the insights model-assisted layer. The proposer reaches the active
+	// provider on its cheap routing tier; buildSubAgents installs it only when the
+	// `subagents.insights_writer.model` overlay opts in, so the default stays
+	// measured-first and free.
+	insightsProposer := insightsmodel.New(providers[provName], routingCfg, model, pricing)
+	subReg, subStore, err := buildSubAgents(cfg, store, saveTargetResolver(wd, skills), openFactLedger(store, os.Stderr), skills, insightsProposer, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("build sub-agents: %w", err)
 	}
