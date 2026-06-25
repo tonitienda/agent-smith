@@ -1,7 +1,7 @@
 ---
 id: AS-141
 title: "Archtest: add internal/serve to faces forbidden list in layering contracts"
-status: ready-to-implement
+status: done
 area: quality
 priority: high
 depends_on: [AS-098]
