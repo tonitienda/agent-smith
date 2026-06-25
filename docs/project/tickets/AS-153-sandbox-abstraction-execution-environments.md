@@ -5,7 +5,7 @@ status: needs-clarification
 area: security
 priority: P2
 depends_on: [AS-144, AS-146, AS-158]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-153 · Sandbox abstraction and execution environments
