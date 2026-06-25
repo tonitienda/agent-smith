@@ -256,6 +256,10 @@ func (d *Detector) finding(c candidate) subagent.Finding {
 		Kind:    FindingKind,
 		Summary: c.summary(),
 		Detail:  c.evidence(),
+		// The count of failed prior attempts is the fact's grounding strength: the
+		// more the agent flailed before settling, the more durable the fact and the
+		// more confident we are it is worth persisting (AS-138).
+		Confidence: len(c.Failed),
 		Proposal: &subagent.Edit{
 			Target:      target,
 			Description: c.diff(),

@@ -79,6 +79,11 @@ func TestDetectsRediscoveredCommand(t *testing.T) {
 	if !strings.Contains(f.Detail, "npm test") || !strings.Contains(f.Detail, "make tests") {
 		t.Fatalf("evidence does not cite the failed attempts: %q", f.Detail)
 	}
+	// Confidence is the count of failed prior attempts justifying the fact (AS-138):
+	// two failures here.
+	if f.Confidence != 2 {
+		t.Fatalf("confidence = %d, want 2 (the failed attempts)", f.Confidence)
+	}
 }
 
 // A success with no related flailing is not a rediscovered fact (precision: a

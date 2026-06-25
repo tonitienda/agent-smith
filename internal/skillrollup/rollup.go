@@ -33,6 +33,11 @@ type Group struct {
 	Resolved  bool
 	Target    string
 	Diff      string
+	// Confidence is the strongest grounding signal seen across the group's records
+	// (max, not sum) — the count of failed prior attempts that justify the fact.
+	// It lets a single high-confidence finding be promoted to a proposal without
+	// waiting for cross-session recurrence (AS-138).
+	Confidence int
 	// Examples lists up to maxExamples distinct session IDs that raised this
 	// finding, sorted for determinism. It lets a portfolio view link a recurring
 	// item back to concrete sessions to inspect (AS-057). Empty for findings
@@ -109,6 +114,11 @@ func (s *Store) Rollup() Report {
 		}
 		if r.Target != "" {
 			a.g.Target = r.Target
+		}
+		// Keep the strongest grounding the fact ever showed, so a single
+		// high-confidence sighting is not diluted by weaker later ones.
+		if r.Confidence > a.g.Confidence {
+			a.g.Confidence = r.Confidence
 		}
 	}
 

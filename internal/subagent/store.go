@@ -41,6 +41,13 @@ type Finding struct {
 	// Summary is a one-line description; Detail is optional longer context.
 	Summary string
 	Detail  string
+	// Confidence is an optional, deterministic strength signal for the finding:
+	// the count of grounding evidence (e.g. the rediscovered-fact detector reports
+	// the number of failed prior attempts that justify the fact). A higher value
+	// means the finding is more strongly grounded; 0 means no signal was supplied.
+	// It lets a downstream consumer promote a single high-confidence finding
+	// without waiting for cross-session recurrence (AS-138).
+	Confidence int
 	// Proposal is an optional propose-only edit; non-nil only when the sub-agent
 	// declared ProposeEdit.
 	Proposal *Edit
