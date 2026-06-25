@@ -123,6 +123,37 @@ func TestFrictionLinksRecurringSessions(t *testing.T) {
 	}
 }
 
+func TestImprovementsSurfaceBeforeAfter(t *testing.T) {
+	friction := skillrollup.Report{Efficacy: []skillrollup.Efficacy{
+		{Summary: "re-read config.go", Target: "AGENT.md", Before: 2, After: 0},
+		{Summary: "wrong test cmd", Target: "CLAUDE.md", Before: 1, After: 2, SessionsAfter: 2},
+	}}
+	r := stats.Build(corpus(), friction, "this project")
+
+	if len(r.Improvements) != 2 {
+		t.Fatalf("Improvements = %+v, want 2", r.Improvements)
+	}
+	if !r.Improvements[0].Worked {
+		t.Fatalf("a remedy with no post-apply recurrence should read as worked: %+v", r.Improvements[0])
+	}
+	if r.Improvements[1].Worked {
+		t.Fatalf("a still-recurring remedy should not read as worked: %+v", r.Improvements[1])
+	}
+
+	out := stats.Render(r)
+	for _, want := range []string{
+		"Applied improvements",
+		"re-read config.go",
+		"no recurrence since applied",
+		"wrong test cmd",
+		"still recurring",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("render missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestRenderEmpty(t *testing.T) {
 	out := stats.Render(stats.Build(nil, skillrollup.Report{}, "this project"))
 	if !strings.Contains(out, "No sessions recorded yet.") {

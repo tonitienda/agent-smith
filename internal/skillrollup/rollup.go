@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/tonitienda/agent-smith/internal/render"
 	"github.com/tonitienda/agent-smith/internal/subagent"
@@ -18,6 +19,22 @@ type Report struct {
 	Total    int     // total findings (tombstones excluded)
 	Groups   []Group // recurring findings, most distinct sessions first
 	Pending  []Pending
+	Efficacy []Efficacy // before/after payoff of each applied remedy (AS-139)
+}
+
+// Efficacy is the before/after view of one applied remedy's payoff (AS-139): the
+// finding signature it resolved, when the remedy was applied (the tombstone's
+// timestamp), and how often the same finding was recorded before vs after that
+// moment. After == 0 is the deterministic proxy that the edit worked — the
+// targeted fact stopped recurring once the proposal landed.
+type Efficacy struct {
+	Kind          string
+	Summary       string
+	Target        string    // the applied proposal's target file, when the marker carries it
+	AppliedAt     time.Time // when the remedy was applied (earliest tombstone)
+	Before        int       // findings of this signature recorded at or before AppliedAt
+	After         int       // findings recorded after AppliedAt — recurrences despite the edit
+	SessionsAfter int       // distinct sessions that re-raised the finding after application
 }
 
 // Group is one finding signature aggregated across sessions: how many sessions
@@ -154,6 +171,88 @@ func (s *Store) Rollup() Report {
 			Index: n, Kind: g.Kind, Summary: g.Summary, Target: g.Target, Diff: g.Diff,
 		})
 	}
+	out.Efficacy = efficacyFrom(records)
+	return out
+}
+
+// efficacyFrom computes the before/after payoff of each applied remedy from the
+// raw record log (AS-139). The application moment is the earliest tombstone for a
+// signature; findings of that signature are then split into those recorded at or
+// before that moment (Before) and those recorded after it (After) — a post-apply
+// recurrence the edit failed to prevent. Only signatures that were actually
+// applied (have a tombstone) appear. Output is sorted by application time then
+// signature so the view is reproducible.
+func efficacyFrom(records []Record) []Efficacy {
+	applied := map[string]time.Time{} // sig → earliest application time
+	kindSummary := map[string][2]string{}
+	target := map[string]string{}
+	for _, r := range records {
+		if !r.Resolved {
+			continue
+		}
+		k := sig(r.Kind, r.Summary)
+		if t, ok := applied[k]; !ok || r.RecordedAt.Before(t) {
+			applied[k] = r.RecordedAt
+		}
+		kindSummary[k] = [2]string{r.Kind, r.Summary}
+		if r.Target != "" && target[k] == "" {
+			target[k] = r.Target // the marker carries the applied proposal's target
+		}
+	}
+	if len(applied) == 0 {
+		return nil
+	}
+
+	type acc struct {
+		before, after int
+		sessionsAfter map[string]bool
+	}
+	accs := map[string]*acc{}
+	for _, r := range records {
+		if r.Resolved {
+			continue
+		}
+		k := sig(r.Kind, r.Summary)
+		at, ok := applied[k]
+		if !ok {
+			continue
+		}
+		a := accs[k]
+		if a == nil {
+			a = &acc{sessionsAfter: map[string]bool{}}
+			accs[k] = a
+		}
+		if r.RecordedAt.After(at) {
+			a.after++
+			if r.Session != "" {
+				a.sessionsAfter[r.Session] = true
+			}
+		} else {
+			a.before++
+		}
+		if r.Target != "" && target[k] == "" {
+			target[k] = r.Target // fall back to a finding's target when the marker lacks one
+		}
+	}
+
+	out := make([]Efficacy, 0, len(applied))
+	for k, at := range applied {
+		ks := kindSummary[k]
+		e := Efficacy{Kind: ks[0], Summary: ks[1], Target: target[k], AppliedAt: at}
+		if a := accs[k]; a != nil {
+			e.Before, e.After, e.SessionsAfter = a.before, a.after, len(a.sessionsAfter)
+		}
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].AppliedAt.Equal(out[j].AppliedAt) {
+			return out[i].AppliedAt.Before(out[j].AppliedAt)
+		}
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Summary < out[j].Summary
+	})
 	return out
 }
 

@@ -1621,7 +1621,7 @@ func (s *chatSession) skillsApply(args []string) (command.Output, error) {
 		return command.Output{}, fmt.Errorf("read skill/memory file: %w", err)
 	}
 	if containsLine(existing, p.Diff) {
-		if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+		if err := rollup.ResolveApplied(p.Kind, p.Summary, p.Target, p.Diff); err != nil {
 			return command.Output{}, fmt.Errorf("resolve finding: %w", err)
 		}
 		return command.Output{Text: fmt.Sprintf("Already in %s — marked resolved.", target)}, nil
@@ -1629,7 +1629,7 @@ func (s *chatSession) skillsApply(args []string) (command.Output, error) {
 	if err := appendMemoryLine(path, existing, p.Diff); err != nil {
 		return command.Output{}, fmt.Errorf("write skill/memory file: %w", err)
 	}
-	if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+	if err := rollup.ResolveApplied(p.Kind, p.Summary, p.Target, p.Diff); err != nil {
 		return command.Output{}, fmt.Errorf("resolve finding: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Applied to %s and marked resolved:\n\n  %s", target, p.Diff)}, nil
@@ -1747,7 +1747,7 @@ func (s *chatSession) improveApply(args []string) (command.Output, error) {
 		return command.Output{}, fmt.Errorf("read skill/memory file: %w", err)
 	}
 	if containsLine(existing, p.Edit) {
-		if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+		if err := rollup.ResolveApplied(p.Kind, p.Summary, p.Target, p.Edit); err != nil {
 			return command.Output{}, fmt.Errorf("resolve proposal: %w", err)
 		}
 		return command.Output{Text: fmt.Sprintf("Already in %s — marked resolved.", p.Target)}, nil
@@ -1755,7 +1755,7 @@ func (s *chatSession) improveApply(args []string) (command.Output, error) {
 	if err := appendMemoryLine(path, existing, p.Edit); err != nil {
 		return command.Output{}, fmt.Errorf("write skill/memory file: %w", err)
 	}
-	if err := rollup.Resolve(p.Kind, p.Summary); err != nil {
+	if err := rollup.ResolveApplied(p.Kind, p.Summary, p.Target, p.Edit); err != nil {
 		return command.Output{}, fmt.Errorf("resolve proposal: %w", err)
 	}
 	return command.Output{Text: fmt.Sprintf("Applied to %s and marked resolved:\n\n  %s", p.Target, p.Edit)}, nil

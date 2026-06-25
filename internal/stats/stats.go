@@ -50,6 +50,10 @@ type Report struct {
 	Days     []DaySpend     // chronological spend trend
 	Savings  []Saving       // top recommendations, highest measured lever first
 	Friction []FrictionItem // recurring findings across ≥2 sessions
+
+	// Improvements is the before/after payoff of applied /improve remedies
+	// (AS-139): whether the friction each one targeted dropped in later sessions.
+	Improvements []Improvement
 }
 
 // ProjectSpend is one project's slice of the corpus.
@@ -92,12 +96,27 @@ type FrictionItem struct {
 	Examples []string
 }
 
+// Improvement is one applied /improve remedy's before/after payoff (AS-139): the
+// friction it targeted, where the edit landed, and whether that friction stopped
+// recurring once the proposal was applied. Worked is the deterministic proxy
+// (After == 0): the targeted finding has not recurred since.
+type Improvement struct {
+	Summary       string
+	Target        string
+	Before        int
+	After         int
+	SessionsAfter int
+	Worked        bool
+}
+
 // maxSavings and maxFriction bound the two ranked lists so the report stays a
 // digest, not a dump. maxSavings honours the "top 3 ways to save" framing
-// (§7.24); maxFriction keeps the recurring list scannable.
+// (§7.24); maxFriction keeps the recurring list scannable. maxImprovements keeps
+// the applied-remedy payoff list scannable for the same reason.
 const (
-	maxSavings  = 3
-	maxFriction = 5
+	maxSavings      = 3
+	maxFriction     = 5
+	maxImprovements = 5
 )
 
 // Build folds the priced corpus and the findings rollup into a Report under the
@@ -167,7 +186,30 @@ func Build(sessions []Session, friction skillrollup.Report, scope string) Report
 	r.Days = sortedDays(days)
 	r.Savings = savings(sessions, r, biggestTurn, unpriced)
 	r.Friction = frictionItems(friction)
+	r.Improvements = improvements(friction)
 	return r
+}
+
+// improvements projects the applied-remedy efficacy (AS-139) into the report,
+// capping the list so it stays a digest. Each item reports whether the targeted
+// friction stopped recurring after the proposal was applied (the deterministic
+// before/after proxy).
+func improvements(rep skillrollup.Report) []Improvement {
+	var out []Improvement
+	for _, e := range rep.Efficacy {
+		out = append(out, Improvement{
+			Summary:       e.Summary,
+			Target:        e.Target,
+			Before:        e.Before,
+			After:         e.After,
+			SessionsAfter: e.SessionsAfter,
+			Worked:        e.After == 0,
+		})
+		if len(out) == maxImprovements {
+			break
+		}
+	}
+	return out
 }
 
 func sortedProjects(m map[string]*ProjectSpend) []ProjectSpend {
@@ -346,6 +388,23 @@ func Render(r Report) string {
 			line := fmt.Sprintf("  %s — %s in %s", f.Summary, render.Count(f.Count, "time"), render.Count(f.Sessions, "session"))
 			if len(f.Examples) > 0 {
 				line += fmt.Sprintf(" (e.g. %s)", strings.Join(f.Examples, ", "))
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+
+	if len(r.Improvements) > 0 {
+		b.WriteString("\nApplied improvements\n")
+		for _, im := range r.Improvements {
+			line := fmt.Sprintf("  %s", im.Summary)
+			if im.Target != "" {
+				line += fmt.Sprintf(" (%s)", im.Target)
+			}
+			if im.Worked {
+				line += " — ✓ no recurrence since applied"
+			} else {
+				line += fmt.Sprintf(" — still recurring: %s in %s since applied",
+					render.Count(im.After, "time"), render.Count(im.SessionsAfter, "session"))
 			}
 			b.WriteString(line + "\n")
 		}

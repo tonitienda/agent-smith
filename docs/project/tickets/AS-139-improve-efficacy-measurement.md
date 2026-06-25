@@ -1,7 +1,7 @@
 ---
 id: AS-139
 title: /improve proposal efficacy measurement (before/after friction delta)
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-058, AS-057, AS-136]
 area: insights-wedge
@@ -11,7 +11,26 @@ source: spun out of AS-138
 
 # AS-139 · /improve proposal efficacy measurement
 
-**Status: ready to implement** *(spun out of AS-138)*
+**Status: done** *(spun out of AS-138)*
+
+## Implementation notes
+
+- The **application marker** is the existing `skillrollup` tombstone, now enriched:
+  `Store.ResolveApplied(kind, summary, target, diff)` records the applied
+  proposal's target + edit (the proposal `Key`) alongside the finding signature
+  and timestamp it already carried. `Resolve` delegates to it with empty
+  target/diff, so the extra fields are additive (D2) and idempotent. Both
+  `/improve apply` and `/skills apply` now call `ResolveApplied`.
+- The **before/after delta** is computed deterministically in `skillrollup`
+  (`efficacyFrom` → `Report.Efficacy`): the earliest tombstone for a signature is
+  the application moment; findings of that signature are split into those recorded
+  at/before it (`Before`) and after it (`After`, the post-apply recurrences, with
+  distinct `SessionsAfter`). `After == 0` is the proxy that the edit worked. Only
+  applied signatures appear; no model call.
+- **Surfaced** in the `stats` report (`Report.Improvements` + an "Applied
+  improvements" render section), shared by the `/stats` TUI panel and the headless
+  `smith stats` verb. Default `/stats` scope is the current project, satisfying the
+  "same project" requirement; the `all` scope extends it portfolio-wide.
 
 ## Description
 
@@ -41,13 +60,13 @@ Keep it deterministic where possible.
 
 ## Acceptance criteria
 
-- [ ] Applying an `/improve` proposal records a durable, additive application
+- [x] Applying an `/improve` proposal records a durable, additive application
       marker (Key + finding signature + timestamp).
-- [ ] A before/after friction delta is computed per applied proposal for the same
+- [x] A before/after friction delta is computed per applied proposal for the same
       project, using the AS-057/AS-136 metrics (the simplest proxy: did the
       targeted finding stop recurring in sessions after the application?).
-- [ ] The delta is surfaced in `/stats` or `/insights` and its headless face.
-- [ ] The marker and any persisted fields are additive — an older reader ignores
+- [x] The delta is surfaced in `/stats` or `/insights` and its headless face.
+- [x] The marker and any persisted fields are additive — an older reader ignores
       them.
 
 ## Dependencies

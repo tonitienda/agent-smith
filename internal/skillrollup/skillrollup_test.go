@@ -162,6 +162,61 @@ func TestRenderShowsSessionAndRollup(t *testing.T) {
 	}
 }
 
+// TestEfficacyBeforeAfter asserts the rollup computes a per-applied-remedy
+// before/after friction delta (AS-139): a remedy whose targeted finding stops
+// recurring after it was applied reads as worked (After == 0), while one that
+// keeps recurring carries the post-apply count and sessions.
+func TestEfficacyBeforeAfter(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f.jsonl")
+	lines := []string{
+		// "cmd A": raised once, applied, never recurs → worked.
+		`{"session":"s1","kind":"rediscovered_fact","summary":"cmd A","target":"AGENT.md","diff":"+ a","recorded_at":"2026-01-01T00:00:00Z"}`,
+		`{"kind":"rediscovered_fact","summary":"cmd A","target":"AGENT.md","diff":"+ a","resolved":true,"recorded_at":"2026-01-02T00:00:00Z"}`,
+		// "cmd B": raised, applied, then recurs in a later session → did not work.
+		`{"session":"s1","kind":"rediscovered_fact","summary":"cmd B","target":"CLAUDE.md","diff":"+ b","recorded_at":"2026-01-01T00:00:00Z"}`,
+		`{"kind":"rediscovered_fact","summary":"cmd B","target":"CLAUDE.md","diff":"+ b","resolved":true,"recorded_at":"2026-01-02T00:00:00Z"}`,
+		`{"session":"s2","kind":"rediscovered_fact","summary":"cmd B","target":"CLAUDE.md","diff":"+ b","recorded_at":"2026-01-03T00:00:00Z"}`,
+		// "cmd C": never applied → must not appear in the efficacy view.
+		`{"session":"s1","kind":"rediscovered_fact","summary":"cmd C","target":"AGENT.md","diff":"+ c","recorded_at":"2026-01-01T00:00:00Z"}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	eff := s.Rollup().Efficacy
+	if len(eff) != 2 {
+		t.Fatalf("want 2 applied remedies in efficacy, got %d: %+v", len(eff), eff)
+	}
+	// Sorted by application time then signature: A before B.
+	a, b := eff[0], eff[1]
+	if a.Summary != "cmd A" || a.After != 0 || a.Before != 1 || a.Target != "AGENT.md" {
+		t.Fatalf("cmd A efficacy wrong: %+v", a)
+	}
+	if b.Summary != "cmd B" || b.After != 1 || b.Before != 1 || b.SessionsAfter != 1 || b.Target != "CLAUDE.md" {
+		t.Fatalf("cmd B efficacy wrong: %+v", b)
+	}
+}
+
+// TestResolveAppliedCarriesProposalKey asserts the application marker records the
+// applied proposal's target and edit, not just the finding signature (AS-139 AC1),
+// and that it survives a reopen.
+func TestResolveAppliedCarriesProposalKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f.jsonl")
+	s, _ := Open(path)
+	s.Record(fact("s1", "cmd A", "AGENT.md", "+ a"))
+	if err := s.ResolveApplied("rediscovered_fact", "cmd A", "AGENT.md", "+ a"); err != nil {
+		t.Fatalf("resolve applied: %v", err)
+	}
+	reopened, _ := Open(path)
+	eff := reopened.Rollup().Efficacy
+	if len(eff) != 1 || eff[0].Target != "AGENT.md" {
+		t.Fatalf("marker lost the proposal target after reopen: %+v", eff)
+	}
+}
+
 func groupFor(t *testing.T, r Report, summary string) Group {
 	t.Helper()
 	for _, g := range r.Groups {
