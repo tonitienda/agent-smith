@@ -5,7 +5,7 @@ status: needs-clarification
 area: observability
 priority: P2
 depends_on: [AS-146]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-151 · Smith event-log integration for orchestrated runs
