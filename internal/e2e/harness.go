@@ -152,7 +152,6 @@ func New(t *testing.T, turns []turn, opts ...Option) *Harness {
 	if err != nil {
 		t.Fatalf("e2e: create session: %v", err)
 	}
-	t.Cleanup(func() { _ = sess.Log.Close() })
 
 	pricing := cost.Embedded()
 
@@ -174,6 +173,14 @@ func New(t *testing.T, turns []turn, opts ...Option) *Harness {
 		t.Fatalf("e2e: build engine: %v", err)
 	}
 	h.engine = eng
+	// One cleanup closes whichever log is active at test end. Reopen swaps h.sess,
+	// so closing h.sess.Log here (not the local sess) avoids a double-close and
+	// always releases the live log.
+	t.Cleanup(func() {
+		if h.sess != nil && h.sess.Log != nil {
+			_ = h.sess.Log.Close()
+		}
+	})
 	return h
 }
 
@@ -268,7 +275,9 @@ func (h *Harness) Reopen() []schema.Block {
 	if err != nil {
 		h.t.Fatalf("e2e: reopen session: %v", err)
 	}
-	h.t.Cleanup(func() { _ = reopened.Log.Close() })
+	// Swap the active session so later Events()/Cost() read the reloaded log and
+	// the single New cleanup closes it (no per-reopen cleanup, no double-close).
+	h.sess = reopened
 	return reopened.Log.Events()
 }
 
