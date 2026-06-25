@@ -185,6 +185,12 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-130](AS-130-tui-agents-panel.md) | TUI /agents orchestrator panel — tree view, state dots, pulsing animation | tui | ready | 121, 044, 067 |
 | [AS-131](AS-131-tui-insights-panel-visual.md) | TUI /insights panel visual redesign — stat cards, timeline, tool histogram | tui | ready | 121, 045 |
 
+## Index — QA / test infrastructure follow-ons
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-140](AS-140-campaign-missing-scenarios.md) | Manual test campaign — add detailed scenarios for newly-completed tickets | quality | ready-to-implement | AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138 |
+
 ## Suggested build order
 
 1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.
