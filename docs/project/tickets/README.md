@@ -159,7 +159,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-136](AS-136-stats-index-and-cross-project-friction.md) | Persisted cross-session stats index + cross-project friction merge (spun out of AS-057) | insights-wedge | done | 050, 057 |
 | [AS-137](AS-137-insights-on-demand-model-retro.md) | `/insights` on-demand model retro when the writer is disabled (spun out of AS-109) | insights-wedge | done | 109 |
 | [AS-138](AS-138-improve-confidence-and-efficacy.md) | `/improve` high-confidence single-fact threshold (spun out of AS-058) | insights-wedge | done | 058, 048, 057 |
-| [AS-139](AS-139-improve-efficacy-measurement.md) | `/improve` proposal efficacy measurement (before/after friction delta) (spun out of AS-138) | insights-wedge | ready | 058, 057, 136 |
+| [AS-139](AS-139-improve-efficacy-measurement.md) | `/improve` proposal efficacy measurement (before/after friction delta) (spun out of AS-138) | insights-wedge | done | 058, 057, 136 |
 
 ## Index — Recorded-provider regression harness (AS-133 … AS-135)
 

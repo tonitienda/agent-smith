@@ -1,6 +1,7 @@
 package stats_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,66 @@ func TestFrictionLinksRecurringSessions(t *testing.T) {
 	}
 	if len(f.Examples) != 2 {
 		t.Fatalf("friction examples = %v, want 2 linked sessions", f.Examples)
+	}
+}
+
+func TestImprovementsSurfaceBeforeAfter(t *testing.T) {
+	friction := skillrollup.Report{Efficacy: []skillrollup.Efficacy{
+		{Summary: "re-read config.go", Target: "AGENT.md", Before: 2, After: 0},
+		{Summary: "wrong test cmd", Target: "CLAUDE.md", Before: 1, After: 2, SessionsAfter: 2},
+	}}
+	r := stats.Build(corpus(), friction, "this project")
+
+	if len(r.Improvements) != 2 {
+		t.Fatalf("Improvements = %+v, want 2", r.Improvements)
+	}
+	bySummary := map[string]stats.Improvement{}
+	for _, im := range r.Improvements {
+		bySummary[im.Summary] = im
+	}
+	if !bySummary["re-read config.go"].Worked {
+		t.Fatalf("a remedy with no post-apply recurrence should read as worked: %+v", bySummary["re-read config.go"])
+	}
+	if bySummary["wrong test cmd"].Worked {
+		t.Fatalf("a still-recurring remedy should not read as worked: %+v", bySummary["wrong test cmd"])
+	}
+
+	out := stats.Render(r)
+	for _, want := range []string{
+		"Applied improvements",
+		"re-read config.go",
+		"no recurrence since applied",
+		"wrong test cmd",
+		"still recurring",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("render missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// TestImprovementsCapKeepsMostRecent asserts the capped digest surfaces the most
+// recently applied remedies, not the oldest — so a growing history keeps showing
+// new improvements instead of freezing on the first five.
+func TestImprovementsCapKeepsMostRecent(t *testing.T) {
+	var eff []skillrollup.Efficacy // oldest-applied first, as skillrollup emits
+	for i := 0; i < 7; i++ {
+		eff = append(eff, skillrollup.Efficacy{
+			Summary:   fmt.Sprintf("remedy %d", i),
+			AppliedAt: day("2026-06-20").Add(time.Duration(i) * time.Hour),
+		})
+	}
+	r := stats.Build(nil, skillrollup.Report{Efficacy: eff}, "this project")
+	if len(r.Improvements) != 5 {
+		t.Fatalf("want 5 (capped), got %d", len(r.Improvements))
+	}
+	if r.Improvements[0].Summary != "remedy 6" {
+		t.Fatalf("newest applied should lead the digest, got %q", r.Improvements[0].Summary)
+	}
+	for _, im := range r.Improvements {
+		if im.Summary == "remedy 0" || im.Summary == "remedy 1" {
+			t.Fatalf("oldest remedies should be dropped, found %q", im.Summary)
+		}
 	}
 }
 

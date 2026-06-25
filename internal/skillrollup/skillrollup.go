@@ -181,9 +181,20 @@ func (s *Store) Findings(session string) []subagent.Finding {
 // Resolve marks a (kind, summary) signature resolved by appending a tombstone, so
 // a remedy applied once stays applied across sessions. It is idempotent.
 func (s *Store) Resolve(kind, summary string) error {
+	return s.ResolveApplied(kind, summary, "", "")
+}
+
+// ResolveApplied is Resolve plus the applied proposal's identity: it records the
+// target file and edit on the tombstone so the durable marker carries the
+// proposal Key (target + edit), not just the finding signature — the application
+// event the AS-139 efficacy view reads to compute before/after friction. The
+// extra fields are optional and an older reader ignores them (additive, D2). The
+// tombstone still dedups on its signature alone, so the resolution stays
+// idempotent regardless of the target/diff passed.
+func (s *Store) ResolveApplied(kind, summary, target, diff string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	r := Record{Kind: kind, Summary: summary, Resolved: true, RecordedAt: time.Now().UTC()}
+	r := Record{Kind: kind, Summary: summary, Target: target, Diff: diff, Resolved: true, RecordedAt: time.Now().UTC()}
 	if !s.add(r) {
 		return nil
 	}
