@@ -142,6 +142,16 @@ type chatSession struct {
 	// a plain in-memory store, which leaves /skills on its session-only view.
 	rollup *skillrollup.Store
 
+	// retro is the on-demand insights model retrospective seam (AS-137): the
+	// `/insights describe` path runs it once on the current session to add grounded,
+	// model-authored suggestions on top of the measured dashboard, charging the spend
+	// against the session budget. nil leaves /insights measured-first and free.
+	// retroModelEnabled mirrors whether the session-end model layer (AS-109) is on:
+	// when it is, the retro already runs at session end, so /insights makes no
+	// on-demand offer (it would be redundant).
+	retro             insightsRetro
+	retroModelEnabled bool
+
 	// router is the model routing/tiering policy (AS-042): tier-declaring work
 	// (/compact summarization) resolves its concrete model through it instead of
 	// hardcoding ids. Defaults to routing.Default() so a face that never calls
@@ -272,6 +282,23 @@ func (s *chatSession) setRouter(p routing.Policy) { s.router, s.baseRouter = p, 
 // setSnapshots installs the per-session file snapshot store (AS-084) that
 // /rewind --restore-files reads back. A nil store leaves file restore disabled.
 func (s *chatSession) setSnapshots(st *snapshot.Store) { s.snapshots = st }
+
+// insightsRetro is the on-demand insights model retrospective (AS-137): given the
+// measured Report it returns grounded, model-authored suggestions plus the usage
+// event to record on the session log, so the spend is charged against the live
+// session budget. *insightsmodel.Proposer implements it.
+type insightsRetro interface {
+	Describe(ctx context.Context, r insights.Report) ([]insights.Suggestion, schema.Block, error)
+}
+
+// setInsightsRetro installs the on-demand model retro seam (AS-137) and records
+// whether the session-end model layer (AS-109) is enabled. The composition root
+// passes a provider-backed proposer; a nil retro (or an enabled session-end layer)
+// leaves /insights measured-first with no on-demand offer.
+func (s *chatSession) setInsightsRetro(retro insightsRetro, modelEnabled bool) {
+	s.retro = retro
+	s.retroModelEnabled = modelEnabled
+}
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -1203,20 +1230,93 @@ func (s *chatSession) routeOverride(args []string) (command.Output, error) {
 // renders even with no pricing configured. `/insights apply <n>` lands the
 // numbered suggestion's memory-file edit through a shown diff. The numbering is
 // stable because the analysis is deterministic, so no preview state is staged.
-func (s *chatSession) cmdInsights(_ context.Context, args []string) (command.Output, error) {
+func (s *chatSession) cmdInsights(ctx context.Context, args []string) (command.Output, error) {
 	if len(args) > 0 {
-		if args[0] != "apply" {
-			return command.Output{Text: "Usage: /insights [apply <n>]"}, nil
+		switch args[0] {
+		case "apply":
+			return s.insightsApply(args[1:])
+		case "describe":
+			return s.insightsDescribe(ctx)
+		default:
+			return command.Output{Text: "Usage: /insights [apply <n> | describe]"}, nil
 		}
-		return s.insightsApply(args[1:])
 	}
 	s.mu.Lock()
 	events := s.sess.Log.Events()
 	model := s.model
 	table := s.pricing
+	offer := s.retro != nil && !s.retroModelEnabled
 	s.mu.Unlock()
 
-	return command.Output{Text: insights.Render(insights.Analyze(events, table, model))}, nil
+	text := insights.Render(insights.Analyze(events, table, model))
+	// AS-137: when the session-end model layer is disabled, offer the one-shot model
+	// retro on demand. The measured dashboard above rendered for free; this is the
+	// only path that spends, and only if the user opts in.
+	if offer {
+		text += "\n\nRun /insights describe to add a one-time model retrospective (spends from the session budget)."
+	}
+	return command.Output{Text: text}, nil
+}
+
+// insightsDescribe runs the on-demand insights model retro once (AS-137): it calls
+// the cheap-tier proposer over the measured report, merges only the grounded
+// (evidence-citing) suggestions into the rendered dashboard labelled model-authored,
+// and charges the spend by recording the call's usage on the session log so /cost,
+// the meter, and the budget guard all include it. The call is skipped — with no
+// model call — when no proposer is wired, when the session-end model layer already
+// runs it, or when the session budget has no room. A proposer error degrades to the
+// measured dashboard rather than failing the command.
+func (s *chatSession) insightsDescribe(ctx context.Context) (command.Output, error) {
+	s.mu.Lock()
+	retro := s.retro
+	modelEnabled := s.retroModelEnabled
+	events := s.sess.Log.Events()
+	model := s.model
+	table := s.pricing
+	limit := s.budgetDefaultUSD
+	warn := s.budgetWarnFraction
+	s.mu.Unlock()
+
+	if retro == nil {
+		return command.Output{Text: "No model is configured for the on-demand retro — set subagents.insights_writer.model to enable it. The measured dashboard above is always available with /insights."}, nil
+	}
+	if modelEnabled {
+		return command.Output{Text: "The insights model layer already runs at session end — nothing to add on demand. See /insights for the dashboard."}, nil
+	}
+
+	rep := insights.Analyze(events, table, model)
+
+	// Charge against the live session budget (AS-041): refuse the spend when the
+	// session is already at or over its ceiling, before any model call.
+	if v, ok := budget.Current(events); ok {
+		limit = v
+	}
+	if g := (budget.Guard{LimitUSD: limit, WarnFraction: warn}); g.Enabled() {
+		summary := cost.Summarize(events, table)
+		if g.Check(summary.TotalUSD) == budget.Halt {
+			sym := cost.Symbol(summary.Currency)
+			return command.Output{Text: fmt.Sprintf(
+				"Budget reached (spent %s%s of %s%s) — skipping the model retro. The measured dashboard is unaffected; see /insights.",
+				sym, strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64), sym, strconv.FormatFloat(limit, 'f', 2, 64))}, nil
+		}
+	}
+
+	suggestions, usage, err := retro.Describe(ctx, rep)
+	if err != nil {
+		// Degrade to the measured dashboard: the retro is an enrichment, never a gate.
+		return command.Output{Text: insights.Render(rep) + "\n\n(model retro unavailable: " + err.Error() + ")"}, nil
+	}
+	// Record the spend on the log so /cost and the budget guard include it.
+	if usage.Kind != "" {
+		s.mu.Lock()
+		_, appendErr := s.sess.Log.Append(usage)
+		s.mu.Unlock()
+		if appendErr != nil {
+			return command.Output{}, fmt.Errorf("record insights retro usage: %w", appendErr)
+		}
+	}
+	rep.Suggestions = append(rep.Suggestions, insights.Grounded(suggestions)...)
+	return command.Output{Text: insights.Render(rep)}, nil
 }
 
 // insightsApply lands the memory-file edit of the suggestion at the given 1-based

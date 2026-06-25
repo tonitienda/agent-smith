@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/insightsmodel"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/routing"
 	"github.com/tonitienda/agent-smith/internal/session"
@@ -230,6 +231,15 @@ func readonlyController(override string) (*chatSession, func(), error) {
 	if cfg, err := loadLayeredConfig(override); err == nil {
 		routingCfg, _ := routing.ConfigFrom(cfg)
 		ctl.setRouter(routingCfg)
+		// AS-137: wire the on-demand `smith insights describe` retro so headless has
+		// parity with the TUI. The proposer reaches the resolved provider on its cheap
+		// tier; it stays off when no provider is resolved or the session-end model
+		// layer is already enabled. The base `smith insights` stays deterministic/free.
+		if p := providers[provName]; p != nil {
+			proposer := insightsmodel.New(p, routingCfg, model, pricing)
+			_, _, modelEnabled := insightsModelLayer(cfg, proposer, io.Discard)
+			ctl.setInsightsRetro(proposer, modelEnabled)
+		}
 	}
 	return ctl, func() { _ = sess.Log.Close() }, nil
 }

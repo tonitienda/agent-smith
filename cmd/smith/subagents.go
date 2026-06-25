@@ -74,19 +74,34 @@ func buildSubAgents(cfg *config.Config, store *session.Store, resolve factdetect
 // guard and /cost see the declared tier and cap. An unreadable overlay degrades to
 // the measured-first writer with a warning rather than failing startup.
 func insightsFactory(cfg *config.Config, proposer insights.Proposer, stderr io.Writer) subagent.Factory {
-	if proposer == nil || cfg == nil {
+	tier, budgetUSD, ok := insightsModelLayer(cfg, proposer, stderr)
+	if !ok {
 		return insights.Factory()
+	}
+	return insights.FactoryWithModel(proposer, tier, budgetUSD)
+}
+
+// insightsModelLayer reports whether the AS-109 session-end insights model layer is
+// enabled — the `subagents.insights_writer.model` overlay names a tier, the entry
+// is not disabled, and a provider-backed proposer is available — returning the
+// declared cheap tier and per-session budget cap. An unreadable overlay warns and
+// degrades to disabled. The on-demand `/insights describe` path (AS-137) reads the
+// same decision: it only offers the one-shot retro when this layer is *off*, so the
+// two never run the retro twice.
+func insightsModelLayer(cfg *config.Config, proposer insights.Proposer, stderr io.Writer) (tier string, budgetUSD float64, ok bool) {
+	if proposer == nil || cfg == nil {
+		return "", 0, false
 	}
 	overlay := map[string]subagent.Config{}
 	if _, err := cfg.Decode("subagents", &overlay); err != nil {
 		_, _ = fmt.Fprintf(stderr, "warning: ignoring subagents config for insights model layer: %v\n", err)
-		return insights.Factory()
+		return "", 0, false
 	}
 	c, ok := overlay[insights.Name]
 	if !ok || c.Model == "" || (c.Enabled != nil && !*c.Enabled) {
-		return insights.Factory()
+		return "", 0, false
 	}
-	return insights.FactoryWithModel(proposer, c.Model, c.BudgetUSD)
+	return c.Model, c.BudgetUSD, true
 }
 
 // skillFindingsName is the per-project durable findings log (AS-050), kept

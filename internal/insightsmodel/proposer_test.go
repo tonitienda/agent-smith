@@ -65,6 +65,48 @@ func TestProposeParsesGroundedAndPrices(t *testing.T) {
 	}
 }
 
+// TestDescribeReturnsUsageEvent asserts the on-demand twin (AS-137) returns the
+// same grounded suggestions plus a usage event the caller records to charge the
+// session budget, rather than a pre-priced dollar figure.
+func TestDescribeReturnsUsageEvent(t *testing.T) {
+	mock := &provider.Mock{
+		NameValue: "anthropic",
+		Events: []provider.Event{
+			textDelta("[{\"summary\":\"Scope grep\",\"evidence\":\"~5k tokens at #4\"}]"),
+			usageEvent(800, 60),
+		},
+	}
+	p := New(mock, routing.Default(), "claude-opus-4-8", cost.Embedded())
+
+	got, usage, err := p.Describe(context.Background(), report())
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if len(got) != 1 || got[0].Summary != "Scope grep" {
+		t.Fatalf("suggestions = %+v, want the single grounded one", got)
+	}
+	if usage.Kind == "" || usage.Tokens == nil || usage.Tokens.Input == nil || *usage.Tokens.Input != 800 {
+		t.Errorf("usage event = %+v, want a recordable usage block carrying the turn's tokens", usage)
+	}
+	// The usage block must name the cheap tier that served the call so accounting prices it.
+	if usage.Provider == nil || usage.Provider.Model != "claude-haiku-4-5" {
+		t.Errorf("usage model = %+v, want the cheap tier", usage.Provider)
+	}
+}
+
+// TestDescribeNoUsageNoEvent asserts a reply with no usage yields the zero block
+// (nothing to charge), so the caller appends nothing.
+func TestDescribeNoUsageNoEvent(t *testing.T) {
+	mock := &provider.Mock{NameValue: "anthropic", Events: []provider.Event{textDelta("[]")}}
+	_, usage, err := New(mock, routing.Default(), "claude-opus-4-8", cost.Embedded()).Describe(context.Background(), report())
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	if usage.Kind != "" {
+		t.Errorf("want the zero block when the surface reported no usage, got %+v", usage)
+	}
+}
+
 // TestProposeGarbledReplyYieldsNothing asserts a non-JSON reply degrades to no
 // suggestions (never an error): the measured dashboard stands on its own.
 func TestProposeGarbledReplyYieldsNothing(t *testing.T) {
