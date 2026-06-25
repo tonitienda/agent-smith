@@ -6,6 +6,8 @@ The full backlog derived from [PRD.md](../PRD.md), in three waves:
 - **AS-031 … AS-059 — fast-follow & P2** (everything D6 defers): capability layer (memory files, skills, hooks, MCP, custom commands), remaining power commands, the `/tidy`–`/insights`–routing–budgets wedges, system sub-agents + living skills, headless/ACP faces, Matrix layer, async runner, observability/compliance, and two design spikes. (Plus **AS-066**, the shared slash↔subcommand command-registry follow-on from the [CLI-UX.md](../CLI-UX.md) grilling, **AS-068**, the interactive in-panel `/clean` selection spun out of AS-028, and **AS-072 … AS-076**, the Coding Mode orchestration layer from the [coding-mode.prd.md](../coding-mode.prd.md) grilling.)
 - **AS-077 … AS-081 — GUI wave** (graphical faces over the face-agnostic core, post-V1): the `smith serve` JSON-RPC/WebSocket spine, a thin-client web GUI and a Viscose (VS Code) extension on top of it, a WASM read-only session inspector (the one place WASM genuinely pays off), and a flagged spike for the D9 collision around hosting a live agent for strangers. See those tickets for the full reasoning (browser can't run the live agent — no fs/shell/exec, no keychain, CORS; the GUI is a new *face* over `smith serve`, not a WASM rewrite).
 
+- **AS-144 … AS-153 — Smith Cloud dogfood wave**: scheduled autonomous work, disposable cloud sandboxes, scoped secrets, GitHub App automation, cloud run ingestion, and the first private Agent Smith dogfood jobs. See [smith-cloud-prd.md](../../projects/smith-cloud-prd.md).
+
 Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD marks it "later" and it's too far out to spec honestly; AS-059 (plugin trust) is a prerequisite. (The Desktop/editor UI itself is now ticketed as the GUI wave AS-077…AS-081, shipping on the AS-077 JSON-RPC fallback per §10 Q5 rather than waiting on AS-052/ACP.)
 
 ## Conventions
@@ -199,6 +201,21 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 |---|---|---|---|---|
 | [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | needs-clarification | AS-077 |
 
+## Index — Smith Cloud dogfood wave (AS-144 … AS-153)
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-144](AS-144-smith-cloud-architecture-threat-model.md) | Smith Cloud architecture and threat-model spike | cloud | needs-clarification | — |
+| [AS-145](AS-145-scheduled-job-spec-triggers.md) | Scheduled job spec and trigger semantics | cloud | ready-to-implement | AS-144 |
+| [AS-146](AS-146-cloud-control-plane-run-queue.md) | Cloud control-plane run queue and worker protocol | cloud | ready-to-implement | AS-144, AS-145 |
+| [AS-147](AS-147-sandbox-provider-microvm-prototype.md) | Sandbox provider interface and disposable microVM prototype | cloud-security | ready-to-implement | AS-144, AS-146 |
+| [AS-148](AS-148-cloud-secret-provisioning.md) | Secret provisioning and redaction contract for cloud sandboxes | security | ready-to-implement | AS-144, AS-147 |
+| [AS-149](AS-149-github-app-integration.md) | GitHub App integration and repository permission model | integrations | ready-to-implement | AS-144 |
+| [AS-150](AS-150-pr-automation-auto-merge-policy.md) | PR automation and guarded auto-merge policy | integrations | ready-to-implement | AS-149, AS-151 |
+| [AS-151](AS-151-cloud-event-log-artifact-ingestion.md) | Cloud run event-log and artifact ingestion | observability | ready-to-implement | AS-146, AS-147 |
+| [AS-152](AS-152-agent-smith-dogfood-job-pack.md) | Dogfood job pack for the Agent Smith repository | dogfood | ready-to-implement | AS-145, AS-149, AS-150, AS-151 |
+| [AS-153](AS-153-cloud-operator-ui-api.md) | Cloud operator UI/API for schedules, runs, costs, and approvals | cloud | ready-to-implement | AS-146, AS-151 |
+
 ## Suggested build order
 
 1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.
@@ -213,6 +230,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is **resolved** ([docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md)): closed in favour of 079 — `smith serve` ships for local use only and the public demo is the read-only inspector, since hosting strangers collides with D9 ("not a sandbox").
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
+13. **Smith Cloud dogfood wave**: start with AS-144 to reconcile the hosted-control-plane architecture with D8/D9, then define schedules (145), queue/worker protocol (146), sandbox/secrets/GitHub primitives (147–149), cloud session ingestion (151), PR automation policy (150), the Agent Smith dogfood pack (152), and the operator UI/API (153).
 
 ## Needs clarification — decisions to make
 
