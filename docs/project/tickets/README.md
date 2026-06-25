@@ -143,7 +143,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-106](AS-106-fact-detector-path-config-signals.md) | Rediscovered-fact detector: path-convergence + config-key signals | living-skills | done | 048 |
 | [AS-107](AS-107-subagent-runner-composition.md) | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | subagents | done | 088, 048 |
 | [AS-108](AS-108-subagent-ledger-resolver.md) | Persist the rediscovered-fact ledger + memory/skill-aware save-target resolver | subagents | done | 107, 032, 034 |
-| [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | ready | 045, 040, 042 |
+| [AS-109](AS-109-insights-model-layer.md) | `/insights` model-assisted layer + goal anchoring (spun out of AS-045) | insights-wedge | done | 045, 040, 042 |
 | [AS-110](AS-110-route-escalation-overrides.md) | Model routing escalation + per-session `/route` overrides (spun out of AS-042) | cost | done | 042 |
 | [AS-111](AS-111-scoped-plugin-context-slices.md) | Scope-gated context slices for third-party sub-agents (spun out of AS-059) | security | ready | 044 |
 | [AS-112](AS-112-declarative-boundary-guard.md) | Guard the declarative-only plugin boundary with a test + archtest (spun out of AS-059) | quality | done | 044, 098 |
@@ -157,6 +157,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
 | [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | done | 054 |
 | [AS-136](AS-136-stats-index-and-cross-project-friction.md) | Persisted cross-session stats index + cross-project friction merge (spun out of AS-057) | insights-wedge | done | 050, 057 |
+| [AS-137](AS-137-insights-on-demand-model-retro.md) | `/insights` on-demand model retro when the writer is disabled (spun out of AS-109) | insights-wedge | ready | 109 |
 
 ## Index — Recorded-provider regression harness (AS-133 … AS-135)
 

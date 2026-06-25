@@ -1,7 +1,7 @@
 ---
 id: AS-109
 title: /insights model-assisted layer + goal anchoring (spun out of AS-045)
-status: ready-to-implement
+status: done
 github_issue: 375
 depends_on: [AS-045, AS-040, AS-042]
 area: insights-wedge
@@ -57,3 +57,27 @@ This ticket adds, on top of the AS-045 substrate:
 
 - AS-045 (measured substrate + writer + panel), AS-040 (goal anchoring), AS-042
   (model routing/tiering — soft; configured default until it lands)
+
+## Implementation notes (done)
+
+- **Goal anchoring** is deterministic and lives in `internal/insights`: `Analyze`
+  now derives `Report.Goal` (a `GoalAssessment`) from the log — a live `/goal`
+  block reads as `in-progress`, a goal retired via `/goal done` (excluded, no live
+  successor) reads as `met` — grounded in measured signals (the goal `#seq` anchor
+  + turn/error counts). It renders regardless of the model layer, so the measured
+  dashboard is unaffected when the layer is off. insights recognizes the goal block
+  by value (`goalProducer`/`goalPrefix` mirroring `internal/goal`) so it keeps
+  pointing inward (no new import), the same pattern `shellTool` already uses.
+- **Model layer** is opt-in via the `subagents.insights_writer.model` overlay. The
+  insights-writer gained an optional `insights.Proposer` seam; the provider-backed
+  implementation is the new `internal/insightsmodel` package (cheap routing tier +
+  bounded reply, priced via `cost.Summarize`), wired in the composition root only
+  when the overlay names a tier. Every model-authored suggestion must cite a
+  measured `#seq` anchor or the writer drops it (§9, enforced in `citesMeasured-`
+  `Evidence`); a proposer error degrades to the measured findings and charges
+  nothing. The per-session budget is the writer's declared `BudgetUSD`, enforced by
+  the sub-agent Runner.
+- **Deferred to AS-137:** the on-demand `/insights` model retro (running the model
+  pass once from the panel when the writer is disabled). The measured dashboard +
+  goal anchoring already render on demand; only the interactive "run the model
+  retro now" affordance is follow-on.

@@ -169,9 +169,15 @@ The enforced contracts (guard test) are the corners most prone to drift:
   grounded suggestions, with a face-agnostic `Render`. It consumes `cost`,
   `projection`, `render`, and `schema` — pointing inward — and houses the
   **insights-writer** `subagent.SubAgent` built-in (the C.3 `insights_writer`),
-  which records the suggestions as findings at session end with no model calls
-  (measured-first; the model-assisted rewrite layer is deferred to AS-109). The
-  same `Analyze` drives the `/insights` panel, which prices turns and lands a
+  which records the suggestions as findings at session end. Measured-first, it
+  makes no model calls by default; the AS-109 model-assisted layer is opt-in
+  (`subagents.insights_writer.model`): the writer then calls an `insights.Proposer`
+  seam — implemented by `internal/insightsmodel` (a cheap-tier, budget-capped,
+  provider-backed pass wired in `cmd/smith`) — and appends the grounded,
+  model-authored suggestions, dropping any that don't cite a measured `#seq` anchor
+  (§9). `Analyze` also derives a deterministic goal assessment (AS-040/AS-109): a
+  live `/goal` reads as in-progress, a `/goal done`-retired goal as met. The same
+  `Analyze` drives the `/insights` panel, which prices turns and lands a
   suggestion's propose-only memory edit through a shown diff (`/insights apply`).
 - **Living-skills report** (`/skills`, AS-050): `internal/skillrollup` is the
   surfacing layer for the living-skills findings — the rediscovered facts (AS-048)

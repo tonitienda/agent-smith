@@ -139,6 +139,74 @@ func TestAnalyzeNilTableZeroCost(t *testing.T) {
 	}
 }
 
+// goalBlock builds a /goal-producer block the way internal/goal.Set does, so the
+// retro recognizes it by value (goalProducer + goalPrefix) without importing goal.
+func goalBlock(seq int, id, objective string) schema.Block {
+	return schema.Block{
+		Seq:        seq,
+		ID:         id,
+		Kind:       schema.KindText,
+		Role:       schema.RoleSystem,
+		Text:       &schema.TextBody{Text: goalPrefix + objective},
+		Provenance: &schema.Provenance{Producer: goalProducer},
+	}
+}
+
+// TestGoalAnchoringInProgress asserts a live /goal is surfaced as in-progress,
+// grounded in measured signals (a #seq anchor), and never reads as met.
+func TestGoalAnchoringInProgress(t *testing.T) {
+	events := []schema.Block{
+		goalBlock(1, "g1", "ship AS-109"),
+		usage(1000, 500),
+	}
+	r := Analyze(events, nil, "")
+	if r.Goal == nil {
+		t.Fatal("want a goal assessment")
+	}
+	if r.Goal.Met || r.Goal.Status != "in-progress" {
+		t.Errorf("goal = %+v, want in-progress, not met", r.Goal)
+	}
+	if r.Goal.Objective != "ship AS-109" {
+		t.Errorf("objective = %q", r.Goal.Objective)
+	}
+	if !strings.Contains(r.Goal.Evidence, "#1") {
+		t.Errorf("evidence %q lacks the goal #seq anchor", r.Goal.Evidence)
+	}
+	if out := Render(r); !strings.Contains(out, "Goal: ship AS-109") || !strings.Contains(out, "in progress") {
+		t.Errorf("render missing in-progress goal:\n%s", out)
+	}
+}
+
+// TestGoalAnchoringCompleted asserts a goal retired via /goal done (an exclusion
+// of the goal block, with no live successor) reads as met — the measured
+// completion signal.
+func TestGoalAnchoringCompleted(t *testing.T) {
+	events := []schema.Block{
+		goalBlock(1, "g1", "land the spike"),
+		usage(1000, 500),
+		eventlog.NewExclusion(goalProducer, "g1"),
+	}
+	r := Analyze(events, nil, "")
+	if r.Goal == nil || !r.Goal.Met || r.Goal.Status != "completed" {
+		t.Fatalf("goal = %+v, want completed/met", r.Goal)
+	}
+	if out := Render(r); !strings.Contains(out, "met ✓") {
+		t.Errorf("render missing met marker:\n%s", out)
+	}
+}
+
+// TestGoalAnchoringNone asserts no goal yields no assessment (and no goal line),
+// so the dashboard is unchanged for the common no-goal session.
+func TestGoalAnchoringNone(t *testing.T) {
+	r := Analyze([]schema.Block{usage(10, 10)}, nil, "")
+	if r.Goal != nil {
+		t.Errorf("want nil goal with no /goal set, got %+v", r.Goal)
+	}
+	if strings.Contains(Render(r), "Goal:") {
+		t.Error("render should omit the goal line when no goal is set")
+	}
+}
+
 // TestRenderEmpty asserts the dashboard degrades to a clear message rather than an
 // empty panel when there is no activity yet.
 func TestRenderEmpty(t *testing.T) {

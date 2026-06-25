@@ -8,14 +8,17 @@
 // Measured-first (§9 mitigation): every signal and every suggestion is computed
 // from the log and cites its evidence (turn/block references), never vibes. The
 // dashboard renders with zero model calls, so it is free and always available —
-// the "model layer disabled" zero-cost mode is the default here. A model-assisted
-// layer that rewrites measured signals into richer prose is deferred (AS-109);
-// the deterministic suggestions below already satisfy the AC of ≥1 specific,
-// applicable suggestion.
+// the "model layer disabled" zero-cost mode is the default here. The deterministic
+// suggestions below already satisfy the AC of ≥1 specific, applicable suggestion,
+// and a deterministic goal assessment (AS-040/AS-109) answers "was the objective
+// met?" from the log alone.
 //
 // The same analysis powers the insights-writer system sub-agent (writer.go),
 // which records the suggestions as findings at session end (AS-044/AS-107), so
 // the cross-session rollup (AS-050/AS-057) reads the same data the panel shows.
+// When the AS-109 model-assisted layer is enabled, the writer additionally calls
+// the Proposer seam (model.go) for richer, model-authored suggestions — each still
+// grounded in measured evidence — implemented out-of-package by internal/insightsmodel.
 //
 // Layering: this package consumes cost, projection, render, and schema and points
 // inward, the same way the other analyzers sit below the loop (see
@@ -35,6 +38,16 @@ import (
 // shellTool is the built-in shell tool whose arguments carry the command string,
 // matched the same way the rediscovered-fact detector matches it (factdetector).
 const shellTool = "shell"
+
+// goalProducer / goalPrefix mirror internal/goal by value (the same value-coupling
+// pattern shellTool uses for the shell tool) so the retro can recognize the active
+// /goal block without importing the goal command package — keeping insights
+// pointing inward (cost, projection, render, schema only). They MUST stay in sync
+// with goal.Producer / goal.textPrefix.
+const (
+	goalProducer = "/goal"
+	goalPrefix   = "Session goal: "
+)
 
 // Thresholds for surfacing a signal. They are deliberate, high-precision bars
 // (PRD §7.14: suggestions must be specific and applicable, not noisy): a command
@@ -73,7 +86,23 @@ type Report struct {
 	LiveBlocks    int             // blocks still in the model-facing window
 	StaleBlocks   int             // blocks dropped from the window (excluded/replay)
 
-	Suggestions []Suggestion // grounded, ordered; apply by 1-based index
+	Goal        *GoalAssessment // the session objective (AS-040) and whether it was met; nil when no /goal was set
+	Suggestions []Suggestion    // grounded, ordered; apply by 1-based index
+}
+
+// GoalAssessment answers "did the session meet its objective?" (AS-109 goal
+// anchoring, PRD §7.14) for the active /goal (AS-040), grounded in measured
+// signals only. Completion is read from the log: a goal retired via `/goal done`
+// (no longer live, with no successor goal) is treated as met; a still-live goal is
+// in progress. The model-assisted layer may add reasoning on top, but the verdict
+// itself is measured, never vibes — so it renders identically with the model layer
+// disabled.
+type GoalAssessment struct {
+	Objective string // the goal text (prefix stripped)
+	Met       bool   // true when the objective was marked complete (`/goal done`)
+	Status    string // "completed" | "in-progress"
+	Evidence  string // the measured grounding (goal anchor + turn/error counts)
+	Seq       int    // the goal block's sequence number, for the jump-to-transcript link
 }
 
 // Repeat is one repeated value (a file path or a command) with its occurrence
@@ -101,7 +130,15 @@ type Suggestion struct {
 	Summary  string
 	Evidence string
 	Edit     *MemoryEdit
+	// Source distinguishes a measured suggestion (the default, "") from a
+	// model-authored one ("model") added by the AS-109 model-assisted layer. A
+	// model suggestion still cites measured evidence (the §9 non-negotiable); the
+	// label only marks provenance so a face can flag the richer prose.
+	Source string
 }
+
+// SourceModel tags a Suggestion authored by the model-assisted layer (AS-109).
+const SourceModel = "model"
 
 // MemoryEdit is a propose-only line to append to a memory file. Target is the
 // memory file (the project-root memory file by default); Line is the addition,
@@ -138,9 +175,46 @@ func Analyze(events []schema.Block, table *cost.Table, model string) Report {
 	proj := projection.Project(events, projection.Options{TargetModel: model})
 	r.LiveBlocks = len(proj.Live())
 	r.StaleBlocks = len(proj.Blocks()) - r.LiveBlocks
+	r.Goal = goalAssessment(proj, r)
 
 	r.Suggestions = suggestions(r)
 	return r
+}
+
+// goalAssessment reads the session's /goal objective (AS-040) from the projection
+// and reports whether it was met, grounded only in measured signals. It returns
+// nil when no goal was ever set. A goal block still live in the window is in
+// progress; a goal that was retired with no live successor was completed via
+// `/goal done` — the measured completion signal. Replacing a goal leaves the new
+// one live, so only a truly finished objective reads as met.
+func goalAssessment(proj *projection.Projection, r Report) *GoalAssessment {
+	var latest *GoalAssessment
+	live := false
+	for _, b := range proj.Blocks() {
+		if b.Kind != schema.KindText || b.Text == nil ||
+			b.Provenance == nil || b.Provenance.Producer != goalProducer {
+			continue
+		}
+		latest = &GoalAssessment{
+			Objective: strings.TrimPrefix(b.Text.Text, goalPrefix),
+			Seq:       b.Seq,
+		}
+		live = b.Live
+	}
+	if latest == nil {
+		return nil
+	}
+	if live {
+		latest.Status = "in-progress"
+		latest.Evidence = "goal set at " + anchors([]int{latest.Seq}) + "; " +
+			plural(r.Turns, "turn") + ", " + plural(r.Errors, "tool error") + " so far"
+	} else {
+		latest.Met = true
+		latest.Status = "completed"
+		latest.Evidence = "goal completed (retired) after " + plural(r.Turns, "turn") +
+			"; set at " + anchors([]int{latest.Seq})
+	}
+	return latest
 }
 
 // costliest returns the most expensive turns, costliest first. It ranks by

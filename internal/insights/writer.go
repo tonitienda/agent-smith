@@ -1,6 +1,8 @@
 package insights
 
 import (
+	"context"
+
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/schema"
 )
@@ -22,19 +24,50 @@ const FindingKind = "insights"
 // It is stateless across the lifecycle (analysis happens in Teardown over the
 // handed slice), so a single instance is reusable; Factory yields fresh ones
 // anyway, per the framework's per-session instancing rule.
-type Writer struct{}
+type Writer struct {
+	// proposer, modelTier and budgetUSD are set only when the AS-109 model-assisted
+	// layer is configured (subagents.insights_writer.model). When proposer is nil
+	// the writer is the original measured-first, zero-cost analyzer — the default.
+	proposer  Proposer
+	modelTier string
+	budgetUSD float64
+}
 
-// New builds a Writer.
+// New builds a measured-first Writer (no model layer): the original zero-cost,
+// default-on retrospective analyzer.
 func New() *Writer { return &Writer{} }
 
-// Factory returns a subagent.Factory that builds Writers.
+// NewWithModel builds a Writer whose teardown runs the AS-109 model-assisted layer
+// after the measured pass: it calls proposer on the cheap tier (tier) within
+// budgetUSD and appends the grounded, model-authored suggestions as findings. A
+// nil proposer or an empty tier yields the measured-first writer (the model layer
+// stays off), so installing it is safe even when the model layer is unconfigured.
+func NewWithModel(proposer Proposer, tier string, budgetUSD float64) *Writer {
+	if proposer == nil || tier == "" {
+		return New()
+	}
+	return &Writer{proposer: proposer, modelTier: tier, budgetUSD: budgetUSD}
+}
+
+// Factory returns a subagent.Factory that builds measured-first Writers.
 func Factory() subagent.Factory {
 	return func() subagent.SubAgent { return New() }
 }
 
+// FactoryWithModel returns a subagent.Factory that builds model-layer Writers
+// (AS-109). The composition root passes a provider-backed Proposer plus the
+// configured cheap tier and per-session budget; a nil proposer falls back to the
+// measured-first writer.
+func FactoryWithModel(proposer Proposer, tier string, budgetUSD float64) subagent.Factory {
+	return func() subagent.SubAgent { return NewWithModel(proposer, tier, budgetUSD) }
+}
+
 // Manifest declares the writer: a passive analyzer that tears down once at
-// session end over the whole session, defaults on (it costs nothing — no model
-// tier), proposes memory edits, and reads the transcript.
+// session end over the whole session, defaults on, proposes memory edits, and
+// reads the transcript. Without the model layer it declares no model tier and a
+// zero budget, so it costs nothing even when enabled; with the AS-109 model layer
+// configured it declares the cheap tier and the per-session budget cap, which the
+// Runner enforces before spending (the §7.19 budget AC).
 func (w *Writer) Manifest() subagent.Manifest {
 	return subagent.Manifest{
 		Name:             Name,
@@ -42,8 +75,8 @@ func (w *Writer) Manifest() subagent.Manifest {
 		Schedule:         subagent.AtSessionEnd,
 		Scope:            subagent.SessionScope,
 		EnabledByDefault: true,
-		ModelTier:        "", // measured-first: no model use → zero cost even when enabled
-		BudgetUSD:        0,
+		ModelTier:        w.modelTier, // "" (measured-first) unless the model layer is configured
+		BudgetUSD:        w.budgetUSD, // 0 unless the model layer is configured
 		Emits:            []string{FindingKind},
 		Permissions:      []subagent.Permission{subagent.ReadTranscript, subagent.ProposeEdit},
 	}
@@ -65,18 +98,47 @@ func (w *Writer) Teardown(scope subagent.Scope, slice []schema.Block) subagent.R
 	rep := Analyze(slice, nil, "")
 	findings := make([]subagent.Finding, 0, len(rep.Suggestions))
 	for _, s := range rep.Suggestions {
-		f := subagent.Finding{
-			Kind:    FindingKind,
-			Summary: s.Summary,
-			Detail:  s.Evidence,
-		}
-		if s.Edit != nil {
-			f.Proposal = &subagent.Edit{
-				Target:      s.Edit.Target,
-				Description: "+ " + s.Edit.Line,
+		findings = append(findings, toFinding(s))
+	}
+
+	// AS-109 model-assisted layer: when configured, the cheap-tier Proposer adds
+	// richer, model-authored suggestions on top of the measured ones. Each must
+	// cite measured evidence (§9) or it is dropped — a hallucinated suggestion
+	// never lands. A Proposer error degrades to the measured findings rather than
+	// failing the teardown; the dashboard already rendered for free.
+	spent := 0.0
+	if w.proposer != nil {
+		proposed, cost, err := w.proposer.Propose(context.Background(), rep)
+		if err == nil {
+			spent = cost
+			for _, s := range proposed {
+				if !citesMeasuredEvidence(s) {
+					continue
+				}
+				s.Source = SourceModel
+				findings = append(findings, toFinding(s))
 			}
 		}
-		findings = append(findings, f)
 	}
-	return subagent.Result{Findings: findings}
+	return subagent.Result{Findings: findings, SpentUSD: spent}
+}
+
+// toFinding maps a measured or model-authored suggestion to a recorded finding,
+// carrying the propose-only memory edit when the suggestion is applicable.
+func toFinding(s Suggestion) subagent.Finding {
+	f := subagent.Finding{
+		Kind:    FindingKind,
+		Summary: s.Summary,
+		Detail:  s.Evidence,
+	}
+	if s.Source == SourceModel {
+		f.Summary += " (model)"
+	}
+	if s.Edit != nil {
+		f.Proposal = &subagent.Edit{
+			Target:      s.Edit.Target,
+			Description: "+ " + s.Edit.Line,
+		}
+	}
+	return f
 }
