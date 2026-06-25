@@ -1,0 +1,38 @@
+{
+  "error_auth": {
+    "intent": "bad-key auth error envelope",
+    "source": "synthetic"
+  },
+  "error_context_too_long": {
+    "intent": "oversized-prompt rejection",
+    "source": "synthetic"
+  },
+  "error_rate_limit": {
+    "intent": "429 rate-limit error envelope",
+    "source": "synthetic"
+  },
+  "large_tool_args": {
+    "intent": "large (1KiB) tool-argument payload preserved verbatim",
+    "source": "synthetic"
+  },
+  "multi_tool": {
+    "intent": "two tool calls in one turn",
+    "source": "synthetic"
+  },
+  "reasoning": {
+    "intent": "reasoning span before answer",
+    "source": "synthetic"
+  },
+  "text": {
+    "intent": "streaming text turn",
+    "source": "synthetic"
+  },
+  "tool_call": {
+    "intent": "single tool-call round trip",
+    "source": "synthetic"
+  },
+  "unicode": {
+    "intent": "multibyte content split across deltas",
+    "source": "synthetic"
+  }
+}

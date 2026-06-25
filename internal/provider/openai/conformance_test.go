@@ -48,3 +48,10 @@ func TestRecordConformance(t *testing.T) {
 		return New("", WithHTTPClient(&http.Client{Transport: rt}))
 	})
 }
+
+// TestFixtureMetadata asserts every conformance fixture is classified as a
+// synthetic edge case or a redacted real capture (AS-133), so the corpus stays
+// auditable as real captures land.
+func TestFixtureMetadata(t *testing.T) {
+	conformance.AssertFixtureMetadata(t, conformance.FixtureDir)
+}

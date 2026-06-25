@@ -135,3 +135,31 @@ The tool scrubs high-confidence secrets, but redaction is best-effort
 Because the metadata records `providers` and `intent`, those suites can select
 fixtures by the vendor shape and the behavior under test rather than re-deriving
 it from the file.
+
+## The recorded vendor simulator (AS-133)
+
+The simulator lives in `internal/provider/conformance` and reuses the existing
+AS-012 conformance fixtures (`<vendor>/testdata/conformance/<case>.http`):
+
+- `conformance.NewRecordedServer(exchanges...)` binds a fake vendor on loopback
+  (ephemeral port). Each `Exchange` asserts the incoming request (method, path,
+  body substrings) and returns a recorded response. It **fails loudly** with a
+  method/path/body diff on a mismatch, an unexpected extra request, or an
+  exchange that was never consumed — validation `FileTransport` cannot do.
+- `conformance.FixtureExchange(t, path, reqPath, bodyContains...)` builds an
+  Exchange from an existing `.http` fixture, so a vendor reuses its conformance
+  corpus to drive the request-validating server.
+- Point an adapter at it with the vendor's `WithBaseURL(srv.URL)` +
+  `WithHTTPClient(srv.Client())`, run the turn, then `srv.AssertConsumed(t)`.
+  This exercises the real HTTP client path (TCP, headers, serialization), unlike
+  the transport-level `FileTransport` replay.
+
+Each fixture directory carries a `fixtures.json` manifest classifying every
+`<case>.http` as `synthetic` (hand-authored edge case) or `redacted-real` (a real
+capture run through this workflow). `conformance.AssertFixtureMetadata` guards
+that every fixture is classified, so a real AS-060 capture can never masquerade
+as synthetic (or vice versa) once it lands.
+
+**AS-060 implementers:** prefer turning a redacted capture into a recorded-server
+fixture (a `redacted-real` `.http` + manifest entry) over a one-off report — it
+becomes a permanent regression guard for the adapter shape the capture exposed.
