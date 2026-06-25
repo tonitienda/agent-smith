@@ -5,7 +5,7 @@ status: needs-clarification
 area: provider
 priority: P2
 depends_on: [AS-145]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-150 · Multi-provider workflow routing
