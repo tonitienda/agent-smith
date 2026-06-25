@@ -182,6 +182,9 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 		return fmt.Errorf("build sub-agents: %w", err)
 	}
 	ctl.setSubAgents(subReg, subStore)
+	// AS-058: the durable /improve decision ledger, kept alongside the findings
+	// rollup so a dismissed/snoozed proposal stays suppressed across sessions.
+	ctl.setImproveLedger(openImproveLedger(store, os.Stderr))
 	// AS-137: wire the on-demand `/insights describe` retro. Only offer it when a
 	// provider is resolved and the session-end model layer is *off* — when it is on,
 	// the retro already runs at session end, so the on-demand offer is suppressed.
@@ -368,6 +371,16 @@ func chatCommands(ctl *chatSession) *command.Registry {
 		Scriptability: command.Both,
 		Examples:      []string{"smith skills", "smith skills apply 1"},
 		Run:           ctl.cmdSkills,
+	})
+	mustRegisterCommand(reg, command.Command{
+		Name:          "improve",
+		Summary:       "Self-improving config: proposed memory/skill edits from recurring findings",
+		Args:          "[apply <n> | dismiss <n> | snooze <n>]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 2},
+		Mode:          command.FullScreen,
+		Scriptability: command.Both,
+		Examples:      []string{"smith improve", "smith improve apply 1", "smith improve dismiss 2"},
+		Run:           ctl.cmdImprove,
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "clean",

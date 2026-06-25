@@ -99,7 +99,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-055](AS-055-replayable-runs-otel.md) | Replayable runs + OpenTelemetry export | observability | done | 005, 007, 020 |
 | [AS-056](AS-056-compliance-archiving-spike.md) | Spike: compliance archiving vs erasure (Q13) | compliance | done | 005 |
 | [AS-057](AS-057-cross-session-analytics.md) | Cross-session analytics | insights-wedge | done | 007, 020, 045 |
-| [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | ready | 032, 045, 050 |
+| [AS-058](AS-058-self-improving-config.md) | Self-improving config | insights-wedge | done | 032, 045, 050 |
 | [AS-059](AS-059-plugin-trust-spike.md) | Spike: plugin trust & sandboxing (Q12) | security | done | 044 |
 | [AS-066](AS-066-command-registry-parity.md) | Shared command registry — slash ↔ subcommand parity | commands | done | 022, 065 |
 | [AS-068](AS-068-clean-interactive-selection.md) | `/clean` interactive multi-select + per-item archive restore | context-wedge | done | 028, 067 |
@@ -158,6 +158,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-132](AS-132-async-runner-daemon-concurrency.md) | Background runner daemon + worker concurrency (spun out of AS-054) | async | done | 054 |
 | [AS-136](AS-136-stats-index-and-cross-project-friction.md) | Persisted cross-session stats index + cross-project friction merge (spun out of AS-057) | insights-wedge | done | 050, 057 |
 | [AS-137](AS-137-insights-on-demand-model-retro.md) | `/insights` on-demand model retro when the writer is disabled (spun out of AS-109) | insights-wedge | done | 109 |
+| [AS-138](AS-138-improve-confidence-and-efficacy.md) | `/improve` high-confidence single-fact threshold + efficacy measurement (spun out of AS-058) | insights-wedge | ready | 058, 048, 057 |
 
 ## Index — Recorded-provider regression harness (AS-133 … AS-135)
 
