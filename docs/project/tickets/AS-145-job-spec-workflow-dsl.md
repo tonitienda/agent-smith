@@ -5,7 +5,7 @@ status: needs-clarification
 area: orchestrator
 priority: P2
 depends_on: [AS-144]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-145 · Job specification and workflow DSL
