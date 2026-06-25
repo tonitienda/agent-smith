@@ -1292,12 +1292,12 @@ func (s *chatSession) insightsDescribe(ctx context.Context) (command.Output, err
 		limit = v
 	}
 	if g := (budget.Guard{LimitUSD: limit, WarnFraction: warn}); g.Enabled() {
-		spent := cost.Summarize(events, table).TotalUSD
-		if g.Check(spent) == budget.Halt {
-			sym := cost.Symbol(cost.Summarize(events, table).Currency)
+		summary := cost.Summarize(events, table)
+		if g.Check(summary.TotalUSD) == budget.Halt {
+			sym := cost.Symbol(summary.Currency)
 			return command.Output{Text: fmt.Sprintf(
 				"Budget reached (spent %s%s of %s%s) — skipping the model retro. The measured dashboard is unaffected; see /insights.",
-				sym, strconv.FormatFloat(spent, 'f', 4, 64), sym, strconv.FormatFloat(limit, 'f', 2, 64))}, nil
+				sym, strconv.FormatFloat(summary.TotalUSD, 'f', 4, 64), sym, strconv.FormatFloat(limit, 'f', 2, 64))}, nil
 		}
 	}
 
