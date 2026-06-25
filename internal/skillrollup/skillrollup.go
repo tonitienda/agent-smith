@@ -50,6 +50,7 @@ type Record struct {
 	Detail     string    `json:"detail,omitempty"`
 	Target     string    `json:"target,omitempty"`
 	Diff       string    `json:"diff,omitempty"`
+	Confidence int       `json:"confidence,omitempty"`
 	Resolved   bool      `json:"resolved,omitempty"`
 	RecordedAt time.Time `json:"recorded_at,omitempty"`
 }
@@ -131,6 +132,7 @@ func (s *Store) Record(f subagent.Finding) {
 		Kind:       f.Kind,
 		Summary:    f.Summary,
 		Detail:     f.Detail,
+		Confidence: f.Confidence,
 		RecordedAt: time.Now().UTC(),
 	}
 	if f.Proposal != nil {

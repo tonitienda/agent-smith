@@ -45,6 +45,36 @@ func TestPersistAcrossStores(t *testing.T) {
 
 // TestRecordDedup asserts the same finding re-reported within a process (an engine
 // rebuild re-running teardown) is counted once.
+
+// TestConfidencePersistsAndAggregatesMax asserts a finding's confidence survives a
+// reopen and that a group carries the strongest (max) confidence seen, so a single
+// high-confidence sighting is not diluted by weaker ones (AS-138).
+func TestConfidencePersistsAndAggregatesMax(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "skill-findings.jsonl")
+	s1, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	strong := fact("sess-1", "Rediscovered working command: make test", "AGENT.md", "+ `make test`")
+	strong.Confidence = 3
+	weak := fact("sess-2", "Rediscovered working command: make test", "AGENT.md", "+ `make test`")
+	weak.Confidence = 1
+	s1.Record(strong)
+	s1.Record(weak)
+
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	r := s2.Rollup()
+	if len(r.Groups) != 1 {
+		t.Fatalf("want 1 group, got %d", len(r.Groups))
+	}
+	if r.Groups[0].Confidence != 3 {
+		t.Fatalf("group confidence = %d, want max 3", r.Groups[0].Confidence)
+	}
+}
+
 func TestRecordDedup(t *testing.T) {
 	s := NewMem()
 	f := fact("sess-1", "Rediscovered working command: make test", "AGENT.md", "+ `make test`")

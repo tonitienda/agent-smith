@@ -2,9 +2,11 @@
 // consolidates the cross-session findings rollup (AS-050) into a queue of
 // proposed edits to memory files and skills, surfaced on demand through
 // `/improve` (and `smith improve`). It generalizes the living-skills pattern —
-// a remedy a single session can surface becomes a *proposal* only once the same
+// a remedy a single session can surface becomes a *proposal* once the same
 // actionable suggestion has recurred across at least MinSessions distinct
-// sessions, so the agent learns *your* workflow from evidence rather than noise.
+// sessions — or, even from one session, once it is grounded strongly enough
+// (Confidence ≥ HighConfidence, AS-138) — so the agent learns *your* workflow
+// from evidence rather than noise.
 //
 // The package is deterministic and makes no model calls: it selects and narrows
 // the rollup's grounded remedies, it never authors them. Proposals never
@@ -27,6 +29,13 @@ import (
 // promoted to a proposal. One session is not yet a pattern.
 const MinSessions = 2
 
+// HighConfidence is the single-session promotion threshold (AS-138): a finding
+// whose grounding signal (the rediscovered-fact detector's count of failed prior
+// attempts) reaches this many is proposed immediately, without waiting for a
+// second session. A fact the agent only flailed once or twice over still waits
+// for recurrence — one weakly grounded sighting is not yet a pattern.
+const HighConfidence = 3
+
 // Proposal is one consolidated, cross-session config-improvement suggestion: a
 // single edit (a whole line) to one target file (a memory file or a skill's
 // SKILL.md), grounded in the distinct sessions that raised it.
@@ -36,8 +45,14 @@ type Proposal struct {
 	Summary  string   // human-readable description of the gap
 	Target   string   // memory file or skill file the edit lands in
 	Edit     string   // the proposed addition (a whole line)
-	Sessions int      // distinct sessions that raised it (≥ MinSessions)
+	Sessions int      // distinct sessions that raised it (≥ MinSessions unless high-confidence)
 	Examples []string // up to a few sample session ids — evidence links
+
+	// HighConfidence records that this proposal was promoted on a single
+	// high-confidence sighting (Confidence ≥ HighConfidence) rather than on
+	// cross-session recurrence, so the rendered grounding can explain why a
+	// one-session fact was proposed.
+	HighConfidence bool
 }
 
 // Key is a proposal's dedup identity for the dismissal Ledger: its target file
@@ -55,8 +70,9 @@ func Key(target, edit string) string {
 func normalize(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // Build consolidates the cross-session findings rollup into the pending proposal
-// queue: one proposal per recurring (≥ MinSessions distinct sessions) finding
-// signature that carries a target and an edit and is neither already resolved
+// queue: one proposal per finding signature that recurs across ≥ MinSessions
+// distinct sessions (or is a single ≥ HighConfidence sighting), carries a target
+// and an edit, and is neither already resolved
 // (the remedy was applied) nor dismissed/snoozed in the ledger. The rollup
 // groups are already deterministic and ordered most-recurring-first, so the
 // proposal numbering is stable for `/improve apply <n>`.
@@ -64,7 +80,13 @@ func Build(rep skillrollup.Report, led *Ledger, now time.Time) []Proposal {
 	var out []Proposal
 	n := 0
 	for _, g := range rep.Groups {
-		if g.Resolved || g.Diff == "" || g.Target == "" || g.Sessions < MinSessions {
+		if g.Resolved || g.Diff == "" || g.Target == "" {
+			continue
+		}
+		// A proposal is promoted once it recurs across MinSessions distinct
+		// sessions, or — even from a single session — once it is strongly enough
+		// grounded (AS-138). A weakly grounded one-session fact still waits.
+		if g.Sessions < MinSessions && g.Confidence < HighConfidence {
 			continue
 		}
 		if led != nil && led.Suppressed(Key(g.Target, g.Diff), now) {
@@ -79,6 +101,10 @@ func Build(rep skillrollup.Report, led *Ledger, now time.Time) []Proposal {
 			Edit:     g.Diff,
 			Sessions: g.Sessions,
 			Examples: g.Examples,
+			// A finding that passed the gate with fewer than MinSessions distinct
+			// sessions can only have been promoted on confidence, so this both
+			// matches the field's doc and stays a single source of truth.
+			HighConfidence: g.Sessions < MinSessions,
 		})
 	}
 	return out
@@ -101,6 +127,9 @@ func Render(props []Proposal) string {
 		fmt.Fprintf(&b, "  %d. %s\n", p.Index, p.Summary)
 		fmt.Fprintf(&b, "     %s: %s\n", p.Target, p.Edit)
 		ev := "seen across " + render.Count(p.Sessions, "session")
+		if p.HighConfidence {
+			ev = "high-confidence single fact"
+		}
 		if len(p.Examples) > 0 {
 			ev += " — e.g. " + strings.Join(p.Examples, ", ")
 		}

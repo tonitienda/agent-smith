@@ -256,6 +256,10 @@ func (d *Detector) finding(c candidate) subagent.Finding {
 		Kind:    FindingKind,
 		Summary: c.summary(),
 		Detail:  c.evidence(),
+		// The count of failed prior attempts is the fact's grounding strength: the
+		// more the agent flailed before settling, the more durable the fact and the
+		// more confident we are it is worth persisting (AS-138).
+		Confidence: len(c.Failed),
 		Proposal: &subagent.Edit{
 			Target:      target,
 			Description: c.diff(),
@@ -638,20 +642,31 @@ func detectConfigKeys(slice []schema.Block) []candidate {
 		// A success: a var named by a *related* prior failure (the same command
 		// re-run after the var was set) is now resolved. An unrelated success (an
 		// `ls`/`git status` mid-flail) must not orphan a pending key, so it stays
-		// in the queue for a later related success — mirroring detectCommands.
+		// in the queue for a later related success — mirroring detectCommands. All
+		// failures naming the same var aggregate into one candidate (in first-seen
+		// order, kept deterministic) so its confidence reflects the full flailing
+		// rather than being capped at one by the per-fingerprint de-dupe (AS-138).
 		var remaining []miss
+		var names []string
+		failed := map[string][]string{}
 		for _, m := range pending {
 			if shares(tokens(cmd), tokens(m.cmd)) {
-				out = append(out, candidate{
-					Kind:        ConfigFact,
-					Value:       m.name,
-					Fingerprint: configFingerprint(m.name),
-					Skill:       skillOf(b),
-					Failed:      []string{m.cmd},
-				})
+				if _, ok := failed[m.name]; !ok {
+					names = append(names, m.name)
+				}
+				failed[m.name] = append(failed[m.name], m.cmd)
 			} else {
 				remaining = append(remaining, m)
 			}
+		}
+		for _, name := range names {
+			out = append(out, candidate{
+				Kind:        ConfigFact,
+				Value:       name,
+				Fingerprint: configFingerprint(name),
+				Skill:       skillOf(b),
+				Failed:      failed[name],
+			})
 		}
 		pending = remaining
 	}

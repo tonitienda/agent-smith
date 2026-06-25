@@ -41,6 +41,27 @@ func TestBuildPromotesOnlyRecurringFindings(t *testing.T) {
 	}
 }
 
+func TestBuildPromotesHighConfidenceSingleFact(t *testing.T) {
+	strong := grp("found after much flailing", 1)
+	strong.Confidence = HighConfidence
+	weak := grp("weakly grounded one-off", 1)
+	weak.Confidence = HighConfidence - 1
+
+	props := Build(report(strong, weak), NewMemLedger(), time.Now())
+	if len(props) != 1 {
+		t.Fatalf("want 1 proposal (only the high-confidence single fact), got %d", len(props))
+	}
+	if props[0].Summary != "found after much flailing" {
+		t.Fatalf("wrong proposal promoted: %q", props[0].Summary)
+	}
+	if !props[0].HighConfidence {
+		t.Fatal("single-session promotion must be flagged HighConfidence")
+	}
+	if out := Render(props); !strings.Contains(out, "high-confidence single fact") {
+		t.Fatalf("render should explain the single-session promotion:\n%s", out)
+	}
+}
+
 func TestBuildSkipsResolvedTargetlessAndEditless(t *testing.T) {
 	resolved := grp("already applied", 3)
 	resolved.Resolved = true

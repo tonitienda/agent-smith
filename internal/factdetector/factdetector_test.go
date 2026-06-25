@@ -79,6 +79,11 @@ func TestDetectsRediscoveredCommand(t *testing.T) {
 	if !strings.Contains(f.Detail, "npm test") || !strings.Contains(f.Detail, "make tests") {
 		t.Fatalf("evidence does not cite the failed attempts: %q", f.Detail)
 	}
+	// Confidence is the count of failed prior attempts justifying the fact (AS-138):
+	// two failures here.
+	if f.Confidence != 2 {
+		t.Fatalf("confidence = %d, want 2 (the failed attempts)", f.Confidence)
+	}
 }
 
 // A success with no related flailing is not a rediscovered fact (precision: a
@@ -270,6 +275,34 @@ func TestDetectsRediscoveredConfigKey(t *testing.T) {
 	}
 	if !strings.Contains(cfg.Detail, "go run ./cmd/server") {
 		t.Fatalf("config evidence lost the failing command: %q", cfg.Detail)
+	}
+}
+
+// Regression (AS-138): multiple failures naming the same var aggregate into one
+// candidate, so the config fact's confidence reflects the full flailing rather
+// than being capped at 1 by the per-fingerprint de-dupe.
+func TestConfigConfidenceAggregatesFailures(t *testing.T) {
+	blocks := []schema.Block{
+		shellCall("c1", "go run ./cmd/server", ""),
+		shellResultText("c1", "[exit code 1]\nfatal: DATABASE_URL is not set", true),
+		shellCall("c2", "go test ./cmd/server/...", ""),
+		shellResultText("c2", "[exit code 1]\nDATABASE_URL is required", true),
+		shellCall("c3", "go run ./cmd/server", ""),
+		shellResult("c3", false),
+	}
+	d := New(nil, NewMemLedger())
+	got := d.Teardown(subagent.Scope{}, blocks).Findings
+	var cfg *subagent.Finding
+	for i := range got {
+		if strings.Contains(got[i].Summary, "required config") {
+			cfg = &got[i]
+		}
+	}
+	if cfg == nil {
+		t.Fatalf("no config finding among %+v", got)
+	}
+	if cfg.Confidence != 2 {
+		t.Fatalf("config confidence = %d, want 2 (both failed attempts aggregated)", cfg.Confidence)
 	}
 }
 

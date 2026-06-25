@@ -1,7 +1,7 @@
 ---
 id: AS-138
-title: /improve high-confidence single-fact threshold + efficacy measurement
-status: ready-to-implement
+title: /improve high-confidence single-fact threshold
+status: done
 github_issue: null
 depends_on: [AS-058, AS-048, AS-057]
 area: insights-wedge
@@ -29,23 +29,34 @@ yet:
    rediscovered-fact detector (AS-048/AS-106) through the rollup record so a
    single high-confidence fact can be promoted to a proposal immediately.
 
-2. **Efficacy measurement (AS-058 AC 4).** "Applying proposals reduces the
-   measured friction in subsequent sessions" needs longitudinal data: tie an
-   applied `/improve` proposal to the later AS-030/AS-057 friction metrics for the
-   same project and show whether friction dropped. Surface it in `/stats` or
-   `/insights`.
+The second deferred piece — **efficacy measurement** (AS-058 AC 4) — was a
+substantially larger, longitudinal concern (linking applied proposals to later
+friction metrics) and was spun out to **AS-139** so this ticket stays a focused,
+deterministic confidence-threshold change.
 
-Keep both additive (D2) and deterministic where possible.
+Keep additive (D2) and deterministic where possible.
 
 ## Acceptance criteria
 
-- [ ] A single rediscovered fact above a confidence threshold yields a proposal
+- [x] A single rediscovered fact above a confidence threshold yields a proposal
       without waiting for a second session; low-confidence single facts still wait
       for recurrence.
-- [ ] The confidence signal flows through the persisted rollup record additively
+- [x] The confidence signal flows through the persisted rollup record additively
       (an older reader ignores it).
-- [ ] Applied proposals are linked to subsequent-session friction metrics and a
-      before/after delta is shown in `/stats` or `/insights`.
+- [ ] ~~Applied proposals linked to subsequent-session friction metrics~~ — spun
+      out to **AS-139** (efficacy measurement).
+
+## Implementation notes
+
+- The confidence signal is the rediscovered-fact detector's **count of failed
+  prior attempts** that justify a fact (`len(candidate.Failed)`): the more the
+  agent flailed before settling, the more durable the fact. It threads additively
+  through `subagent.Finding.Confidence` → `skillrollup.Record.confidence` (json,
+  unknown-field-tolerant) → `skillrollup.Group.Confidence` (max across the group).
+- `improve.HighConfidence = 3`: a single-session finding grounded by ≥3 failed
+  attempts is proposed immediately; weaker single-session facts still wait for
+  `MinSessions` recurrence. The proposal renders "high-confidence single fact" so
+  the grounding for a one-session promotion is legible.
 
 ## Dependencies
 
