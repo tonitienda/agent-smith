@@ -1732,6 +1732,12 @@ func (s *chatSession) improveApply(args []string) (command.Output, error) {
 	rollup := s.rollup
 	wd := s.wd
 	s.mu.Unlock()
+	// improveProposal already returned a proposal, which it only does with a
+	// non-nil rollup — but guard defensively (matching skillsApply) so a future
+	// refactor that reorders the checks can never deref a nil store.
+	if rollup == nil {
+		return command.Output{Text: "No cross-session findings store — nothing to apply."}, nil
+	}
 	path, ok := resolveApplyTarget(wd, p.Target)
 	if !ok {
 		return command.Output{Text: fmt.Sprintf("Refusing to apply: target %q escapes the working directory.", p.Target)}, nil

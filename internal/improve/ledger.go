@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -142,6 +143,9 @@ func (l *Ledger) persist() error {
 	for _, d := range l.decisions {
 		decisions = append(decisions, d)
 	}
+	// Sort by key so the persisted file is byte-stable across saves (map iteration
+	// order is random) — deterministic writes keep diffs and tests reproducible.
+	sort.Slice(decisions, func(i, j int) bool { return decisions[i].Key < decisions[j].Key })
 	data, err := json.Marshal(ledgerFile{Decisions: decisions})
 	if err != nil {
 		return fmt.Errorf("marshal improve ledger: %w", err)
