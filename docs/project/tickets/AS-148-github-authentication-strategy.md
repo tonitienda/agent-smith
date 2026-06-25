@@ -5,7 +5,7 @@ status: needs-clarification
 area: integrations
 priority: P2
 depends_on: [AS-144, AS-147]
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-148 · GitHub authentication strategy
