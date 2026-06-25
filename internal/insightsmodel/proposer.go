@@ -66,6 +66,13 @@ var _ insights.Proposer = (*Proposer)(nil)
 // measured dashboard untouched — and surfaces an error only when the turn itself
 // fails to run.
 func (m *Proposer) Propose(ctx context.Context, r insights.Report) ([]insights.Suggestion, float64, error) {
+	// Defensive: an unconfigured/unresolved provider (e.g. providers[name] == nil
+	// at the wiring site) must degrade to the measured-first dashboard, never panic
+	// the session-end teardown. router is a value type, so a zero policy is safe —
+	// Resolve falls back to baseModel.
+	if m == nil || m.p == nil {
+		return nil, 0, nil
+	}
 	model := m.router.Resolve(routing.Cheap, m.p.Name(), m.baseModel)
 
 	req := provider.Request{

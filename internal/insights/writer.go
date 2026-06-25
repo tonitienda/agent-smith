@@ -2,10 +2,17 @@ package insights
 
 import (
 	"context"
+	"time"
 
 	"github.com/tonitienda/agent-smith/internal/subagent"
 	"github.com/tonitienda/agent-smith/schema"
 )
+
+// modelPassTimeout bounds the AS-109 model-assisted pass so a hung provider or
+// network can never block session-end teardown (which freezes the CLI/TUI on
+// exit). On timeout the proposer's context is cancelled and the writer degrades to
+// the measured-first findings, which already rendered for free.
+const modelPassTimeout = 10 * time.Second
 
 // Name is the built-in insights-writer sub-agent's stable registry name (Appendix
 // C.3 `insights_writer`).
@@ -108,7 +115,9 @@ func (w *Writer) Teardown(scope subagent.Scope, slice []schema.Block) subagent.R
 	// failing the teardown; the dashboard already rendered for free.
 	spent := 0.0
 	if w.proposer != nil {
-		proposed, cost, err := w.proposer.Propose(context.Background(), rep)
+		ctx, cancel := context.WithTimeout(context.Background(), modelPassTimeout)
+		proposed, cost, err := w.proposer.Propose(ctx, rep)
+		cancel()
 		if err == nil {
 			spent = cost
 			for _, s := range proposed {
