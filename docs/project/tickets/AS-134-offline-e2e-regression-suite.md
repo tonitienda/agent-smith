@@ -1,7 +1,7 @@
 ---
 id: AS-134
 title: Offline E2E regression suite over recorded providers, TUI, and append-only logs
-status: ready-to-implement
+status: done
 github_issue: 414
 depends_on: [AS-005, AS-018, AS-021, AS-024, AS-046, AS-119, AS-120, AS-133]
 area: quality
@@ -46,16 +46,36 @@ ledger, and append-only JSONL session artifacts.
 
 ## Acceptance criteria
 
-- [ ] The full E2E suite runs offline in CI with no vendor API keys and no live network calls.
-- [ ] Scenarios fail with actionable diffs for transcript, event-log, or TUI-model drift.
-- [ ] At least one scenario includes multiple subagents and verifies per-child cost/itemized
+- [x] The full E2E suite runs offline in CI with no vendor API keys and no live network calls.
+- [x] Scenarios fail with actionable diffs for transcript, event-log, or TUI-model drift.
+- [x] At least one scenario includes multiple subagents and verifies per-child cost/itemized
       attribution when AS-119/AS-120 are present.
-- [ ] At least one scenario includes a large tool request/response pair that would be
+- [x] At least one scenario includes a large tool request/response pair that would be
       impractical to exercise repeatedly against live APIs.
-- [ ] The suite documents how to refresh goldens intentionally and how to distinguish an
+- [x] The suite documents how to refresh goldens intentionally and how to distinguish an
       intended schema evolution from a regression.
-- [ ] The new command is wired into an appropriate CI job or documented as a required local
+- [x] The new command is wired into an appropriate CI job or documented as a required local
       pre-release gate if it is too slow for every pull request.
+
+## Implementation notes
+
+- Lives in `internal/e2e` as plain Go tests, so it runs inside `make test` and CI's existing
+  `test` job — no new workflow, build tag, or env var. The provider turns are authored inline
+  as Anthropic Messages SSE (`sse.go`) and replayed by the AS-133 `conformance.RecordedServer`,
+  which validates each request in order; there are no golden files to re-record.
+- `harness.go` wires the real composition pieces — `session.Store` (disk-backed JSONL),
+  `loop.Engine`, built-in tool runtime, `cost` accounting, and `delegate.Spawner` for the
+  `task` tool — so scenarios exercise production wiring, not a stub.
+- Scenarios (`e2e_test.go`): large write-arg + read-result single-agent loop; parallel
+  independent tool calls; denied-permission recovery; two-child delegation with per-child cost
+  ledger and sidechain usage; and a resume/rehydration check asserting no prior event mutates
+  and projection is deterministic. TUI-facing assertions read the face-agnostic `loop.UIEvent`
+  stream (tool cards, turn lifecycle) — no terminal required.
+- Vendor scope: scenarios drive the Anthropic SSE surface (single format keeps scripted turns
+  readable); OpenAI/compatible *normalization* is already covered by the AS-012 conformance
+  suite, so this suite focuses on whole-session behaviour over one recorded surface.
+- Docs: [docs/testing/offline-e2e-suite.md](../../testing/offline-e2e-suite.md), referenced from
+  the testing strategy and the manual-test campaign (row 3.4a).
 
 ## Dependencies
 

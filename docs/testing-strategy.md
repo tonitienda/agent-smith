@@ -22,6 +22,7 @@ Good examples in this codebase:
 
 - `cmd/smith/main_test.go` builds the production command tree with in-memory stdin/stdout/stderr and verifies CLI behavior through the real router wiring instead of calling tiny parser helpers directly.
 - `internal/provider/conformance` replays recorded provider HTTP fixtures through real provider adapters and compares normalized semantics shared by all providers.
+- `internal/e2e` drives whole scripted sessions (loop, tools, log, cost, sub-agents) against the recorded vendor simulators and asserts on the transcript, the face-agnostic UIEvent stream, cost/ledger, and the on-disk JSONL — the offline end-to-end suite ([offline-e2e-suite.md](testing/offline-e2e-suite.md), AS-134). It runs inside `make test` with no keys or network.
 - `internal/eventlog/fuzz_test.go` writes blocks to a real JSONL log, closes it, reopens it, and checks the append/reload durability contract.
 - `internal/schemaguard` checks committed schema descriptors and golden session documents, which protects the real on-disk compatibility contract rather than a single helper function.
 

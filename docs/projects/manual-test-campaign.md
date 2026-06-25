@@ -94,7 +94,7 @@ Covers AS-008 through AS-012 and AS-092.
 | 3.2 | With `OPENAI_API_KEY` or OpenAI-compatible endpoint config, run the same one-turn task. | The same face-level events appear despite provider differences. |
 | 3.3 | Repeat a prompt with cache-eligible context. | Prompt-cache usage/savings appear in `/cost` when the provider reports them. |
 | 3.4 | Run provider conformance tests from the quality gate. | Recorded fixtures pass offline; no live network is needed for default tests. |
-| 3.4a | Once AS-133–AS-135 land, run the recorded-provider simulator and offline E2E suite against redacted fixtures. | Fake Anthropic/OpenAI-compatible servers replay captures deterministically; TUI-facing state and append-only JSONL assertions pass without burning tokens. Until then, these tickets remain **Not implemented**. |
+| 3.4a | Run the offline E2E suite: `go test ./internal/e2e/...` (also covered by `make test`). | Scripted whole-session scenarios (large tool payloads, parallel calls, denied-permission recovery, two-child delegation, resume) drive the recorded vendor simulators and assert transcript, UIEvent stream, cost/ledger, and append-only JSONL — deterministic, no keys, no network. (AS-133/AS-134; see [offline-e2e-suite.md](../testing/offline-e2e-suite.md)) |
 | 3.5 | `smith auth set anthropic` (paste a key at the hidden prompt), then `smith auth status`. | Key stored in the OS keychain, never a plaintext file; status shows `set (keychain)` without revealing the value. (AS-017) |
 | 3.6 | Export `ANTHROPIC_API_KEY` and re-run `smith auth status anthropic`. | Reports `set (env ANTHROPIC_API_KEY)` — the env var overrides the stored key. (AS-017) |
 | 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) |
@@ -314,7 +314,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-118 | Root help ignores `--output json` | Implemented (`done`) |
 | AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
 | AS-133 | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | Not implemented (`ready-to-implement`) |
-| AS-134 | Offline E2E regression suite over recorded providers, TUI, and append-only logs | Not implemented (`ready-to-implement`) |
+| AS-134 | Offline E2E regression suite over recorded providers, TUI, and append-only logs | Implemented (`done`) — `internal/e2e`, runs in `make test`; see row 3.4a |
 | AS-135 | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | Not implemented (`ready-to-implement`) |
 
 ## Current local smoke pass (2026-06-22)
