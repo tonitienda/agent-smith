@@ -1,11 +1,11 @@
 ---
 id: AS-144
 title: Orchestrator architecture and product boundaries
-status: needs-clarification
+status: ready-to-implement
 area: orchestrator
 priority: P2
 depends_on: []
-source: docs/projects/smith-orchestrator-dogfood-prd.md
+source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
 # AS-144 · Orchestrator architecture and product boundaries
@@ -21,6 +21,7 @@ Define the orchestrator-first architecture for Smith dogfood automation. This re
 - [ ] Deployment modes are separated: local daemon, private VPC daemon, remote workers/sandboxes, and future hosted execution.
 - [ ] Non-goals explicitly include Smith editing its own job specs, jobs creating jobs, prompt-controlled labels/merges, and ignoring repository protection rules.
 - [ ] Open questions from the PRD are triaged into follow-up decisions or scoped tickets.
+- [ ] Downstream tickets are marked ready or kept needs-clarification based on the ADR output.
 
 ## Dependencies
 
