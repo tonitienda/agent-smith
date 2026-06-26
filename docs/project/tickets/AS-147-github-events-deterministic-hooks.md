@@ -4,7 +4,7 @@ title: GitHub event ingestion and deterministic hooks
 status: needs-clarification
 area: integrations
 priority: P2
-depends_on: [AS-145, AS-146]
+depends_on: [AS-160, AS-161]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -25,4 +25,4 @@ Add the GitHub event and deterministic hook layer needed for Smith to react to l
 
 ## Dependencies
 
-[AS-145, AS-146]
+[AS-160, AS-161]

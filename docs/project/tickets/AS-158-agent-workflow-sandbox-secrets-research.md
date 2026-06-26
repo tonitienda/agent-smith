@@ -4,7 +4,7 @@ title: Competitive agent workflow, sandbox, and secrets research spike
 status: ready-to-implement
 area: research
 priority: P2
-depends_on: [AS-144]
+depends_on: [AS-159]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,4 @@ Research how current agent workflow systems handle always-on jobs, repository au
 
 ## Dependencies
 
-[AS-144]
+[AS-159]

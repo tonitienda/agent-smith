@@ -226,11 +226,11 @@ Desired properties:
 
 ## 7. Ticket wave
 
-This PRD is decomposed into AS-144 through AS-158:
+This PRD is decomposed into the orchestrator wave below. The architecture, DSL, and daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by merged keychain/archtest tickets) to AS-159–AS-161:
 
-1. AS-144 — Orchestrator architecture and product boundaries.
-2. AS-145 — Job specification and workflow DSL.
-3. AS-146 — Daemon, scheduler, and SQLite run store.
+1. AS-159 — Orchestrator architecture and product boundaries.
+2. AS-160 — Job specification and workflow DSL.
+3. AS-161 — Daemon, scheduler, and SQLite run store.
 4. AS-147 — GitHub event ingestion and deterministic hooks.
 5. AS-148 — GitHub authentication strategy.
 6. AS-149 — PR lifecycle automation.

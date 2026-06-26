@@ -4,7 +4,7 @@ title: Smith event-log integration for orchestrated runs
 status: needs-clarification
 area: observability
 priority: P2
-depends_on: [AS-146]
+depends_on: [AS-161]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,4 @@ Ensure every orchestrated job/run is persisted as a normal Smith append-only ses
 
 ## Dependencies
 
-[AS-146]
+[AS-161]

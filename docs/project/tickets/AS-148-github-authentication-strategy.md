@@ -4,7 +4,7 @@ title: GitHub authentication strategy
 status: needs-clarification
 area: integrations
 priority: P2
-depends_on: [AS-144, AS-147]
+depends_on: [AS-159, AS-147]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,4 @@ Decide and document how the first dogfood orchestrator receives limited GitHub a
 
 ## Dependencies
 
-[AS-144, AS-147]
+[AS-159, AS-147]

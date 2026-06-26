@@ -4,7 +4,7 @@ title: Private VPC deployment
 status: needs-clarification
 area: deployment
 priority: P2
-depends_on: [AS-146, AS-148, AS-154]
+depends_on: [AS-161, AS-148, AS-154]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,4 @@ Define the first always-on private deployment for the Smith orchestrator so dogf
 
 ## Dependencies
 
-[AS-146, AS-148, AS-154]
+[AS-161, AS-148, AS-154]
