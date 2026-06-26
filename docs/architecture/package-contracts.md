@@ -40,6 +40,17 @@ The enforced contracts (guard test) are the corners most prone to drift:
 - the loop must not import face packages;
 - leaf primitives (`internal/render`, `internal/streamio`) must not import any other package in this module.
 
+The blanket form of "dependencies point inward" is enforced too
+(`internal/archtest/inward_core_test.go`, AS-146): every first-party package
+that is not in the orchestration/face/composition-root layer
+(`orchestrationAndFacePackages` — the loop, `benchmark`, `delegate`, the
+analytics consumers `insights`/`insightsmodel`/`stats`/`statsindex`/`improve`/
+`skillrollup`, the faces `tui`/`serve`, and the roots `smithapp`/`cmd/*`/`e2e`)
+must import nothing in that layer. Per-package guards in `layering_test.go` catch
+the most likely regressions; this guard closes the open-ended case and covers new
+inward packages automatically. A new orchestration/face package is the one
+maintenance point — append it to the allow-list.
+
 ## Where new code goes
 
 - **A new command** (slash or subcommand): the command's semantics live in
