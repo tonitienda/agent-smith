@@ -119,7 +119,8 @@ var secretServiceUnreachableSignatures = []string{
 	"dbus_session_bus_address",      // session bus address unset
 	"$display",                      // autolaunch needs $DISPLAY
 	"connection refused",            // dial to the bus socket refused
-	"no such file or directory",     // bus socket path missing
+	"dial unix",                     // dial to the bus socket failed (e.g. missing socket path)
+	"dbus socket",                   // failed to open the D-Bus socket
 }
 
 // isSecretServiceUnreachable reports whether err is one of the recognized
