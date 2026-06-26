@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/tonitienda/agent-smith/internal/initscaffold"
 	"github.com/tonitienda/agent-smith/internal/rewind"
 )
 
@@ -69,5 +73,40 @@ func TestInitFlagsDispatchThroughContract(t *testing.T) {
 	}
 	if _, err := runChatCommand(t, ctl, "init", "--bogus"); err == nil {
 		t.Error("/init --bogus: want a usage error, got nil")
+	}
+}
+
+// stubEnricher returns a fixed prose section, standing in for the model-backed
+// enricher so the --describe dispatch can be tested offline.
+type stubEnricher struct{}
+
+func (stubEnricher) Enrich(context.Context, initscaffold.Facts) ([]initscaffold.ProseSection, error) {
+	return []initscaffold.ProseSection{{Title: "Overview", Body: "A widget service."}}, nil
+}
+
+// AS-087: /init --describe runs the enrichment pass, so the staged preview gains
+// the model-authored prose section on top of the deterministic scaffold. Plain
+// /init does not invoke the enricher.
+func TestInitDescribeAddsProse(t *testing.T) {
+	ctl := newTestController(t)
+	if err := os.WriteFile(filepath.Join(ctl.wd, "go.mod"), []byte("module x\n\ngo 1.22\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctl.setInitEnricher(stubEnricher{})
+
+	out, err := runChatCommand(t, ctl, "init", "--describe")
+	if err != nil {
+		t.Fatalf("/init --describe: %v", err)
+	}
+	if !strings.Contains(out.Text, "## Overview") || !strings.Contains(out.Text, "A widget service.") {
+		t.Errorf("--describe preview missing prose:\n%s", out.Text)
+	}
+
+	plain, err := runChatCommand(t, ctl, "init")
+	if err != nil {
+		t.Fatalf("/init: %v", err)
+	}
+	if strings.Contains(plain.Text, "## Overview") {
+		t.Errorf("plain /init should not invoke the enricher:\n%s", plain.Text)
 	}
 }

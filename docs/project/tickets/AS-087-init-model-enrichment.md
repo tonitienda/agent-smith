@@ -1,7 +1,7 @@
 ---
 id: AS-087
 title: /init model-assisted draft enrichment
-status: ready-to-implement
+status: done
 github_issue: 157
 depends_on: [AS-039]
 area: commands
@@ -30,13 +30,26 @@ the same `/init` preview → `--apply` flow.
 
 ## Acceptance criteria
 
-- [ ] Enrichment is opt-in (a flag, e.g. `/init --describe`) and off by default,
-      so the base `/init` stays deterministic and free.
-- [ ] The model call uses the cheap/summarizer tier and is budget-capped.
-- [ ] The deterministic build/test/lint section is never replaced by model
-      output — enrichment only adds prose sections.
-- [ ] Generated prose still flows through the diff preview + confirm; nothing is
-      written without review.
+- [x] Enrichment is opt-in (`/init --describe`) and off by default, so the base
+      `/init` stays deterministic and free.
+- [x] The model call uses the cheap routing tier (`routing.Cheap`) and is
+      budget-capped (`maxOutputTokens` bounds the reply, README sample bounded to
+      `maxReadmeBytes`).
+- [x] The deterministic build/test/lint section is never replaced by model
+      output — enrichment only appends prose sections after the deterministic ones.
+- [x] Generated prose still flows through the diff preview + confirm; `--describe`
+      stages it into the same `/init` preview → `--apply` flow, nothing is written
+      without review.
+
+## Implementation notes (done)
+
+- Seam `initscaffold.Enricher` + `ScanWithEnrichment` keep `internal/initscaffold`
+  deterministic and provider-free; the provider-backed enricher lives in
+  `internal/initenrich` (mirrors `internal/insightsmodel`) and is wired in
+  `cmd/smith` (`setInitEnricher`) for both the TUI and the headless CLI.
+- The model is handed the deterministic facts (commands, layout, README sample)
+  and told the commands/layout are already documented, so prose adds rather than
+  repeats; it returns level-2 Markdown sections, capped at `maxSections`.
 
 ## Dependencies
 

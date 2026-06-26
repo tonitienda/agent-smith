@@ -16,6 +16,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/command"
 	"github.com/tonitienda/agent-smith/internal/config"
 	"github.com/tonitienda/agent-smith/internal/cost"
+	"github.com/tonitienda/agent-smith/internal/initenrich"
 	"github.com/tonitienda/agent-smith/internal/insightsmodel"
 	"github.com/tonitienda/agent-smith/internal/provider"
 	"github.com/tonitienda/agent-smith/internal/routing"
@@ -240,6 +241,9 @@ func readonlyController(override string) (*chatSession, func(), error) {
 			proposer := insightsmodel.New(p, routingCfg, model, pricing)
 			_, _, modelEnabled := insightsModelLayer(cfg, proposer, io.Discard)
 			ctl.setInsightsRetro(proposer, modelEnabled)
+			// AS-087: wire the opt-in `smith init --describe` enrichment so headless
+			// has parity with the TUI. Off unless --describe is passed.
+			ctl.setInitEnricher(initenrich.New(p, routingCfg, model))
 		}
 	}
 	return ctl, func() { _ = sess.Log.Close() }, nil
