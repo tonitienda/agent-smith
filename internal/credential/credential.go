@@ -103,13 +103,49 @@ func Resolve(getenv func(string) string, store Store, p Provider) (string, error
 // go-keyring (macOS Keychain, Linux Secret Service, Windows Credential Manager).
 type Keyring struct{}
 
+// secretServiceUnreachableSignatures are substrings of the plain errors
+// go-keyring surfaces on a *supported* platform whose secret service is not
+// actually reachable — the headless-Linux case AS-017 supports via env vars.
+// go-keyring only maps a wholly unsupported platform to ErrUnsupportedPlatform;
+// a missing D-Bus, absent `dbus-launch`, or unprovided `org.freedesktop.secrets`
+// name fall through as opaque errors, so we recognize them by signature. The set
+// is deliberately narrow: only "secret store unreachable" modes are downgraded to
+// ErrUnavailable, so a genuine backend bug still propagates verbatim (AS-144).
+var secretServiceUnreachableSignatures = []string{
+	"dbus-launch",                   // exec: "dbus-launch": executable file not found
+	"org.freedesktop.secrets",       // name was not provided by any .service files
+	"the name org.freedesktop.dbus", // bus name not provided
+	"cannot autolaunch d-bus",       // no X11 / no session bus to autolaunch
+	"dbus_session_bus_address",      // session bus address unset
+	"$display",                      // autolaunch needs $DISPLAY
+	"connection refused",            // dial to the bus socket refused
+	"dial unix",                     // dial to the bus socket failed (e.g. missing socket path)
+	"dbus socket",                   // failed to open the D-Bus socket
+}
+
+// isSecretServiceUnreachable reports whether err is one of the recognized
+// "no reachable secret service" failures that should classify as ErrUnavailable
+// rather than leak a raw D-Bus/exec error to the user.
+func isSecretServiceUnreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, sig := range secretServiceUnreachableSignatures {
+		if strings.Contains(msg, sig) {
+			return true
+		}
+	}
+	return false
+}
+
 // Get implements Store.
 func (Keyring) Get(account string) (string, error) {
 	secret, err := keyring.Get(Service, account)
 	switch {
 	case errors.Is(err, keyring.ErrNotFound):
 		return "", ErrNotFound
-	case errors.Is(err, keyring.ErrUnsupportedPlatform):
+	case errors.Is(err, keyring.ErrUnsupportedPlatform), isSecretServiceUnreachable(err):
 		return "", ErrUnavailable
 	case err != nil:
 		return "", fmt.Errorf("keychain get %q: %w", account, err)
@@ -121,7 +157,7 @@ func (Keyring) Get(account string) (string, error) {
 func (Keyring) Set(account, secret string) error {
 	err := keyring.Set(Service, account, secret)
 	switch {
-	case errors.Is(err, keyring.ErrUnsupportedPlatform):
+	case errors.Is(err, keyring.ErrUnsupportedPlatform), isSecretServiceUnreachable(err):
 		return ErrUnavailable
 	case err != nil:
 		return fmt.Errorf("keychain set %q: %w", account, err)
@@ -135,7 +171,7 @@ func (Keyring) Remove(account string) error {
 	switch {
 	case errors.Is(err, keyring.ErrNotFound):
 		return ErrNotFound
-	case errors.Is(err, keyring.ErrUnsupportedPlatform):
+	case errors.Is(err, keyring.ErrUnsupportedPlatform), isSecretServiceUnreachable(err):
 		return ErrUnavailable
 	case err != nil:
 		return fmt.Errorf("keychain delete %q: %w", account, err)

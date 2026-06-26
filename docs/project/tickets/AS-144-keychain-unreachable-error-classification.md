@@ -1,7 +1,7 @@
 ---
 id: AS-144
 title: "auth set/status leaks a raw dbus error instead of the actionable env-var hint when no Secret Service is reachable"
-status: ready-to-implement
+status: done
 github_issue: null
 type: bug
 depends_on: [AS-017]

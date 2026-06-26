@@ -128,3 +128,38 @@ func TestLookup(t *testing.T) {
 		}
 	}
 }
+
+// TestIsSecretServiceUnreachable covers the AS-144 classification: the opaque
+// errors go-keyring returns on a supported platform whose Secret Service is not
+// reachable must be recognized (so callers reach the ErrUnavailable / env-hint
+// path), while genuinely unexpected errors must propagate verbatim.
+func TestIsSecretServiceUnreachable(t *testing.T) {
+	unreachable := []string{
+		`exec: "dbus-launch": executable file not found in $PATH`,
+		`The name org.freedesktop.secrets was not provided by any .service files`,
+		`Cannot autolaunch D-Bus without X11 $DISPLAY`,
+		`dial unix /run/user/0/bus: connect: connection refused`,
+		`failed to open dbus socket: no such file or directory`,
+		`$DBUS_SESSION_BUS_ADDRESS is not set`,
+	}
+	for _, msg := range unreachable {
+		if !isSecretServiceUnreachable(errors.New(msg)) {
+			t.Errorf("isSecretServiceUnreachable(%q) = false, want true", msg)
+		}
+	}
+
+	expected := []string{
+		"keyring item too large",
+		"permission denied writing to keyring",
+		"some genuinely unexpected backend failure",
+	}
+	for _, msg := range expected {
+		if isSecretServiceUnreachable(errors.New(msg)) {
+			t.Errorf("isSecretServiceUnreachable(%q) = true, want false", msg)
+		}
+	}
+
+	if isSecretServiceUnreachable(nil) {
+		t.Error("isSecretServiceUnreachable(nil) = true, want false")
+	}
+}
