@@ -189,7 +189,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-140](AS-140-campaign-missing-scenarios.md) | Manual test campaign — add detailed scenarios for newly-completed tickets | quality | ready-to-implement | AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138 |
+| [AS-140](AS-140-campaign-missing-scenarios.md) | Manual test campaign — add detailed scenarios for newly-completed tickets | quality | done | AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138 |
 | [AS-141](AS-141-archtest-serve-face-layering.md) | Archtest: add `internal/serve` to faces forbidden list in layering contracts | quality | done | AS-098 |
 | [AS-142](AS-142-archtest-conformance-schema-guard.md) | Archtest: add layering guard for `internal/provider/conformance` and `schema` | quality | done | AS-098, AS-141 |
 | [AS-144](AS-144-keychain-unreachable-error-classification.md) | `auth set/status` leaks a raw dbus error instead of the actionable env-var hint when no Secret Service is reachable | faces | done | AS-017 |
