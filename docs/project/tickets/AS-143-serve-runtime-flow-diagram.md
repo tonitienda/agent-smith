@@ -1,7 +1,7 @@
 ---
 id: AS-143
 title: "Add smith serve JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md"
-status: needs-clarification
+status: done
 area: architecture
 priority: low
 depends_on: [AS-077]
@@ -25,23 +25,17 @@ The serve path has distinctive structure:
 - Permission prompts travel as server-initiated request/response pairs (fail-fast
   if the client cannot answer).
 
-## Open questions
+## Resolution
 
-1. **Is the diagram worth adding now?** The serve face is complete (AS-077,
-   AS-119) but the consumer-facing GUI (AS-078) and VS Code extension (AS-081)
-   are still `ready` tickets. The serve path's audience is limited until a GUI
-   lands. Alternatively, the diagram is useful for implementors of future clients
-   and for verifying the architecture during design reviews.
+1. **Worth adding now** — the diagram documents the architecture for AS-078 /
+   AS-081 client implementors and for design reviews, so it lands now rather than
+   waiting on a GUI to ship.
+2. **Scope** — the diagram covers the happy-path turn over WebSocket *and* the
+   architecturally interesting parts: server-initiated `event` notification
+   streaming, `session.start` create/resume, and `permission.ask`
+   forwarding with the fail-fast denial fallback.
 
-2. **Scope**: Should the diagram cover only the happy-path turn-over-WebSocket, or
-   also permission-prompt forwarding and session create/resume flows?
-
-## Suggested resolution
-
-If the diagram is worth adding now, implement it in `runtime-flows.md` following
-the existing mermaid `sequenceDiagram` style. The happy-path diagram is
-straightforward; permission-prompt forwarding is the architecturally interesting
-part (server-initiated request, fail-fast denial fallback).
-
-If deferred, close this ticket when AS-078 (web GUI) is `ready-to-implement` and
-reopen it there.
+Implemented as the "`smith serve` turn over JSON-RPC/WebSocket" sequence diagram
+in [`runtime-flows.md`](../../architecture/runtime-flows.md), following the
+existing mermaid `sequenceDiagram` style. Method names match `internal/serve`
+(`session.start`, `turn.run`, `event`, `permission.ask`).

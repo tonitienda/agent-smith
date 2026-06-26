@@ -200,7 +200,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | needs-clarification | AS-077 |
+| [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | done | AS-077 |
 
 ## Suggested build order
 
