@@ -111,3 +111,51 @@ sequenceDiagram
     AgentLoop-->>HeadlessRunner: Normalized UI events and final state
     HeadlessRunner->>OutputRenderer: Write result to stdout and diagnostics to stderr
 ```
+
+## `smith serve` turn over JSON-RPC/WebSocket
+
+The `internal/serve` face exposes the same face-agnostic loop to programmatic
+clients (the web GUI AS-078, the Viscose extension AS-081). Client→server calls
+are JSON-RPC requests (`session.start`, `turn.run`, `turn.cancel`,
+`session.list`); turn output streams back as server-initiated `event`
+notifications; an ask-mode permission prompt (AS-016) is a server-initiated
+`permission.ask` request that blocks the turn until the client answers, and
+fails fast if it cannot.
+
+```mermaid
+sequenceDiagram
+    actor Client as WebSocket client
+    participant Conn as serve conn
+    participant Backend as Backend (cmd/smith)
+    participant Session as serve session
+    participant AgentLoop as Agent turn engine
+    participant ToolRuntime as tool runtime
+
+    Client->>Conn: session.start (optional resume_id)
+    Conn->>Backend: Open(resumeID, conn)
+    Backend-->>Conn: Session bound to this conn
+    Conn-->>Client: reply session_id
+
+    Client->>Conn: turn.run (prompt)
+    Conn->>Session: Run(ctx, prompt) off the read loop
+    Session->>AgentLoop: Run turn over wired session
+    AgentLoop-->>Session: UI events (text, tool calls, usage)
+    Session->>Conn: Emit each UI event
+    Conn--)Client: event notification (per UI event)
+    alt tool call needs interactive approval
+        AgentLoop->>ToolRuntime: Execute gated tool call
+        ToolRuntime->>Session: Ask permission
+        Session->>Conn: AskPermission(req)
+        Conn->>Client: permission.ask request (server-initiated)
+        alt client answers
+            Client-->>Conn: permission decision
+            Conn-->>ToolRuntime: Decision (allow/deny)
+        else client cannot answer
+            Conn-->>ToolRuntime: Fail-fast deny
+        end
+        ToolRuntime-->>AgentLoop: Tool result or denial
+    end
+    AgentLoop-->>Session: Stop reason and final state
+    Session-->>Conn: Turn result
+    Conn-->>Client: reply turn.run result
+```
