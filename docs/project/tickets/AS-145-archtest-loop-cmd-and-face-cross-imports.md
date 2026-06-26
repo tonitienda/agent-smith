@@ -1,7 +1,7 @@
 ---
 id: AS-145
 title: "Archtest: guard loop↛cmd and face↛face/cmd, the documented-but-unenforced layering rules"
-status: ready-to-implement
+status: done
 area: quality
 priority: medium
 depends_on: [AS-098, AS-141]
