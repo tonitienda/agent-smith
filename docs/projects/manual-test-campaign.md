@@ -99,7 +99,7 @@ Covers AS-008 through AS-012 and AS-092.
 | 3.4a | Run the offline E2E suite: `go test ./internal/e2e/...` (also covered by `make test`). | Scripted whole-session scenarios (large tool payloads, parallel calls, denied-permission recovery, two-child delegation, resume) drive the recorded vendor simulators and assert transcript, UIEvent stream, cost/ledger, and append-only JSONL — deterministic, no keys, no network. (AS-133/AS-134; see [offline-e2e-suite.md](../testing/offline-e2e-suite.md)) |
 | 3.5 | `smith auth set anthropic` (paste a key at the hidden prompt), then `smith auth status`. | Key stored in the OS keychain, never a plaintext file; status shows `set (keychain)` without revealing the value. (AS-017) |
 | 3.6 | Export `ANTHROPIC_API_KEY` and re-run `smith auth status anthropic`. | Reports `set (env ANTHROPIC_API_KEY)` — the env var overrides the stored key. (AS-017) |
-| 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) |
+| 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) — **Bug (AS-144):** on a headless Linux box with no D-Bus, this leaks a raw `keychain set "openai": exec: "dbus-launch": …` error instead of the actionable env-var hint, and `auth status` shows `error:` instead of the `no keychain available` line. |
 
 ### 4. Tools, permissions, and transparent execution
 
@@ -370,3 +370,23 @@ Full campaign run against `make build` binary (commit 7bbf891). All automated te
 | `./smith runs work --help` | Pass | `--watch` and `--concurrency` flags documented (AS-132). |
 | `./smith run --help` shows `--queue` | Pass | Background enqueue flag documented (AS-054). |
 | Campaign stale entries | Fixed | 10 tickets corrected from "Not implemented" → "Implemented"; AS-119–AS-139 coverage matrix rows added; ticket AS-140 filed for missing detailed scenarios. |
+
+## QA campaign pass (2026-06-26)
+
+Campaign re-run against `make build` binary (commit 3b1222a). All automated
+suites pass; CLI scenarios re-checked on a headless Linux host (no D-Bus /
+Secret Service). One bug found at step 3.7 and filed as AS-144.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `make build` | Pass | Static binary builds; `./smith --version` reports `smith dev (3b1222a)`. |
+| `make test` | Pass | All packages pass, including `internal/e2e` offline suite (AS-134). |
+| `scripts/harness/arch.sh` | Pass | Architecture contract tests pass. |
+| `./smith --help --output json` + leaf `run --help --output json` | Pass | Both parse as JSON (AS-118 holds). |
+| `./smith does-not-exist` | Pass | Exits 2 (invalid usage). |
+| `./smith run "say hello"` without credentials | Pass | Exits 6; concise stderr error. |
+| `run -f` / `serve --unsafe-bind` / `runs work --watch/--concurrency` / `run --queue` help | Pass | AS-069, AS-077, AS-132, AS-054 surfaces documented. |
+| `./smith stats` / `stats all` / `stats rebuild` | Pass | Cross-session analytics; rebuild refreshes index. |
+| `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
+| `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (AS-017 step 3.6). |
+| `smith auth set openai` / `auth status` with no Secret Service | **Fail → AS-144** | Leaks raw `keychain … exec: "dbus-launch": …` error instead of the actionable `OPENAI_API_KEY` hint promised by AS-017 / step 3.7. Bug ticket AS-144 filed. |
