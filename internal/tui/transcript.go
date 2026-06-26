@@ -323,16 +323,21 @@ func (m *model) cursorSeg() int {
 }
 
 // revealedRunes returns the prefix of s.text the typewriter has exposed so far;
-// a done run (or one whose reveal has caught up) returns its whole text.
+// a done run (or one whose reveal has caught up) returns its whole text. It walks
+// the string by rune to find the byte boundary of the revealed-th rune, so the
+// render hot path (every tick and keystroke) stays allocation-free.
 func revealedRunes(s *segment) string {
-	r := []rune(s.text)
-	if s.revealed >= len(r) {
-		return s.text
-	}
 	if s.revealed <= 0 {
 		return ""
 	}
-	return string(r[:s.revealed])
+	var count int
+	for i := range s.text {
+		if count == s.revealed {
+			return s.text[:i]
+		}
+		count++
+	}
+	return s.text
 }
 
 // runeLen is the rune count of s, the unit the typewriter reveals in.
@@ -486,11 +491,10 @@ func (m *model) renderSegment(s *segment, cursor bool) string {
 		return assistantLabelStyle.Render("smith") + "\n" + body
 
 	case segReasoning:
-		body := dimStyle.Render(revealedRunes(s))
-		if s.done {
-			body = dimStyle.Render(s.text)
+		if !s.done {
+			return reasoningLabelStyle.Render("thinking") + "\n" + dimStyle.Render(revealedRunes(s)) + cursorGlyph(cursor)
 		}
-		return reasoningLabelStyle.Render("thinking") + "\n" + body + cursorGlyph(cursor)
+		return reasoningLabelStyle.Render("thinking") + "\n" + dimStyle.Render(s.text)
 
 	case segTool:
 		icon := "⋯"
