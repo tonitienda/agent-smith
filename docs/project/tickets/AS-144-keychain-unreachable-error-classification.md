@@ -63,8 +63,8 @@ its `errors.Is(err, credential.ErrUnavailable)` branch and the actionable
 - [ ] On a Linux host with no reachable Secret Service, `smith auth set openai`
       fails with the actionable `unavailableErr` message naming `OPENAI_API_KEY`
       (not a raw `dbus-launch` exec error).
-- [ ] `smith auth status` on the same host prints the `no keychain available
-      (set ANTHROPIC_API_KEY or \`smith auth set anthropic\`)` hint rather than
+- [ ] `smith auth status` on the same host prints the ``no keychain available
+      (set ANTHROPIC_API_KEY or `smith auth set anthropic`)`` hint rather than
       `error: keychain get …`.
 - [ ] `Keyring.Get/Set/Remove` classify the Secret-Service-unreachable failure
       modes (missing `dbus-launch`, D-Bus connection refused, name not provided)
