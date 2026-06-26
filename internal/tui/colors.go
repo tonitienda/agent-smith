@@ -76,4 +76,9 @@ var (
 	StyleDim          = lipgloss.NewStyle().Foreground(ColorDim)
 	StyleBanner       = lipgloss.NewStyle().Bold(true).Foreground(ColorBrand)
 	StyleDividerLogo  = lipgloss.NewStyle().Foreground(ColorDividerLogo) // splash underrule (AS-122)
+
+	// Tool-card left rule (AS-124): active while the call is in flight, idle once
+	// it settles, so the border dims as the card freezes.
+	StyleBorderActive = lipgloss.NewStyle().Foreground(ColorBorderActive)
+	StyleBorderIdle   = lipgloss.NewStyle().Foreground(ColorBorder)
 )
