@@ -1,7 +1,7 @@
 ---
 id: AS-146
 title: "Archtest: guard that inward-core packages do not import orchestration packages"
-status: needs-clarification
+status: done
 area: quality
 priority: low
 depends_on: [AS-098]
@@ -67,3 +67,21 @@ Lean toward option (b): one hand-maintained `orchestrationAndFacePackages`
 allow-list, asserting every *other* first-party package imports nothing in it.
 This is the lowest-maintenance form and auto-covers new core packages. Confirm
 before implementing.
+
+## Resolution (2026-06-26)
+
+Implemented option (b). `internal/archtest/inward_core_test.go` adds
+`TestInwardCoreDoesNotImportOrchestration`: a single hand-maintained
+`orchestrationAndFacePackages` allow-list (loop, benchmark, delegate, insights,
+insightsmodel, stats, statsindex, improve, skillrollup, the faces tui/serve, and
+the composition roots smithapp/cmd/e2e). The guard walks every first-party
+non-test source, skips the allow-listed subtrees, and fails if any *other*
+(inward) package imports something in the list. New inward packages are covered
+automatically; a new orchestration/face package is the one maintenance point —
+the failure message tells the maintainer to append it. The boundary cases from
+Open question 3 are handled for free: the intra-orchestration edges
+(`insightsmodel→insights`, `statsindex→stats`, `improve→skillrollup`,
+`stats→skillrollup`) are allowed because both ends are allow-listed, and
+`smithapp`/`cmd/*`/`e2e` are allow-listed so they may wire everything up. A QA
+audit plus a `go list` import-graph scan confirmed the invariant holds across all
+current inward packages before the guard was added.

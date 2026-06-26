@@ -194,7 +194,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-142](AS-142-archtest-conformance-schema-guard.md) | Archtest: add layering guard for `internal/provider/conformance` and `schema` | quality | done | AS-098, AS-141 |
 | [AS-144](AS-144-keychain-unreachable-error-classification.md) | `auth set/status` leaks a raw dbus error instead of the actionable env-var hint when no Secret Service is reachable | faces | done | AS-017 |
 | [AS-145](AS-145-archtest-loop-cmd-and-face-cross-imports.md) | Archtest: guard loop↛cmd and face↛face/cmd, the documented-but-unenforced layering rules | quality | done | AS-098, AS-141 |
-| [AS-146](AS-146-archtest-inward-core-no-orchestration.md) | Archtest: guard that inward-core packages do not import orchestration packages | quality | needs-clarification | AS-098 |
+| [AS-146](AS-146-archtest-inward-core-no-orchestration.md) | Archtest: guard that inward-core packages do not import orchestration packages | quality | done | AS-098 |
 
 ## Index — Architecture documentation follow-ons
 
