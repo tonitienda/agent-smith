@@ -13,8 +13,9 @@ depends_on: [AS-098]
 
 `docs/architecture/package-contracts.md` states the load-bearing invariant that
 "nothing in the inward core may import" an orchestration / consumer / face
-package (the layer of `benchmark`, `delegate`, `insights`, `insightsmodel`,
-`stats`, `statsindex`, `improve`, `skillrollup`, and the faces). A QA audit
+package (the layer of `loop`, `benchmark`, `delegate`, `insights`,
+`insightsmodel`, `stats`, `statsindex`, `improve`, `skillrollup`, the faces, and
+composition roots like `internal/smithapp` or `cmd/*`). A QA audit
 (2026-06-26) verified this holds today across ~32 inward-core packages, but it is
 **convention only** — `internal/archtest/layering_test.go` enforces the inverse
 direction per-orchestration-package (e.g. `delegate ↛ faces`) and individual
@@ -54,8 +55,9 @@ must be maintained as packages are added.
    guard worth the list maintenance, or should this ticket be closed as
    wont-fix in favour of the per-package guards plus review?
 
-3. **Boundary cases:** `internal/e2e` and `cmd/*` legitimately import
-   orchestration packages and must be excluded; `insightsmodel→insights`,
+3. **Boundary cases:** `internal/e2e`, `internal/smithapp`, and `cmd/*`
+   legitimately import orchestration packages and must be excluded;
+   `insightsmodel→insights`,
    `statsindex→stats`, `improve→skillrollup`, `stats→skillrollup` are
    intra-orchestration and allowed. Any guard must encode these exceptions.
 
