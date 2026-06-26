@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
@@ -64,6 +65,11 @@ type segment struct {
 	// rendered caches the markdown render of a done assistant segment for the
 	// current wrap width; resize clears it.
 	rendered string
+	// revealed is how many runes of a still-streaming assistant/reasoning run have
+	// been exposed by the typewriter drip (AS-123). It lags text while the turn is
+	// live and is flushed to the full length when the run is finalized; once done,
+	// it is irrelevant (the whole body renders).
+	revealed int
 }
 
 // apply folds one loop UIEvent into the transcript. Unknown kinds are ignored,
@@ -270,17 +276,67 @@ func (m *model) markPendingToolsInterrupted() {
 	}
 }
 
-// finalizeText marks the current assistant and reasoning runs complete so they
-// render as markdown, and ends the active text runs.
+// finalizeText marks every still-streaming assistant/reasoning run complete so
+// they render as markdown, and ends the active text runs. The turn is over, so
+// any typewriter drip still mid-reveal is flushed to the full text immediately —
+// no cursor or animation may linger over finished content (AS-123, §6).
 func (m *model) finalizeText() {
-	if m.curAssistant >= 0 {
-		m.segs[m.curAssistant].done = true
-	}
-	if m.curReasoning >= 0 {
-		m.segs[m.curReasoning].done = true
+	for i := range m.segs {
+		s := &m.segs[i]
+		if (s.kind == segAssistant || s.kind == segReasoning) && !s.done {
+			s.revealed = runeLen(s.text)
+			s.done = true
+		}
 	}
 	m.curAssistant, m.curReasoning = -1, -1
 }
+
+// firstHiddenSeg returns the index of the earliest still-streaming text run with
+// runes the typewriter has not revealed yet, or -1 when everything received so
+// far is on screen. Revealing in index order keeps a reasoning run from being cut
+// off when the assistant answer that follows it starts streaming.
+func (m *model) firstHiddenSeg() int {
+	for i := range m.segs {
+		s := &m.segs[i]
+		if (s.kind == segAssistant || s.kind == segReasoning) && !s.done && s.revealed < runeLen(s.text) {
+			return i
+		}
+	}
+	return -1
+}
+
+// cursorSeg returns the index of the segment that should carry the trailing block
+// cursor, or -1 when nothing is streaming (idle, between tool calls, or finished).
+// The cursor follows the run currently being revealed; once the drip catches up it
+// rests at the end of the active text run while more tokens may still arrive.
+func (m *model) cursorSeg() int {
+	if !m.busy {
+		return -1
+	}
+	if i := m.firstHiddenSeg(); i >= 0 {
+		return i
+	}
+	if m.curAssistant >= 0 {
+		return m.curAssistant
+	}
+	return m.curReasoning
+}
+
+// revealedRunes returns the prefix of s.text the typewriter has exposed so far;
+// a done run (or one whose reveal has caught up) returns its whole text.
+func revealedRunes(s *segment) string {
+	r := []rune(s.text)
+	if s.revealed >= len(r) {
+		return s.text
+	}
+	if s.revealed <= 0 {
+		return ""
+	}
+	return string(r[:s.revealed])
+}
+
+// runeLen is the rune count of s, the unit the typewriter reveals in.
+func runeLen(s string) int { return utf8.RuneCountInString(s) }
 
 // renderTranscript renders every segment into a single string for the viewport.
 // The startup header (D-TUI-10) is the first thing in the scrollback when splash
@@ -293,8 +349,9 @@ func (m *model) renderTranscript() string {
 	if m.splash {
 		parts = append(parts, m.headerView())
 	}
+	cursor := m.cursorSeg()
 	for i := range m.segs {
-		parts = append(parts, m.renderSegment(&m.segs[i]))
+		parts = append(parts, m.renderSegment(&m.segs[i], i == cursor))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -403,15 +460,20 @@ func (m model) userLabel() string {
 }
 
 // renderSegment styles one segment. Assistant bodies render as markdown once
-// done (cached per wrap width); everything else is plain styled text.
-func (m *model) renderSegment(s *segment) string {
+// done (cached per wrap width); a still-streaming text run shows only the runes
+// the typewriter has revealed, with a trailing block cursor when cursor is set
+// (AS-123). Everything else is plain styled text.
+func (m *model) renderSegment(s *segment, cursor bool) string {
 	switch s.kind {
 	case segUser:
 		return userLabelStyle.Render(m.userLabel()) + "\n" + s.text
 
 	case segAssistant:
+		if !s.done {
+			return assistantLabelStyle.Render("smith") + "\n" + revealedRunes(s) + cursorGlyph(cursor)
+		}
 		body := s.text
-		if s.done && m.renderer != nil {
+		if m.renderer != nil {
 			if s.rendered == "" {
 				if out, err := m.renderer.Render(s.text); err == nil {
 					s.rendered = strings.TrimRight(out, "\n")
@@ -424,7 +486,11 @@ func (m *model) renderSegment(s *segment) string {
 		return assistantLabelStyle.Render("smith") + "\n" + body
 
 	case segReasoning:
-		return reasoningLabelStyle.Render("thinking") + "\n" + dimStyle.Render(s.text)
+		body := dimStyle.Render(revealedRunes(s))
+		if s.done {
+			body = dimStyle.Render(s.text)
+		}
+		return reasoningLabelStyle.Render("thinking") + "\n" + body + cursorGlyph(cursor)
 
 	case segTool:
 		icon := "⋯"
@@ -468,6 +534,16 @@ func (m *model) renderSegment(s *segment) string {
 		return errorStyle.Render("! " + s.text)
 	}
 	return s.text
+}
+
+// cursorGlyph is the trailing block cursor drawn at the tail of the run currently
+// streaming (AS-123). It is the brand-green █; an empty string when this segment
+// is not the cursor target, so finished content carries no glyph.
+func cursorGlyph(on bool) string {
+	if !on {
+		return ""
+	}
+	return cursorStyle.Render("█")
 }
 
 // summarizeToolArgs renders a call's JSON arguments as a compact one-line summary
@@ -587,7 +663,10 @@ var (
 	commandLabelStyle   = StyleSlashCommand.Bold(true)
 	errorStyle          = StyleError
 	dimStyle            = StyleDim
-	statusBarStyle      = lipgloss.NewStyle().Foreground(ColorFgDefault).Background(BgStatusLine)
+	// cursorStyle paints the typewriter's trailing block cursor in brand green
+	// (AS-123, internal/tui/CLAUDE.md invariant 5: liveliness maps to real state).
+	cursorStyle    = lipgloss.NewStyle().Foreground(ColorBrand)
+	statusBarStyle = lipgloss.NewStyle().Foreground(ColorFgDefault).Background(BgStatusLine)
 	// modeBarStyle dresses the pinned Coding Mode phase tracker (AS-073) in a
 	// distinct color from the status bar so entering the mode reads as crossing a
 	// threshold (D-CODE-4), not just another status row.

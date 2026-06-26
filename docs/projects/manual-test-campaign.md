@@ -37,7 +37,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
 | AS-060 | Manual capture | Follow section "AS-060 vendor session captures": grab a handful of redacted session artifacts (offline ones first, then one cheap live turn per vendor), run each through the `schema` types, record dispositions. | Each surface has at least one redacted capture round-tripped through AS-003; fields-without-a-home are classified promote / `ext` / out-of-scope; proposed additive deltas linked to AS-003. No CI keys needed. |
 | AS-017, AS-050, AS-054, AS-057–AS-058, AS-061, AS-077, AS-110, AS-119–AS-120, AS-132–AS-133, AS-135–AS-136, AS-138 | Implemented | See detailed sections 3.5–3.7, 8.2a–8.2c, 3.4a, 5.7, 8.0, 9.3; run the CLI subcommands (`smith auth`, `smith stats`, `smith stats all`, `smith stats rebuild`, `smith improve`, `smith runs`). | Auth, stats, background runner, self-improving config, block-schema JSON, task delegation, vendor simulators, and route escalation are all implemented; see per-feature sections for details. |
-| AS-052, AS-078–AS-081, AS-111, AS-123–AS-125, AS-127–AS-131, AS-139 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
+| AS-052, AS-078–AS-081, AS-111, AS-124–AS-125, AS-127–AS-131, AS-139 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
 | AS-087 | Implemented | In a repo with a README, run `/init --describe` (or `smith init --describe`) with a provider configured, review the preview, then `/init --apply`. Compare against plain `/init`. | `--describe` adds model-authored prose sections (e.g. `## Overview`) after the deterministic Build & test / Layout sections; the commands are never restated or replaced; plain `/init` stays deterministic and prose-free; nothing is written until `--apply`. |
 | AS-137 | Implemented | With `subagents.insights_writer.model` **unset**, run a session with tool use, then `/insights` (and `smith insights describe`). The dashboard offers the on-demand retro; running `describe` adds grounded `(model)` suggestions and the spend shows in `/cost`. Set a tiny `/budget` first to see it skip with "Budget reached". | Base `/insights` stays free and offers the retro only when the model layer is off; `describe` merges only evidence-citing suggestions, charges the session budget, and is skipped (no model call) with no budget room. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
@@ -130,7 +130,7 @@ Covers AS-020, AS-025 through AS-028, AS-041, AS-042, AS-063, AS-068, AS-085, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-126.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-123, AS-126.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -141,6 +141,7 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.5 | Add a ```` ```smith-method ```` block (`phases: think, plan, implement, verify`) to the project `CLAUDE.md`/`AGENTS.md`, start a session, and `/feature`. | The phase tracker reflects the overridden phase sequence (reordered/skipped); a malformed block degrades to the default (AS-075). |
 | 6.6 | In Coding Mode, `/phase reflect`, then ask Smith to wrap up the feature (AS-076). | The reflect-artifacts skill drives three artifacts: a measurable success metric (citing the signal to read), an instrumentation proposal as a diff, and a check-back ticket draft (house `AS-NNN` format in this repo, markdown elsewhere — a draft only, no `cmd/ticket-sync`/remote issue). Smith never claims to read shipped-app runtime data. |
 | 6.7 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
+| 6.9 | Launch `./smith tui`, send a message, and watch the assistant reply land (AS-123). | The reply types in letter-by-letter (~40 ms/char) with a green `█` block cursor trailing the last character; a large token burst still reveals at the steady cadence rather than flashing all at once; the cursor disappears the instant the turn ends and finished text stays static. `--no-splash`/headless modes are unaffected. |
 | 6.8 | Launch `./smith tui` and look at the empty startup screen, then type a character and clear it (AS-122). | Logo `▞▞ AGENT SMITH`, a full-width underrule, and the `path · model · mode` context line render; the invite headline and command-hint row show below; at default (medium) Matrix intensity the rain renders behind the copy and the idle phrase replaces the hint after ~3s; the `┃` gutter caret blinks while empty and goes solid the instant you type. `--no-splash` shows nothing above the input bar. |
 
 ### 7. Configuration, memory, skills, hooks, MCP, and living-skills substrate
@@ -324,7 +325,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-120 | `task` per-child cost itemization, prompt attribution, budget | Implemented (`done`) — see step 8.0; child spend included in `/cost` |
 | AS-121 | TUI phosphor palette — centralize colour tokens and apply to all surfaces | Implemented (`done`) — visual pass; verified by running `./smith tui` |
 | AS-122 | TUI splash screen — logo, divider rule, invite text, blinking caret | Implemented (`done`) — see step 6.8 |
-| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Not implemented (`ready-to-implement`) |
+| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Implemented (`done`) — see step 6.9 |
 | AS-124 | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | Not implemented (`ready-to-implement`) |
 | AS-125 | TUI status line + mode bar visual polish — spec-compliant layout and colours | Not implemented (`ready-to-implement`) |
 | AS-126 | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | Implemented (`done`) — see step 6.8 |

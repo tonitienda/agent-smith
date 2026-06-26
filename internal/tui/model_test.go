@@ -77,6 +77,42 @@ func TestStreamingTextBecomesAssistantSegment(t *testing.T) {
 	}
 }
 
+func TestTypewriterRevealsRuneByRune(t *testing.T) {
+	m := newTestModel(t, &fakeRunner{})
+	m.busy = true // a real turn is in flight, so the block cursor is live
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnStart})
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITextDelta, Text: "Hi!"})
+
+	// The full text is buffered immediately, but nothing is revealed until a tick.
+	if m.segs[0].text != "Hi!" {
+		t.Fatalf("text = %q, want full buffered %q", m.segs[0].text, "Hi!")
+	}
+	if m.segs[0].revealed != 0 {
+		t.Fatalf("revealed = %d before any tick, want 0", m.segs[0].revealed)
+	}
+	if !strings.Contains(m.renderTranscript(), "█") {
+		t.Fatal("streaming run missing the trailing block cursor")
+	}
+
+	// Each tick exposes exactly one more rune — never skipping ahead.
+	for want := 1; want <= 3; want++ {
+		m = update(t, m, typewriterTickMsg{})
+		if m.segs[0].revealed != want {
+			t.Fatalf("revealed = %d after %d ticks, want %d", m.segs[0].revealed, want, want)
+		}
+	}
+
+	// On turn completion the buffer is flushed and the cursor is gone (§6: no
+	// animation over finished content).
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnComplete})
+	if !m.segs[0].done || m.segs[0].revealed != 3 {
+		t.Fatalf("after complete: done=%v revealed=%d, want done with revealed=3", m.segs[0].done, m.segs[0].revealed)
+	}
+	if strings.Contains(m.renderTranscript(), "█") {
+		t.Fatalf("block cursor lingers over finished content:\n%s", m.renderTranscript())
+	}
+}
+
 func TestToolEventsTrackLifecycle(t *testing.T) {
 	m := newTestModel(t, &fakeRunner{})
 	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnStart})
@@ -266,6 +302,9 @@ func TestViewRendersStatusAndTranscript(t *testing.T) {
 	m := newTestModel(t, &fakeRunner{})
 	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnStart})
 	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITextDelta, Text: "streaming reply"})
+	// The typewriter reveals text rune-by-rune on a tick; finalize the turn so the
+	// full reply is flushed and the snapshot is deterministic (AS-123).
+	m = sendEvent(t, m, loop.UIEvent{Kind: loop.UITurnComplete})
 
 	view := m.View()
 	for _, want := range []string{"anthropic", "claude-opus-4-8", "streaming reply", "ready"} {
