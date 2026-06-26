@@ -56,8 +56,8 @@ func TestLayeringContracts(t *testing.T) {
 		{
 			name:      "provider conformance suite does not import loop, faces, or composition roots",
 			pkgDir:    "internal/provider/conformance",
-			forbidden: []string{"internal/loop", "internal/tui", "internal/serve", "internal/smithapp", "cmd"},
-			reason:    "the shared conformance suite is a leaf under the provider layer (AS-012); like concrete adapters it must not reach into the loop, faces, or composition roots — and unlike adapters, smithapp does not import it, so only this guard catches a layering violation toward smithapp",
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve", "internal/smithapp", "cmd", "internal/provider/anthropic", "internal/provider/openai"},
+			reason:    "the shared conformance suite is a provider-agnostic leaf under the provider layer (AS-012); it must not reach into the loop, faces, or composition roots, nor into concrete adapters (packageImports does not recurse, so the internal/provider rule does not cover it) — and unlike adapters, smithapp does not import it, so only this guard catches a layering violation toward smithapp",
 		},
 		{
 			name:         "schema does not import module packages",
