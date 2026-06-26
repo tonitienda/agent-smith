@@ -1,7 +1,7 @@
 ---
 id: AS-142
 title: "Archtest: add layering guard for internal/provider/conformance and schema"
-status: ready-to-implement
+status: done
 area: quality
 priority: medium
 depends_on: [AS-098, AS-141]

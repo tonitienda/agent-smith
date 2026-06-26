@@ -54,6 +54,18 @@ func TestLayeringContracts(t *testing.T) {
 			reason:    "concrete providers are leaves: the loop, faces, and cmd/* wire them up, never the reverse",
 		},
 		{
+			name:      "provider conformance suite does not import loop, faces, or composition roots",
+			pkgDir:    "internal/provider/conformance",
+			forbidden: []string{"internal/loop", "internal/tui", "internal/serve", "internal/smithapp", "cmd", "internal/provider/anthropic", "internal/provider/openai"},
+			reason:    "the shared conformance suite is a provider-agnostic leaf under the provider layer (AS-012); it must not reach into the loop, faces, or composition roots, nor into concrete adapters (packageImports does not recurse, so the internal/provider rule does not cover it) — and unlike adapters, smithapp does not import it, so only this guard catches a layering violation toward smithapp",
+		},
+		{
+			name:         "schema does not import module packages",
+			pkgDir:       "schema",
+			forbidModule: true,
+			reason:       "schema is the module-root contract every layer imports; it must stay stdlib-only so no first-party dependency can point outward",
+		},
+		{
 			name:         "render primitives do not import module packages",
 			pkgDir:       "internal/render",
 			forbidModule: true,
