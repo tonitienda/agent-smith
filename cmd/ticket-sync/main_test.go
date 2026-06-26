@@ -267,3 +267,22 @@ func stubGHAPI(t *testing.T, fn func(endpoint, method string, input []byte) ([]b
 		ghAPI = old
 	}
 }
+
+func TestFilterTicketsAcceptsImplementationAndQACategories(t *testing.T) {
+	got := filterTickets([]string{
+		"docs/project/tickets/AS-123-example.md",
+		"docs/project/tickets/AS-Q-123-qa-example.md",
+		"docs/project/tickets/NOT-123-example.md",
+	})
+	want := "docs/project/tickets/AS-123-example.md\ndocs/project/tickets/AS-Q-123-qa-example.md"
+	if strings.Join(got, "\n") != want {
+		t.Fatalf("filterTickets = %q, want %q", strings.Join(got, "\n"), want)
+	}
+}
+
+func TestSplitTicketIDSupportsQACategory(t *testing.T) {
+	prefix, n, ok := splitTicketID("AS-Q-123")
+	if !ok || prefix != "AS-Q" || n != 123 {
+		t.Fatalf("splitTicketID(AS-Q-123) = %q, %d, %v; want AS-Q, 123, true", prefix, n, ok)
+	}
+}

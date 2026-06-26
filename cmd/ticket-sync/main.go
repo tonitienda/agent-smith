@@ -44,7 +44,7 @@ import (
 const ticketsDir = "docs/project/tickets"
 
 var (
-	ticketFileRe  = regexp.MustCompile(`^AS-\d+.*\.md$`)
+	ticketFileRe  = regexp.MustCompile(`^AS(?:-Q)?-\d+.*\.md$`)
 	issueLineRe   = regexp.MustCompile(`(?m)^github_issue: *null *$`)
 	linkedIssueRe = regexp.MustCompile(`(?m)^github_issue: *(\d+) *$`)
 )
@@ -70,6 +70,8 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "print planned actions without calling GitHub or editing files")
 	requireExisting := flag.Bool("require-existing", false, "fail instead of creating issues for tickets with github_issue: null")
 	skipUnlinked := flag.Bool("skip-unlinked", false, "skip (instead of creating or failing) tickets with github_issue: null")
+	checkConflicts := flag.String("check-id-conflicts", "", "fail if selected tickets reuse an ID already present at this git ref (for PR checks, pass origin/main)")
+	bumpConflicts := flag.String("bump-id-conflicts", "", "renumber selected tickets that reuse an ID already present at this git ref, and update selected depends_on references")
 	flag.Parse()
 
 	files, err := selectFiles(flag.Args(), *all, *changedSince)
@@ -83,6 +85,19 @@ func main() {
 		return
 	}
 	sort.Strings(files)
+
+	if *checkConflicts != "" {
+		if err := checkIDConflicts(*checkConflicts, files); err != nil {
+			fatal(err)
+		}
+		return
+	}
+	if *bumpConflicts != "" {
+		if err := bumpIDConflicts(*bumpConflicts, files); err != nil {
+			fatal(err)
+		}
+		return
+	}
 
 	tickets := make([]*ticket, 0, len(files))
 	for _, f := range files {
@@ -237,6 +252,150 @@ func changedFiles() ([]string, error) {
 		}
 	}
 	return paths, nil
+}
+
+func checkIDConflicts(baseRef string, files []string) error {
+	baseIDs, err := ticketIDsAtRef(baseRef)
+	if err != nil {
+		return err
+	}
+	var conflicts []string
+	for _, f := range files {
+		t, err := parseTicket(f)
+		if err != nil {
+			return fmt.Errorf("%s: %w", f, err)
+		}
+		if baseIDs[t.id] && !sameFileAtRef(baseRef, f, t.id) {
+			conflicts = append(conflicts, fmt.Sprintf("%s (%s)", t.id, f))
+		}
+	}
+	if len(conflicts) > 0 {
+		return fmt.Errorf("ticket ID(s) already exist on %s: %s; create new ticket numbers", baseRef, strings.Join(conflicts, ", "))
+	}
+	return nil
+}
+
+func bumpIDConflicts(baseRef string, files []string) error {
+	baseIDs, err := ticketIDsAtRef(baseRef)
+	if err != nil {
+		return err
+	}
+	allIDs, err := ticketIDsAtRef("HEAD")
+	if err != nil {
+		return err
+	}
+	maxByPrefix := map[string]int{}
+	for id := range allIDs {
+		prefix, n, ok := splitTicketID(id)
+		if ok && n > maxByPrefix[prefix] {
+			maxByPrefix[prefix] = n
+		}
+	}
+	renumber := map[string]string{}
+	for _, f := range files {
+		t, err := parseTicket(f)
+		if err != nil {
+			return fmt.Errorf("%s: %w", f, err)
+		}
+		if baseIDs[t.id] && !sameFileAtRef(baseRef, f, t.id) {
+			prefix, _, ok := splitTicketID(t.id)
+			if !ok {
+				return fmt.Errorf("%s: invalid ticket id %q", f, t.id)
+			}
+			maxByPrefix[prefix]++
+			renumber[t.id] = fmt.Sprintf("%s-%03d", prefix, maxByPrefix[prefix])
+		}
+	}
+	if len(renumber) == 0 {
+		_, err := fmt.Fprintln(os.Stdout, "no conflicting ticket IDs to bump")
+		return err
+	}
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		updated := string(raw)
+		for old, newID := range renumber {
+			updated = strings.ReplaceAll(updated, old, newID)
+		}
+		if err := os.WriteFile(f, []byte(updated), 0o644); err != nil {
+			return err
+		}
+		base := filepath.Base(f)
+		for old, newID := range renumber {
+			if strings.HasPrefix(base, old+"-") || base == old+".md" {
+				newPath := filepath.Join(filepath.Dir(f), newID+strings.TrimPrefix(base, old))
+				if newPath != f {
+					if err := os.Rename(f, newPath); err != nil {
+						return err
+					}
+					f = newPath
+				}
+			}
+		}
+	}
+	for old, newID := range renumber {
+		if _, err := fmt.Fprintf(os.Stdout, "renumbered %s -> %s\n", old, newID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ticketIDsAtRef(ref string) (map[string]bool, error) {
+	out, err := git("ls-tree", "-r", "--name-only", ref, "--", ticketsDir)
+	if err != nil {
+		return nil, err
+	}
+	ids := map[string]bool{}
+	for _, p := range strings.Split(out, "\n") {
+		p = strings.TrimSpace(p)
+		if p == "" || !ticketFileRe.MatchString(filepath.Base(p)) {
+			continue
+		}
+		raw, err := exec.Command("git", "show", ref+":"+p).Output()
+		if err != nil {
+			return nil, fmt.Errorf("git show %s:%s: %w", ref, p, err)
+		}
+		if id := frontmatterValue(string(raw), "id"); id != "" {
+			ids[id] = true
+		}
+	}
+	return ids, nil
+}
+
+func sameFileAtRef(ref, path, id string) bool {
+	raw, err := exec.Command("git", "show", ref+":"+path).Output()
+	return err == nil && frontmatterValue(string(raw), "id") == id
+}
+
+func frontmatterValue(content, key string) string {
+	if !strings.HasPrefix(content, "---\n") {
+		return ""
+	}
+	end := strings.Index(content[4:], "\n---\n")
+	if end < 0 {
+		return ""
+	}
+	for _, line := range strings.Split(content[4:4+end], "\n") {
+		k, v, ok := strings.Cut(line, ":")
+		if ok && k == key {
+			return strings.Trim(strings.TrimSpace(v), `"`)
+		}
+	}
+	return ""
+}
+
+func splitTicketID(id string) (string, int, bool) {
+	for _, prefix := range []string{"AS-Q", "AS"} {
+		needle := prefix + "-"
+		if strings.HasPrefix(id, needle) {
+			n, err := strconv.Atoi(strings.TrimPrefix(id, needle))
+			return prefix, n, err == nil
+		}
+	}
+	return "", 0, false
 }
 
 func parseTicket(path string) (*ticket, error) {
