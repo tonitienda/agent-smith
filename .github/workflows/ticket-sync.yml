@@ -9,8 +9,7 @@ on:
       - closed
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
   pull-requests: read
 
 jobs:
@@ -65,6 +64,10 @@ jobs:
     name: Sync changed tickets to issues
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
     steps:
       - name: Check out merged code
         uses: actions/checkout@v6
@@ -135,8 +138,8 @@ jobs:
               continue
             fi
             stem="$(basename "${file}")"
-            prefix="${stem%%-*}"
-            match="$(find docs/project/tickets -maxdepth 1 -type f -name "AS-*-${stem#*-}" | head -n 1 || true)"
+            suffix="$(printf '%s' "${stem}" | sed -E 's/^AS(-Q)?-[0-9]+//')"
+            match="$(find docs/project/tickets -maxdepth 1 -type f -name "AS*${suffix}" | head -n 1 || true)"
             if [ -n "${match}" ]; then
               tickets+=("${match}")
             else

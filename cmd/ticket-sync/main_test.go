@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -284,5 +286,78 @@ func TestSplitTicketIDSupportsQACategory(t *testing.T) {
 	prefix, n, ok := splitTicketID("AS-Q-123")
 	if !ok || prefix != "AS-Q" || n != 123 {
 		t.Fatalf("splitTicketID(AS-Q-123) = %q, %d, %v; want AS-Q, 123, true", prefix, n, ok)
+	}
+}
+
+func TestBumpIDConflictsRenumbersFileAndSelectedReferences(t *testing.T) {
+	repo := t.TempDir()
+	t.Chdir(repo)
+	runGit(t, "init")
+	runGit(t, "config", "user.name", "Test")
+	runGit(t, "config", "user.email", "test@example.invalid")
+	if err := os.MkdirAll(ticketsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	basePath := filepath.Join(ticketsDir, "AS-001-base.md")
+	writeTicketFile(t, basePath, `---
+id: AS-001
+title: Base
+status: ready-to-implement
+github_issue: 1
+---
+
+# AS-001 · Base
+`)
+	runGit(t, "add", ".")
+	runGit(t, "commit", "-m", "base")
+
+	conflictPath := filepath.Join(ticketsDir, "AS-001-new.md")
+	writeTicketFile(t, conflictPath, `---
+id: AS-001
+title: New
+status: ready-to-implement
+github_issue: null
+depends_on:
+  - AS-001
+---
+
+# AS-001 · New
+`)
+	runGit(t, "add", ".")
+	runGit(t, "commit", "-m", "conflicting ticket")
+
+	if err := bumpIDConflicts("HEAD~1", []string{conflictPath}); err != nil {
+		t.Fatalf("bumpIDConflicts returned error: %v", err)
+	}
+
+	newPath := filepath.Join(ticketsDir, "AS-002-new.md")
+	raw, err := os.ReadFile(newPath)
+	if err != nil {
+		t.Fatalf("renumbered ticket was not renamed to %s: %v", newPath, err)
+	}
+	content := string(raw)
+	for _, want := range []string{"id: AS-002", "  - AS-002", "# AS-002 · New"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("renumbered ticket missing %q:\n%s", want, content)
+		}
+	}
+	if _, err := os.Stat(conflictPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("old ticket path still exists or stat failed with unexpected error: %v", err)
+	}
+}
+
+func runGit(t *testing.T, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+func writeTicketFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
