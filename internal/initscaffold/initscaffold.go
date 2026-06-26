@@ -7,7 +7,10 @@
 // The scan is deterministic rather than model-assisted: build/test/lint commands
 // are read straight from the project's own Makefile targets and package.json
 // scripts, which names them exactly and keeps the result testable and free of
-// token cost. (Model-assisted prose enrichment is deferred — see AS-087.)
+// token cost. An optional, opt-in model-assisted pass (AS-087, ScanWithEnrichment)
+// drafts extra prose sections on top — it only ever *adds* sections, never
+// replacing the deterministic commands/layout — and the model dependency stays
+// out of this package behind the Enricher seam.
 //
 // Nothing is written by Scan; it returns a Plan the caller previews (Render) and
 // only then commits (Apply), so /init never clobbers. An existing memory file is
@@ -17,6 +20,7 @@
 package initscaffold
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +32,41 @@ import (
 
 	"github.com/tonitienda/agent-smith/internal/memory"
 )
+
+// maxReadmeBytes bounds how much of the project README the enrichment pass sees,
+// so a large README cannot blow up the prompt (and the cost) of the cheap-tier
+// model call. A few KB is plenty to ground a project summary.
+const maxReadmeBytes = 4096
+
+// Facts is the deterministic scan summary handed to an Enricher (AS-087). It is
+// everything the model-assisted pass is allowed to see: the commands and layout
+// already derived deterministically, plus a bounded README sample to ground the
+// prose. The Enricher never touches the filesystem itself — it only drafts from
+// these facts — which keeps enrichment cheap and the package provider-free.
+type Facts struct {
+	ProjectName string
+	Build       string
+	Test        string
+	Lint        string
+	Layout      []string
+	Readme      string
+}
+
+// ProseSection is one model-authored memory-file section (AS-087): a heading
+// title and its Markdown body. Scan appends these after the deterministic
+// sections; it never lets them replace the build/test/lint or layout sections.
+type ProseSection struct {
+	Title string
+	Body  string
+}
+
+// Enricher drafts optional prose sections from the deterministic scan facts
+// (AS-087). It is implemented outside this package by a cheap-tier model call
+// (internal/initenrich), so the model and routing dependencies stay in the
+// composition root and initscaffold itself remains deterministic and offline.
+type Enricher interface {
+	Enrich(ctx context.Context, f Facts) ([]ProseSection, error)
+}
 
 // maxDiffLines caps how many added lines the preview prints per file, so a large
 // generated memory file or scaffold does not flood the screen.
@@ -78,16 +117,52 @@ func (p Plan) Empty() bool { return len(p.Changes) == 0 }
 
 // Scan inspects wd and builds the proposed plan without touching the filesystem.
 // Reads go through an fs.FS rooted at wd (os.DirFS), so the inspection is bounded
-// to the project tree and testable with an in-memory filesystem.
+// to the project tree and testable with an in-memory filesystem. The scan is
+// fully deterministic — no model calls, no token cost.
 func Scan(wd string) (Plan, error) {
+	return scan(wd, nil)
+}
+
+// ScanWithEnrichment is Scan plus an optional model-assisted prose pass (AS-087):
+// after the deterministic scan it asks e to draft prose sections (project
+// summary, conventions, gotchas) from the scan facts and appends them to the
+// memory file. The deterministic build/test/lint and layout sections are always
+// produced and never replaced — enrichment only adds. A nil enricher behaves
+// exactly like Scan; an enricher that errors fails the scan so the caller can
+// fall back rather than silently dropping requested prose.
+func ScanWithEnrichment(ctx context.Context, wd string, e Enricher) (Plan, error) {
+	if e == nil {
+		return Scan(wd)
+	}
+	return scan(wd, func(fsys fs.FS, abs string) ([]section, error) {
+		secs, err := e.Enrich(ctx, gatherFacts(fsys, abs))
+		if err != nil {
+			return nil, err
+		}
+		return toSections(secs), nil
+	})
+}
+
+// scan is the shared scan core. enrich, when non-nil, computes extra prose
+// sections from the same fs.FS used for the deterministic scan; they are appended
+// after the deterministic memory sections.
+func scan(wd string, enrich func(fs.FS, string) ([]section, error)) (Plan, error) {
 	abs, err := filepath.Abs(wd)
 	if err != nil {
 		return Plan{}, fmt.Errorf("resolve working dir: %w", err)
 	}
 	fsys := os.DirFS(abs)
 
+	var extra []section
+	if enrich != nil {
+		extra, err = enrich(fsys, abs)
+		if err != nil {
+			return Plan{}, fmt.Errorf("enrich memory file: %w", err)
+		}
+	}
+
 	var p Plan
-	if err := p.planMemory(fsys, abs); err != nil {
+	if err := p.planMemory(fsys, abs, extra); err != nil {
 		return Plan{}, err
 	}
 	p.planScaffold(fsys, abs)
@@ -95,9 +170,11 @@ func Scan(wd string) (Plan, error) {
 }
 
 // planMemory proposes the memory file: it amends an existing project-level
-// AGENT/AGENTS/CLAUDE.md with any missing sections, or creates AGENT.md.
-func (p *Plan) planMemory(fsys fs.FS, wd string) error {
-	sections := memorySections(fsys)
+// AGENT/AGENTS/CLAUDE.md with any missing sections, or creates AGENT.md. extra
+// holds optional model-authored prose sections (AS-087), appended after the
+// deterministic ones so they never displace the commands/layout sections.
+func (p *Plan) planMemory(fsys fs.FS, wd string, extra []section) error {
+	sections := append(memorySections(fsys), extra...)
 
 	target, existing, err := existingMemoryFile(fsys, wd)
 	if err != nil {
@@ -219,6 +296,54 @@ type section struct {
 
 func (s section) heading() string { return "## " + s.title }
 func (s section) render() string  { return s.heading() + "\n" + s.body }
+
+// gatherFacts collects the deterministic scan summary an Enricher drafts prose
+// from (AS-087): the same commands and layout the deterministic sections use,
+// plus a bounded README sample. It reaches the filesystem so the Enricher does
+// not have to.
+func gatherFacts(fsys fs.FS, wd string) Facts {
+	build, test, lint := commands(fsys)
+	return Facts{
+		ProjectName: filepath.Base(wd),
+		Build:       build,
+		Test:        test,
+		Lint:        lint,
+		Layout:      layout(fsys),
+		Readme:      readReadme(fsys),
+	}
+}
+
+// readReadme returns a bounded sample of the project's README (the first
+// maxReadmeBytes), or "" when none exists. The sample grounds the enrichment
+// prose without sending the whole file to the model.
+func readReadme(fsys fs.FS) string {
+	for _, name := range []string{"README.md", "README", "readme.md", "Readme.md"} {
+		data, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			continue
+		}
+		if len(data) > maxReadmeBytes {
+			data = data[:maxReadmeBytes]
+		}
+		return string(data)
+	}
+	return ""
+}
+
+// toSections converts model-authored prose into memory-file sections, dropping
+// any with an empty title or body and normalizing the trailing newline so the
+// rendered section matches the deterministic ones.
+func toSections(ps []ProseSection) []section {
+	out := make([]section, 0, len(ps))
+	for _, p := range ps {
+		title := strings.TrimSpace(p.Title)
+		if title == "" || strings.TrimSpace(p.Body) == "" {
+			continue
+		}
+		out = append(out, section{title: title, body: strings.TrimRight(p.Body, "\r\n") + "\n"})
+	}
+	return out
+}
 
 // memorySections builds the memory-file sections from a deterministic scan of fsys.
 func memorySections(fsys fs.FS) []section {

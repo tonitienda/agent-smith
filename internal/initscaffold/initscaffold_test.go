@@ -1,6 +1,8 @@
 package initscaffold
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -272,5 +274,103 @@ func TestRenderEmptyPlan(t *testing.T) {
 	out := p.Render()
 	if !strings.Contains(out, "already set up") {
 		t.Errorf("unexpected empty render:\n%s", out)
+	}
+}
+
+// fakeEnricher records the facts it was handed and returns a fixed result, so the
+// enrichment plumbing (AS-087) can be tested without a model.
+type fakeEnricher struct {
+	got  Facts
+	secs []ProseSection
+	err  error
+}
+
+func (f *fakeEnricher) Enrich(_ context.Context, facts Facts) ([]ProseSection, error) {
+	f.got = facts
+	return f.secs, f.err
+}
+
+// AS-087: --describe appends model-authored prose to the created memory file
+// after the deterministic sections, and the enricher is handed the deterministic
+// scan facts (commands, layout, README sample) to ground its prose.
+func TestScanWithEnrichmentAppendsProse(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n\ngo 1.22\n")
+	write(t, dir, "cmd/x/main.go", "package main\n")
+	write(t, dir, "README.md", "# X\n\nX is a widget service.\n")
+
+	e := &fakeEnricher{secs: []ProseSection{{Title: "Overview", Body: "X is a widget service."}}}
+	plan, err := ScanWithEnrichment(context.Background(), dir, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if e.got.ProjectName != filepath.Base(dir) {
+		t.Errorf("facts.ProjectName = %q, want %q", e.got.ProjectName, filepath.Base(dir))
+	}
+	if e.got.Test != "go test ./..." {
+		t.Errorf("facts.Test = %q, want deterministic go test", e.got.Test)
+	}
+	if !strings.Contains(e.got.Readme, "widget service") {
+		t.Errorf("facts.Readme missing README sample: %q", e.got.Readme)
+	}
+
+	agent := changeFor(t, plan, "AGENT.md")
+	// Deterministic section still present and not replaced.
+	if !strings.Contains(agent.NewContent, "`go test ./...`") {
+		t.Errorf("deterministic build/test section dropped:\n%s", agent.NewContent)
+	}
+	// Prose section appended after the deterministic ones.
+	if !strings.Contains(agent.NewContent, "## Overview") || !strings.Contains(agent.NewContent, "X is a widget service.") {
+		t.Errorf("prose section not appended:\n%s", agent.NewContent)
+	}
+	if idx, pidx := strings.Index(agent.NewContent, "## Build & test"), strings.Index(agent.NewContent, "## Overview"); idx < 0 || pidx < idx {
+		t.Errorf("prose should follow deterministic sections:\n%s", agent.NewContent)
+	}
+}
+
+// A nil enricher makes ScanWithEnrichment identical to Scan (deterministic only).
+func TestScanWithEnrichmentNilIsPlainScan(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n\ngo 1.22\n")
+
+	got, err := ScanWithEnrichment(context.Background(), dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Scan(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changeFor(t, got, "AGENT.md").NewContent != changeFor(t, want, "AGENT.md").NewContent {
+		t.Error("nil enricher should match plain Scan")
+	}
+}
+
+// An enricher error fails the scan so the caller can fall back rather than
+// silently dropping the requested prose.
+func TestScanWithEnrichmentPropagatesError(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n\ngo 1.22\n")
+
+	e := &fakeEnricher{err: errors.New("boom")}
+	if _, err := ScanWithEnrichment(context.Background(), dir, e); err == nil {
+		t.Fatal("want error from failing enricher, got nil")
+	}
+}
+
+// Empty or whitespace-only prose sections are dropped, never written as blank
+// headings.
+func TestScanWithEnrichmentSkipsEmptySections(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "go.mod", "module example.com/x\n\ngo 1.22\n")
+
+	e := &fakeEnricher{secs: []ProseSection{{Title: "", Body: "no title"}, {Title: "Empty", Body: "  \n"}}}
+	plan, err := ScanWithEnrichment(context.Background(), dir, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(changeFor(t, plan, "AGENT.md").NewContent, "## Empty") {
+		t.Error("empty-body section should be dropped")
 	}
 }

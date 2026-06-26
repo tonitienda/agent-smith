@@ -15,6 +15,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/customcmd"
 	"github.com/tonitienda/agent-smith/internal/delegate"
+	"github.com/tonitienda/agent-smith/internal/initenrich"
 	"github.com/tonitienda/agent-smith/internal/insightsmodel"
 	"github.com/tonitienda/agent-smith/internal/memory"
 	"github.com/tonitienda/agent-smith/internal/personality"
@@ -191,6 +192,10 @@ func startChat(resumeID string, noSplash bool, override, intensity string) error
 	if providers[provName] != nil {
 		_, _, modelEnabled := insightsModelLayer(cfg, insightsProposer, os.Stderr)
 		ctl.setInsightsRetro(insightsProposer, modelEnabled)
+		// AS-087: wire the opt-in /init --describe model-assisted prose layer. It
+		// reaches the active provider on its cheap routing tier; off unless the user
+		// passes --describe, so the base /init stays deterministic and free.
+		ctl.setInitEnricher(initenrich.New(providers[provName], routingCfg, model))
 	}
 	// Build the Matrix personality layer (AS-053) from config for this interactive
 	// face: themed status line + role names, on by default in the TUI, with
@@ -516,15 +521,16 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	mustRegisterCommand(reg, command.Command{
 		Name:          "init",
 		Summary:       "Scaffold project config and an AGENT.md memory file",
-		Args:          "[--apply | --cancel]",
+		Args:          "[--describe] [--apply | --cancel]",
 		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
 		Flags: func(fs *flag.FlagSet) {
 			fs.Bool("apply", false, "write the staged scaffold to disk")
 			fs.Bool("cancel", false, "discard the staged scaffold")
+			fs.Bool("describe", false, "add model-authored prose sections (project summary, conventions) to the preview")
 		},
-		Examples: []string{"smith init", "smith init --apply"},
+		Examples: []string{"smith init", "smith init --describe", "smith init --apply"},
 		Run:      ctl.cmdInit,
 	})
 	mustRegisterCommand(reg, seriousCommand(ctl))

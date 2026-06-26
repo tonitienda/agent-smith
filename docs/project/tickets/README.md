@@ -121,7 +121,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-084](AS-084-rewind-file-snapshot.md) | Rewind file-system snapshot & restore | commands | done | 037 |
 | [AS-085](AS-085-auto-compact.md) | Auto-compact on approaching the window limit (config-flagged, default off) | commands | done | 038, 025, 031 |
 | [AS-086](AS-086-conservative-budget-enforcement.md) | Conservative budget enforcement — pre-turn estimate + unpriced-turn handling | cost | done | 041, 063 |
-| [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | ready | 039 |
+| [AS-087](AS-087-init-model-enrichment.md) | `/init` model-assisted draft enrichment (spun out of AS-039) | commands | done | 039 |
 | [AS-088](AS-088-subagent-loop-wiring.md) | Wire the sub-agent Runner into the turn loop lifecycle (spun out of AS-044) | subagents | done | 044 |
 | [AS-089](AS-089-smith-app-composition-root.md) | Shrink cmd/smith into a thin composition root | architecture | done | 065, 066 |
 | [AS-090](AS-090-command-semantics-catalog.md) | Consolidate slash and subcommand semantics in one command catalog | commands | done | 066 |

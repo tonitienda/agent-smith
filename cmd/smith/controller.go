@@ -224,6 +224,12 @@ type chatSession struct {
 	pendingInit    *initscaffold.Plan
 	pendingInitFor *session.Session
 
+	// initEnricher is the opt-in /init --describe model-assisted prose layer
+	// (AS-087). It reaches the active provider on its cheap routing tier to draft
+	// extra memory-file sections; nil (no provider wired) leaves /init purely
+	// deterministic and --describe a no-op beyond the plain scan.
+	initEnricher initscaffold.Enricher
+
 	// meter memo: recomputed only when the active log, its length, or the model
 	// changes, so the per-delta status-line refresh stays O(1) (mirrors AS-025).
 	meterLog   *eventlog.Log
@@ -306,6 +312,11 @@ func (s *chatSession) setInsightsRetro(retro insightsRetro, modelEnabled bool) {
 	s.retro = retro
 	s.retroModelEnabled = modelEnabled
 }
+
+// setInitEnricher installs the opt-in /init --describe model-assisted prose layer
+// (AS-087). The composition root passes a provider-backed enricher; a nil one
+// leaves /init deterministic and --describe equivalent to a plain scan.
+func (s *chatSession) setInitEnricher(e initscaffold.Enricher) { s.initEnricher = e }
 
 // setBudgetDefaults records the configured budget ceiling default and warning
 // fraction (AS-041), read from layered config at startup. A non-positive default
@@ -2008,19 +2019,38 @@ func (s *chatSession) cmdInit(ctx context.Context, _ []string) (command.Output, 
 		return s.initApply()
 	case f.Bool("cancel"):
 		return s.initCancel()
+	default:
+		return s.initPreview(ctx, f.Bool("describe"))
 	}
-	return s.initPreview()
 }
 
 // initPreview scans the working directory and stages the resulting plan for
 // confirmation. Nothing is written; the plan is keyed to the active session so a
-// /clear or /resume before --apply invalidates it.
-func (s *chatSession) initPreview() (command.Output, error) {
+// /clear or /resume before --apply invalidates it. When describe is set and a
+// model enricher is wired (AS-087), the scan adds model-authored prose sections
+// to the staged memory file; the user reviews and applies them through the same
+// preview → --apply flow.
+func (s *chatSession) initPreview(ctx context.Context, describe bool) (command.Output, error) {
 	// Scan the filesystem outside the lock — s.wd is immutable — so a slow disk
-	// scan never blocks the status-line Meter/Meta refresh that also takes s.mu.
-	plan, err := initscaffold.Scan(s.wd)
+	// scan (or a model call, under --describe) never blocks the status-line
+	// Meter/Meta refresh that also takes s.mu.
+	var (
+		plan initscaffold.Plan
+		err  error
+	)
+	if describe && s.initEnricher != nil {
+		plan, err = initscaffold.ScanWithEnrichment(ctx, s.wd, s.initEnricher)
+	} else {
+		plan, err = initscaffold.Scan(s.wd)
+	}
 	if err != nil {
 		return command.Output{}, fmt.Errorf("scan project: %w", err)
+	}
+	// --describe asked for prose but no provider is configured: say so rather than
+	// silently degrading to the deterministic scan, so the user knows why no prose
+	// appears.
+	if describe && s.initEnricher == nil {
+		plan.Skipped = append(plan.Skipped, "model-assisted enrichment (no active provider configured)")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
