@@ -87,6 +87,10 @@ type model struct {
 	textarea textarea.Model
 	viewport viewport.Model
 	spinner  spinner.Model
+	// spinnerFrame advances once per spinner.TickMsg while a turn is busy; the
+	// braille tool-card/status spinners index brailleSpinnerFrames with it so they
+	// share the one tick cadence rather than each owning a ticker (AS-124).
+	spinnerFrame int
 
 	segs         []segment
 	curAssistant int
@@ -375,6 +379,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
+		// Only advance the shared braille frame when the spinner actually accepted
+		// the tick (a non-nil follow-up cmd). A stale or mismatched TickMsg is
+		// rejected by spinner.Update with a nil cmd, so gating here keeps the card
+		// spinner in lockstep rather than racing on duplicate tick chains.
+		if cmd != nil {
+			m.spinnerFrame++
+		}
 		return m, cmd
 	}
 

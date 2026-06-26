@@ -58,6 +58,11 @@ type segment struct {
 	// (a UIToolFinished). A tool finalized only because its turn was interrupted
 	// is done-but-not-settled, so a late authoritative result can still correct it.
 	toolSettled bool
+	// toolStart stamps when the card opened; toolElapsed freezes the running
+	// duration when the call settles (AS-124). Both stay zero for rehydrated cards
+	// (AS-064), which carry no live timing, so no elapsed time is shown for them.
+	toolStart   time.Time
+	toolElapsed time.Duration
 
 	// done marks a text run finalized, so the assistant body renders as markdown.
 	done bool
@@ -93,7 +98,7 @@ func (m *model) apply(ev loop.UIEvent) {
 		if ev.Tool != nil {
 			args = summarizeToolArgs(ev.Tool.Arguments)
 		}
-		m.segs = append(m.segs, segment{kind: segTool, toolName: name, toolID: id, toolArgs: args})
+		m.segs = append(m.segs, segment{kind: segTool, toolName: name, toolID: id, toolArgs: args, toolStart: time.Now()})
 		// A tool call ends the current text run; later text starts a fresh bubble.
 		m.curAssistant, m.curReasoning = -1, -1
 
@@ -106,6 +111,7 @@ func (m *model) apply(ev loop.UIEvent) {
 			if s.kind == segTool && s.toolID == id && !s.toolSettled {
 				s.toolDone = true
 				s.toolSettled = true
+				s.freezeElapsed()
 				if ev.Tool != nil && ev.Tool.Result != nil {
 					s.toolError = ev.Tool.Result.IsError
 					s.toolResult = toolResultText(ev.Tool.Result)
@@ -266,7 +272,18 @@ func (m *model) markPendingToolsInterrupted() {
 		if s.kind == segTool && !s.toolDone {
 			s.toolDone = true
 			s.toolError = true
+			s.freezeElapsed()
 		}
+	}
+}
+
+// freezeElapsed records the running duration of a tool card at the moment it
+// settles, so the elapsed time on the card stops ticking once the call is done
+// (AS-124). A card with no recorded start (a rehydrated turn) keeps a zero
+// elapsed, which renders as no time at all.
+func (s *segment) freezeElapsed() {
+	if !s.toolStart.IsZero() {
+		s.toolElapsed = time.Since(s.toolStart)
 	}
 }
 
@@ -427,31 +444,7 @@ func (m *model) renderSegment(s *segment) string {
 		return reasoningLabelStyle.Render("thinking") + "\n" + dimStyle.Render(s.text)
 
 	case segTool:
-		icon := "⋯"
-		style := toolLabelStyle
-		if s.toolDone {
-			icon = "✓"
-			if s.toolError {
-				icon = "✗"
-				style = errorStyle
-			}
-		}
-		name := s.toolName
-		if name == "" {
-			name = "tool"
-		}
-		head := style.Render(fmt.Sprintf("%s %s", icon, name))
-		if s.toolArgs != "" {
-			head += "  " + dimStyle.Render(s.toolArgs)
-		}
-		body := s.toolResult
-		if body == "" {
-			return head
-		}
-		if !m.expandTools {
-			body = previewLines(body, toolPreviewLines)
-		}
-		return head + "\n" + indentBlock(body)
+		return m.renderToolCard(s)
 
 	case segCommand:
 		body := strings.TrimRight(s.text, "\n")
@@ -553,14 +546,107 @@ func previewLines(s string, n int) string {
 	return strings.Join(kept, "\n")
 }
 
-// indentBlock prefixes every line with two spaces and dims it, so a tool result
-// reads as subordinate detail under its card header.
-func indentBlock(s string) string {
-	lines := strings.Split(s, "\n")
+// renderToolCard draws an AS-024/AS-124 tool-call card: a status row (spinner or
+// ✓/✗ icon, tool name, one-line arg preview, right-aligned elapsed time) over an
+// indented output block fronted by a left │ rule. The rule and icon read the
+// running vs. settled state so an in-flight call animates and a finished one is
+// visually static.
+func (m *model) renderToolCard(s *segment) string {
+	icon, iconStyle := m.toolIcon(s)
+	name := s.toolName
+	if name == "" {
+		name = "tool"
+	}
+	head := iconStyle.Render(icon) + " " + StyleToolName.Render(name)
+	if s.toolArgs != "" {
+		head += "  " + StyleToolArgs.Render(s.toolArgs)
+	}
+	if elapsed := m.toolElapsedLabel(s); elapsed != "" {
+		head = m.fillRight(head, StyleMuted.Render(elapsed))
+	}
+	body := s.toolResult
+	if body == "" {
+		return head
+	}
+	if !m.expandTools {
+		body = previewLines(body, toolPreviewLines)
+	}
+	return head + "\n" + toolOutputBlock(body, s.toolDone)
+}
+
+// toolIcon picks the status glyph and style for a card: an animated braille
+// spinner while the call runs, a green ✓ on success, a red ✗ on failure.
+func (m *model) toolIcon(s *segment) (string, lipgloss.Style) {
+	if !s.toolDone {
+		return brailleSpinnerFrame(m.spinnerFrame), StyleRunning
+	}
+	if s.toolError {
+		return "✗", StyleError
+	}
+	return "✓", StyleSuccess
+}
+
+// toolElapsedLabel formats a card's elapsed time ("1.3 s"): the live duration
+// while the call runs, the frozen duration once it settles, and "" when no start
+// was ever stamped (a rehydrated card) so nothing is shown.
+func (m *model) toolElapsedLabel(s *segment) string {
+	var d time.Duration
+	switch {
+	case s.toolDone:
+		d = s.toolElapsed
+	case !s.toolStart.IsZero():
+		d = time.Since(s.toolStart)
+	default:
+		return ""
+	}
+	if d <= 0 {
+		return ""
+	}
+	return formatElapsed(d)
+}
+
+// formatElapsed renders a tool-card duration compactly: tenths under ten seconds,
+// whole seconds under a minute, then m##s.
+func formatElapsed(d time.Duration) string {
+	switch {
+	case d < 10*time.Second:
+		return fmt.Sprintf("%.1f s", d.Seconds())
+	case d < time.Minute:
+		return fmt.Sprintf("%.0f s", d.Seconds())
+	default:
+		return fmt.Sprintf("%dm%02ds", int(d/time.Minute), int((d%time.Minute)/time.Second))
+	}
+}
+
+// toolOutputBlock indents a tool result under a left │ rule — coloured active
+// while the call runs and idle once it settles — with the body in the dim tool-
+// output hue, so the result reads as subordinate detail under its card header.
+func toolOutputBlock(body string, done bool) string {
+	rule := StyleBorderActive
+	if done {
+		rule = StyleBorderIdle
+	}
+	bar := rule.Render("│") + " "
+	lines := strings.Split(body, "\n")
 	for i, ln := range lines {
-		lines[i] = "  " + dimStyle.Render(ln)
+		lines[i] = bar + StyleToolOutput.Render(ln)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// fillRight pads left so right sits flush against the transcript's right edge,
+// matching the status-line gap logic. Falls back to a single space when the
+// width isn't known yet (pre-resize) or the two sides already overflow it.
+func (m *model) fillRight(left, right string) string {
+	w := m.viewport.Width
+	if w <= 0 {
+		w = m.width
+	}
+	gap := w - lipglossWidth(left) - lipglossWidth(right)
+	if gap < 1 {
+		gap = 1
+	}
+	return left + strings.Repeat(" ", gap) + right
 }
 
 // oneLine collapses whitespace runs (including newlines) to single spaces so a
@@ -583,7 +669,6 @@ var (
 	userLabelStyle      = StyleUser
 	assistantLabelStyle = StyleAssistant
 	reasoningLabelStyle = StyleThinking.Bold(true)
-	toolLabelStyle      = StyleToolName
 	commandLabelStyle   = StyleSlashCommand.Bold(true)
 	errorStyle          = StyleError
 	dimStyle            = StyleDim
