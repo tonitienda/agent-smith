@@ -1,14 +1,14 @@
 ---
-id: AS-145
+id: AS-160
 title: Job specification and workflow DSL
 status: needs-clarification
 area: orchestrator
 priority: P2
-depends_on: [AS-144]
+depends_on: [AS-159]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
-# AS-145 · Job specification and workflow DSL
+# AS-160 · Job specification and workflow DSL
 
 ## Description
 
@@ -24,4 +24,4 @@ Design the versioned `.agent-smith/jobs/*.yaml` format used by the orchestrator 
 
 ## Dependencies
 
-[AS-144]
+[AS-159]

@@ -4,7 +4,7 @@ title: Sandbox abstraction and execution environments
 status: needs-clarification
 area: security
 priority: P2
-depends_on: [AS-144, AS-146, AS-158]
+depends_on: [AS-159, AS-161, AS-158]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,4 @@ Design the execution-environment seam for orchestrated work, starting from local
 
 ## Dependencies
 
-[AS-144, AS-146, AS-158]
+[AS-159, AS-161, AS-158]
