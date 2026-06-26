@@ -340,7 +340,7 @@ func toSections(ps []ProseSection) []section {
 		if title == "" || strings.TrimSpace(p.Body) == "" {
 			continue
 		}
-		out = append(out, section{title: title, body: strings.TrimRight(p.Body, "\n") + "\n"})
+		out = append(out, section{title: title, body: strings.TrimRight(p.Body, "\r\n") + "\n"})
 	}
 	return out
 }

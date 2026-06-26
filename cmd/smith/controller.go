@@ -2046,6 +2046,12 @@ func (s *chatSession) initPreview(ctx context.Context, describe bool) (command.O
 	if err != nil {
 		return command.Output{}, fmt.Errorf("scan project: %w", err)
 	}
+	// --describe asked for prose but no provider is configured: say so rather than
+	// silently degrading to the deterministic scan, so the user knows why no prose
+	// appears.
+	if describe && s.initEnricher == nil {
+		plan.Skipped = append(plan.Skipped, "model-assisted enrichment (no active provider configured)")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if plan.Empty() {

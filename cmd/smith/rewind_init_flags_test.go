@@ -110,3 +110,16 @@ func TestInitDescribeAddsProse(t *testing.T) {
 		t.Errorf("plain /init should not invoke the enricher:\n%s", plain.Text)
 	}
 }
+
+// AS-087: --describe with no enricher wired (no provider configured) says so
+// rather than silently degrading to the deterministic scan.
+func TestInitDescribeNoProviderNotes(t *testing.T) {
+	ctl := newTestController(t) // no enricher wired
+	out, err := runChatCommand(t, ctl, "init", "--describe")
+	if err != nil {
+		t.Fatalf("/init --describe: %v", err)
+	}
+	if !strings.Contains(out.Text, "no active provider configured") {
+		t.Errorf("--describe with no enricher should note the skip:\n%s", out.Text)
+	}
+}
