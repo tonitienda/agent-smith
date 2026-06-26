@@ -208,6 +208,38 @@ The enforced contracts (guard test) are the corners most prone to drift:
   (one `Render` for the TUI panel and headless `smith stats`); the report is
   recomputed from the append-only logs on every call (disposable derived state, no
   index). The persisted index and cross-project friction merge are AS-136.
+- **Model-tier routing** (`routing`, AS-042): `internal/routing` owns the
+  tier→model `Policy` (cheap / standard / strong). A feature that needs a model
+  resolves a *tier* through `routing.Policy.Resolve` / `FeatureTier` rather than
+  hardcoding model ids, so a model swap is one policy change, not a grep across
+  features. The composition root builds the policy (config overlay via
+  `routing.ConfigFrom`, D2 tolerate-but-warn) and hands it to the loop, `/compact`,
+  sub-agents, and the default selection; it is a stdlib + `schema` leaf and points
+  inward — `delegate` depends on it, not the reverse.
+- **Capture-time redaction** (`redaction`, AS-115): `internal/redaction` is the
+  best-effort secret-scrub filter installed on the event log's single write
+  chokepoint. It satisfies the `eventlog.Redactor` consumer seam (`Redact` a body
+  before persist) so secrets never reach the append-only log; the composition root
+  builds it from config (`redaction.Build` / `ConfigFrom`) and installs it with
+  `Log.SetRedactor`. A leaf over `schema` (+ `render`); `eventlog` declares the
+  seam and never imports back.
+- **Cosmetic personality** (`personality`, AS-053): the optional "Matrix" theme
+  layer. Its one architectural invariant is *containment* — no business/substance
+  path may import it — enforced by `internal/personality/no_business_imports_test.go`
+  (a package-local guard, not `archtest` and not review). Faces opt in; the loop
+  and inward core never learn it exists.
+- **Feature-leaf peers** that follow the same inward-pointing patterns as their
+  documented siblings, called out so the map is complete: `topic` (AS-027,
+  deterministic block topic/tag labels feeding `/context` and semantic `/clean`),
+  `tidy` (AS-043, lossless dedup of repeated reads via an appended exclusion
+  event — peer of `clean` / `compact`), and `improve` (AS-058, consolidates the
+  findings rollup into dismissible memory/skill edit proposals for `/improve` —
+  peer of `insights` / `skillrollup`). `/init` is split into `initscaffold`
+  (AS-039, the deterministic scan and its `Enricher` seam) and `initenrich`
+  (AS-087, the provider-backed `Enricher` impl kept out of the deterministic
+  scaffold). Test/guard tooling (`archtest`, `harnessparity`, `schemajson`,
+  `capturefixture`, `e2e`) and derived caches/adapters (`statsindex`,
+  `insightsmodel`) sit at or above their feature's layer and need no separate seam.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
