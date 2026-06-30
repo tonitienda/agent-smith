@@ -66,31 +66,45 @@ func (m *model) syncPalette() {
 }
 
 // paletteHeight is the number of rows the palette occupies in the layout (zero
-// when closed), so relayout can shrink the transcript to fit it. It is the cap
-// (paletteMaxRows) and the match count, further clamped to the terminal so a
-// short window can't push the palette past the input/status chrome. At least one
-// transcript row is always reserved.
+// when closed), so relayout can shrink the transcript to fit it. It is measured
+// from the rendered view so the reserved height and the drawn block can never
+// disagree — including the modal border/search/footer chrome and the degraded
+// plain list a tiny window falls back to (paletteView clamps both to the same
+// budget). When even one row can't fit, the palette is dropped (0).
 func (m *model) paletteHeight() int {
 	if !m.palette.open {
 		return 0
 	}
-	n := len(m.palette.matches)
-	if n > paletteMaxRows {
-		n = paletteMaxRows
-	}
-	// Reserve only the chrome that actually renders: on a tiny window the status
-	// line is dropped (statusRows()==0), so reserving it unconditionally would let
-	// viewport+palette+textarea exceed the terminal (D-TUI-11). The trailing -1
-	// keeps at least one transcript row; when even that can't fit, the palette is
-	// dropped entirely (0) rather than forced to overflow the input.
-	maxRows := m.height - inputHeight - m.statusRows() - 1
-	if maxRows < 1 {
+	v := m.paletteView()
+	if v == "" {
 		return 0
 	}
-	if n > maxRows {
-		n = maxRows
+	return lipgloss.Height(v)
+}
+
+// paletteBudget is the total rows the palette may occupy above the input/status
+// chrome, keeping at least one transcript row (D-TUI-11). It mirrors the
+// permRows/relayout budgeting: on a tiny window the status line is dropped
+// (statusRows()==0), so only the chrome that actually renders is reserved.
+func (m *model) paletteBudget() int {
+	return m.height - inputHeight - m.statusRows() - 1
+}
+
+// paletteRange returns the [start,end) slice of matches to show for a row limit,
+// scrolling the window to keep the selection in view.
+func (m *model) paletteRange(limit int) (int, int) {
+	if limit < 1 {
+		limit = 1
 	}
-	return n
+	start := 0
+	if m.palette.sel >= limit {
+		start = m.palette.sel - limit + 1
+	}
+	end := start + limit
+	if end > len(m.palette.matches) {
+		end = len(m.palette.matches)
+	}
+	return start, end
 }
 
 // completeFromPalette fills the input with the highlighted command name and a
@@ -106,42 +120,121 @@ func (m *model) completeFromPalette() {
 	m.relayout()
 }
 
-// paletteView renders the visible window of matches with the selection
-// highlighted, each line "  /name args   summary".
+// paletteView renders the command palette as a first-class modal surface (§7.6):
+// a rounded box wrapping a search-field row with a "N commands" count, a rule, the
+// match window, and a footer hint row. When the terminal is too short to fit the
+// chrome plus one match, it degrades to a plain bordered-less match list so a
+// small window still shows the commands (D-TUI-11).
 func (m *model) paletteView() string {
 	matches := m.palette.matches
-	if len(matches) == 0 {
+	if !m.palette.open || len(matches) == 0 {
 		return ""
 	}
-	// Use the same (possibly terminal-clamped) row budget as the layout, so the
-	// rendered window never exceeds the height relayout reserved for it.
-	limit := m.paletteHeight()
-	if limit < 1 {
-		limit = 1
+	budget := m.paletteBudget()
+	if budget < 1 {
+		return ""
 	}
-	start := 0
-	if m.palette.sel >= limit {
-		start = m.palette.sel - limit + 1
-	}
-	end := start + limit
-	if end > len(matches) {
-		end = len(matches)
+	// chrome = border top+bottom (2) + search row + rule + footer (3).
+	const chrome = 5
+	if budget < chrome+1 {
+		return m.paletteListPlain(budget)
 	}
 
+	limit := budget - chrome
+	if limit > paletteMaxRows {
+		limit = paletteMaxRows
+	}
+	start, end := m.paletteRange(limit)
+
+	// First pass: plain text of each row, to size the box to its widest line.
+	query := strings.TrimPrefix(m.textarea.Value(), "/")
+	search := "❯ /" + query
+	count := fmt.Sprintf("%d commands", len(matches))
+	footer := "↑↓ move · ↵ run · tab complete · esc close"
+	innerWidth := lipglossWidth(search + " █ " + count)
+	if w := lipglossWidth(footer); w > innerWidth {
+		innerWidth = w
+	}
+	for i := start; i < end; i++ {
+		if w := lipglossWidth(paletteRowText(matches[i])); w > innerWidth {
+			innerWidth = w
+		}
+	}
+
+	// Search field: caret + typed text + block cursor on the left, count right.
+	gap := innerWidth - lipglossWidth(search+"█") - lipglossWidth(count)
+	if gap < 1 {
+		gap = 1
+	}
+	searchRow := StyleSlashCommand.Render("❯ /"+query) +
+		lipgloss.NewStyle().Foreground(ColorBrand).Render("█") +
+		strings.Repeat(" ", gap) + StyleDim.Render(count)
+
+	// Every line is padded to innerWidth so the box border draws as a clean
+	// rectangle without wrapping (lipgloss .Width double-counts padding).
+	lines := []string{searchRow, paletteRuleStyle.Render(strings.Repeat("─", innerWidth))}
+	for i := start; i < end; i++ {
+		lines = append(lines, m.paletteRow(matches[i], i == m.palette.sel, innerWidth))
+	}
+	lines = append(lines, padRight(StyleDim.Render(footer), innerWidth))
+
+	border := ColorBorder
+	if query != "" {
+		border = ColorBorderSelect
+	}
+	return paletteBoxStyle.BorderForeground(border).Render(strings.Join(lines, "\n"))
+}
+
+// padRight pads s on the right with plain spaces to a target display width.
+func padRight(s string, width int) string {
+	if pad := width - lipglossWidth(s); pad > 0 {
+		return s + strings.Repeat(" ", pad)
+	}
+	return s
+}
+
+// paletteRowText is the unstyled "/name args  summary" text of a match, used for
+// width measurement so the box sizes to its widest row.
+func paletteRowText(c command.Command) string {
+	inv := "/" + c.Name
+	if c.Args != "" {
+		inv += " " + c.Args
+	}
+	return fmt.Sprintf("  %-14s  %s", inv, c.Summary)
+}
+
+// paletteRow renders one match. The selected row fills its full width with the
+// mode-bar green and a brand caret; others read command-green (amber for the
+// /serious toggle) with a muted description.
+func (m *model) paletteRow(c command.Command, selected bool, width int) string {
+	inv := "/" + c.Name
+	if c.Args != "" {
+		inv += " " + c.Args
+	}
+	if selected {
+		sel := lipgloss.NewStyle().Background(BgModeBar)
+		row := sel.Foreground(ColorBrand).Render("❯ ") +
+			sel.Foreground(ColorFgDefault).Render(fmt.Sprintf("%-14s  %s", inv, c.Summary))
+		if pad := width - lipglossWidth(row); pad > 0 {
+			row += sel.Render(strings.Repeat(" ", pad))
+		}
+		return row
+	}
+	nameStyle := StyleSlashCommand
+	if c.Name == "serious" {
+		nameStyle = StyleRunning
+	}
+	row := "  " + nameStyle.Render(fmt.Sprintf("%-14s", inv)) + "  " + StyleMuted.Render(c.Summary)
+	return padRight(row, width)
+}
+
+// paletteListPlain is the degraded fallback for a window too short for the modal
+// chrome: a borderless match list, one row per match within the row budget.
+func (m *model) paletteListPlain(limit int) string {
+	start, end := m.paletteRange(limit)
 	lines := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
-		c := matches[i]
-		inv := "/" + c.Name
-		if c.Args != "" {
-			inv += " " + c.Args
-		}
-		line := fmt.Sprintf("%-20s %s", inv, c.Summary)
-		line = strings.TrimRight(line, " ")
-		if i == m.palette.sel {
-			lines = append(lines, paletteSelStyle.Render("▸ "+line))
-		} else {
-			lines = append(lines, paletteItemStyle.Render("  "+line))
-		}
+		lines = append(lines, m.paletteRow(m.palette.matches[i], i == m.palette.sel, 0))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -383,9 +476,15 @@ func (m model) panelFooter() string {
 	return statusBarStyle.Render(fmt.Sprintf("/%s — esc or q to close · ↑/↓ to scroll", m.panelTitle))
 }
 
-// Palette styles. The selected row fills with the mode-bar green and the matched
-// command name reads in command-green so it stands out at a glance (§7.6).
+// Palette styles (§7.6): a rounded modal box and the search-field rule. Per-row
+// colours are applied in paletteRow; the box border colour is set per render
+// (select-green while typing a query, idle border when empty).
 var (
+	paletteBoxStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
+	paletteRuleStyle = lipgloss.NewStyle().Foreground(ColorBorderSelect)
+
+	// Shared selected/idle row styles, also reused by the picker and selector
+	// surfaces (picker.go, selector.go) for their highlighted rows.
 	paletteItemStyle = StyleNeutral
 	paletteSelStyle  = lipgloss.NewStyle().Bold(true).Foreground(ColorCommand).Background(BgModeBar)
 )
