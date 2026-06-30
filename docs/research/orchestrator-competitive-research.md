@@ -15,6 +15,17 @@ dogfood orchestrator does not reinvent avoidable mistakes. Systems covered:
 **Coder**, **Ona** (formerly Gitpod), and the adjacent agents **GitHub Copilot
 coding agent**, **Devin** (Cognition), and **Google Jules**.
 
+> Note on "Ona": Gitpod rebranded to **Ona** at **ona.com** in September 2025,
+> repositioning from cloud dev environments to an AI agent-orchestration platform
+> ([Gitpod is now Ona](https://ona.com/stories/gitpod-is-now-ona);
+> [InfoQ](https://www.infoq.com/news/2025/09/gitpod-ona/);
+> [The Register](https://www.theregister.com/software/2025/09/03/gitpod-rebrands-as-ona-now-an-ai-driven-dev-platform/)).
+> This is **not** the unrelated humanitarian-data company Ona Systems (`ona.io`).
+> `ona.com` blocked automated fetches during this spike, so deep doc URLs below
+> were gathered via search extracts and should be re-verified before being quoted
+> as guarantees; the platform and its capabilities are corroborated by the
+> rebrand coverage above and the Gitpod whitepaper.
+
 Date: 2026-06-30. Sourcing caveat: several vendor doc domains
 (`anthropic.com/engineering`, `developers.openai.com`, `cursor.com`,
 `docs.github.com`, `docs.devin.ai`, `jules.google`, `coder.com/docs`,
