@@ -4,7 +4,7 @@ title: Multi-provider workflow routing
 status: needs-clarification
 area: provider
 priority: P2
-depends_on: [AS-145]
+depends_on: [AS-160]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -25,4 +25,4 @@ Design how orchestrated jobs bind workflow roles to provider/model routing polic
 
 ## Dependencies
 
-[AS-145]
+[AS-160]

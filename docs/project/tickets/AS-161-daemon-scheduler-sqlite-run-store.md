@@ -1,14 +1,14 @@
 ---
-id: AS-146
+id: AS-161
 title: Daemon, scheduler, and SQLite run store
-status: needs-clarification
+status: ready-to-implement
 area: orchestrator
 priority: P2
-depends_on: [AS-144, AS-145]
+depends_on: [AS-159, AS-160]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
-# AS-146 · Daemon, scheduler, and SQLite run store
+# AS-161 · Daemon, scheduler, and SQLite run store
 
 ## Description
 
@@ -25,4 +25,4 @@ Design and implement the first always-on Smith orchestrator process for loading 
 
 ## Dependencies
 
-[AS-144, AS-145]
+[AS-159, AS-160]

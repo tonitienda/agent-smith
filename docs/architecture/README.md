@@ -11,6 +11,7 @@ This directory documents Agent Smith's software architecture using the [C4 model
 5. [Dependency boundaries](dependency-boundaries.md) — which layers may import third-party code, and the guard test that enforces the stdlib-first core.
 6. [Package contracts](package-contracts.md) — dependency direction and ownership between core packages, where new code goes, and the guard test that enforces it.
 7. [Interface conventions](interface-conventions.md) — when a seam is an interface vs a concrete struct, the classification of every production interface, and where consumer-side seams live.
+8. [Orchestrator architecture (ADR)](orchestrator-architecture.md) — boundaries, deployment modes, non-goals, and open-question triage for the always-on deterministic workflow engine (AS-159).
 
 ## Scope and source of truth
 

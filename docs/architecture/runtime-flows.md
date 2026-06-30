@@ -139,13 +139,11 @@ sequenceDiagram
     Client->>Conn: turn.run (prompt)
     Conn->>Session: Run(ctx, prompt) off the read loop
     Session->>AgentLoop: Run turn over wired session
-    AgentLoop-->>Session: UI events (text, tool calls, usage)
-    Session->>Conn: Emit each UI event
+    AgentLoop->>Conn: Emit UI event (via observer)
     Conn--)Client: event notification (per UI event)
     alt tool call needs interactive approval
         AgentLoop->>ToolRuntime: Execute gated tool call
-        ToolRuntime->>Session: Ask permission
-        Session->>Conn: AskPermission(req)
+        ToolRuntime->>Conn: AskPermission (via serveAsker)
         Conn->>Client: permission.ask request (server-initiated)
         alt client answers
             Client-->>Conn: permission decision

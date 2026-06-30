@@ -1,14 +1,14 @@
 ---
-id: AS-144
+id: AS-159
 title: Orchestrator architecture and product boundaries
-status: ready-to-implement
+status: done
 area: orchestrator
 priority: P2
 depends_on: []
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
-# AS-144 · Orchestrator architecture and product boundaries
+# AS-159 · Orchestrator architecture and product boundaries
 
 ## Description
 
@@ -31,4 +31,4 @@ Define the orchestrator-first architecture for Smith dogfood automation. This re
 
 1. Should the first command shape be `smithd`, `smith runs daemon`, or another noun-grouped command?
 2. Should the orchestrator live under existing packages first, or behind a new `internal/orchestrator` boundary?
-3. Which decisions must be made before AS-145 through AS-157 can move to ready-to-implement?
+3. Which decisions must be made before the remaining tickets in the wave (AS-147–AS-157, AS-160–AS-161) can move to ready-to-implement?
