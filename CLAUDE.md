@@ -1,44 +1,28 @@
 # Agent Smith — working notes for Claude
 
-Provider-agnostic coding agent in Go. Product truth lives in [docs/project/PRD.md](docs/project/PRD.md) — read the **Decision Log (D0–D9) first**; it overrides the rest of the document where they conflict.
+Provider-agnostic coding agent in Go. **Product truth: [docs/project/PRD.md](docs/project/PRD.md) — read the Decision Log (D0–D9) first; it overrides the rest of the doc where they conflict.**
 
+## Always (cheap invariants — keep these in head)
 
-## Repository instructions
+- **Go layout:** runnable commands under `cmd/`, shared code under `internal/`. `cmd/smith` is the process entry / subcommand composition root; reusable Smith wiring belongs in `internal/smithapp`.
+- Repo tooling is **stdlib-only** unless a ticket explicitly introduces a dependency.
+- **Before every commit/handoff the full gate must pass:** `./scripts/agent-quality-gate.sh` (`make fmt`, `make test`, `make vet`, `make lint`) — wire it into a pre-handoff hook. Build the user binary via `make build` (static `./smith`).
+- **Scope (PRD D6):** V1 = AS-001…AS-030. Don't pull deferred features into V1 tickets; document punts explicitly, never silently (D0).
+- **Schema/data design is additive-only (PRD D2)** — including our own formats (tickets, rollups).
+- **Keep docs current in the same change:** `README.md`, `CLAUDE.md`, focused `docs/`, and the C4 docs under `docs/architecture/` whenever a change touches runtime seams, data flow, storage, provider/tool boundaries, or user-facing containers.
 
-- Product truth lives in `docs/project/PRD.md`; read the Decision Log (D0-D9) before making product or architecture decisions.
-- Keep documentation current for both humans and agents. Consider whether `README.md`, `CLAUDE.md`, or focused docs under `docs/` need updates with each code change.
-- Keep architecture documentation current: when a change affects runtime seams, data flow, storage, provider/tool boundaries, or user-facing containers, update the linked C4 docs under `docs/architecture/` in the same change.
-- Use standard Go project layout: runnable commands under `cmd/`, shared internal packages under `internal/`. Keep `cmd/smith` as the process entry/subcommand composition root; reusable Smith application wiring belongs in `internal/smithapp`. For where new code goes and the enforced dependency direction between core packages (provider contracts → adapters, loop → faces, etc.), see [docs/architecture/package-contracts.md](docs/architecture/package-contracts.md); the contracts are guarded by `internal/archtest`.
-- Keep repo tooling stdlib-only unless a ticket explicitly introduces dependencies.
-- Follow the Classical testing strategy in `docs/testing-strategy.md`: prefer feature/integration tests over isolated function tests, use mocks only at required boundaries, keep default tests deterministic/offline, and consider fuzzing for adversarial parsers or persisted formats.
-- Build the user-facing binary through `make build`; it emits a static `./smith` binary by default.
-- All agents (Claude, Codex, GrokBuild) and humans must follow the harness command contract in [`docs/agent-quality-gates.md`](docs/agent-quality-gates.md): pick the smallest entry point that covers the change (`quick` while editing, `arch` after package moves) and run `full` — `./scripts/agent-quality-gate.sh` (`make fmt`, `make test`, `make vet`, `make lint`) — before every commit/handoff, via hooks or the closest agent-specific equivalent. `make lint` installs and runs the pinned repo-local `golangci-lint` instead of a global binary. The contract also maps each CI job to a local command (CI/local parity) and defines the failure-reporting format.
-- Harness design work is tracked in [`docs/projects/harness-quality-system.md`](docs/projects/harness-quality-system.md) and AS-099–AS-103; the active contract derived from it lives in [`docs/agent-quality-gates.md`](docs/agent-quality-gates.md). The named `./scripts/harness/*.sh` wrappers (`quick`, `full`, `arch`, `ci-local`) exist as thin entry points over those commands; `./scripts/agent-quality-gate.sh` remains the canonical full gate (`scripts/harness/full.sh` wraps it).
-- **TUI / terminal face:** visual rules in `internal/tui/CLAUDE.md`; full spec in
-  `docs/design/tui-visual-design.md`
+## Read on demand — don't load these up front
 
-## Tickets
+Prefer the **skill**: it pulls only the doc slice the task needs, keeping main context small. Reach for the raw doc only when no skill covers the task.
 
-- Backlog: one file per ticket in `docs/project/tickets/` (`AS-NNN-slug.md`), indexed in its [README](docs/project/tickets/README.md).
-- Frontmatter is machine-read by `cmd/ticket-sync` — keep `id`, `title`, `status`, optional `type`, `github_issue`, `depends_on`, `area`, `priority` intact. Ticket IDs are stable: never renumber or reuse.
-- `status` is `ready-to-implement`, `needs-clarification`, or `done`; `needs-clarification` tickets must contain an "Open questions" section. Use `type: bug` in frontmatter for defect tickets. Implementation tickets continue the `AS-NNN` sequence. QA, verification, and manual-test follow-up tickets use the separate `AS-Q-NNN` sequence so parallel PRs are less likely to collide.
-- **Ticket numbers do not mark implementation order necessarily. Dependencies and judgement matter more.** Pick the next `ready-to-implement` ticket that makes the most sense to work on now (a `depends_on` chain that is satisfied, a foundational piece that unblocks others) even if a lower-numbered ticket exists. The `depends_on` graph and the "Suggested build order" in the tickets README are the real ordering; the AS-NNN sequence is just stable identity.
-- **Surface follow-on work as a ticket, not a TODO.** When a task reveals additional work — a refinement, a validation pass, a discovered gap, a punted decision — create a new `AS-NNN` implementation ticket (or `AS-Q-NNN` for QA/verification work) for it (continue the sequence, file it in `docs/project/tickets/AS-NNN-slug.md`, add it to the README index) so it's tracked properly instead of being lost in a comment or PR description. (Example: AS-060 was spun out of the AS-002 spike.)
-- When adding or changing tickets, update the index table in the tickets README. Pull requests that add ticket files are checked against the base branch and fail if they reuse an existing ticket ID; choose fresh numbers before merge. If two parallel PRs still merge with colliding IDs, the merge ticket-sync workflow renumbers the just-merged tickets and rewrites `depends_on` references inside the changed ticket files before syncing issues.
-- Manual end-to-end campaign coverage lives in `docs/projects/manual-test-campaign.md`; when tickets are created, implemented, clarified, or found buggy during a smoke pass, update that campaign alongside the ticket file and README index so humans can retest the right behavior.
-- **Files are the source of truth over GitHub issues** — edit the file (set `status: done`, update the README index), and let CI do the rest. The **Sync merged tickets** GitHub Actions workflow runs `cmd/ticket-sync` automatically on every merged PR: it syncs the changed, already-linked tickets to their GitHub issues and closes the issue of any ticket whose frontmatter says `status: done`. **Do not run `ticket-sync` or close/update the GitHub issue yourself** — closing the issue is CI's job, not yours; just land the file change. The tool writes issue numbers back into frontmatter; never invent a `github_issue` value by hand. (`go run ./cmd/ticket-sync -dry-run` is fine locally to *preview*, but don't push issue-state changes from a session.)
-
-## Conventions
-
-- Go: stdlib-only for repo tooling; `./scripts/agent-quality-gate.sh` must pass before committing. Configure Claude project hooks (or the nearest equivalent) to run that script before final handoff so `make fmt`, `make test`, `make vet`, and `make lint` match CI. Codex and GrokBuild should use their equivalent pre-submit/check hooks for the same script.
-- Scope discipline (PRD D6): V1 = AS-001…AS-030. Don't pull deferred features into V1 tickets; punted/hard problems are documented explicitly, never silently (D0).
-- Schema/data design follows additive-only thinking (D2) — applies to our own file formats (tickets, rollups) too.
-
-## Pull requests
-
-- **Always open a PR automatically.** When you finish a unit of work on a feature branch — the quality gate (`./scripts/agent-quality-gate.sh`) passes and the work is committed and pushed — open a pull request for it without waiting to be asked. Give it a clear title and a body summarizing the change, the ticket(s) it closes, and how it was verified. The only exceptions are when a PR already exists for the branch (push to it instead) or the user has explicitly told you not to open one.
-- **Always subscribe to PR activity.** As soon as a PR exists for the branch you're working on (whether you opened it or it was created from the Claude Code UI), call `subscribe_pr_activity` for it so you receive CI results and review comments — then follow through: investigate each event, push fixes for failing CI and actionable review feedback, and ask via `AskUserQuestion` when a fix is ambiguous. Keep watching until the PR is merged or closed, or the user tells you to stop (`unsubscribe_pr_activity`).
-- **Always reply to and resolve every review conversation — every time, no exceptions.** For each review thread (human or bot), once you've pushed a change that addresses it (or decided it isn't worth doing), do both, in order: (1) post a short reply on that thread saying what you did and referencing the commit, or why you're declining; (2) mark the thread resolved (`resolve_review_thread`). Never leave an addressed comment silently and never resolve without a reply — the reviewer must be able to see, thread by thread, what was tackled and what was intentionally skipped. Skip a thread only when it is purely your own reply echoed back or otherwise needs no action.
-- **Copilot review: DISABLED (2026-06-19).** Do **not** request a GitHub Copilot review (`request_copilot_review`) — Copilot is not reviewing PRs right now and the maintainer is investigating. Skip this step entirely until this note is removed. (When re-enabled: request a Copilot review only once Gemini's review is posted and every Gemini thread is addressed and resolved, once per review cycle.)
-- **Auto-merge once the PR is clean.** When every review thread (Gemini and any human) is resolved and the work is complete, enable GitHub's native auto-merge (`enable_pr_auto_merge`) so the PR merges itself the moment required checks pass. Prefer this over a manual merge: CI *success* is not delivered as a PR activity event (only failures wake the session), so relying on the session to notice green and merge is unreliable — let GitHub do it. Use `merge_pull_request` directly only as a fallback when you are already awake and have confirmed CI is green. Never enable auto-merge while a thread is unresolved or a fix is still pending.
-
+| When you're… | Use |
+|---|---|
+| Picking / starting / implementing a ticket, or adding/editing a ticket file | **skill: ticket-implementer** (ticket + deps + PRD Decision Log + arch; also ticket-file conventions) |
+| Running or interpreting the quality gates | **skill: quality-gate-runner** |
+| Reproducing a red CI job locally | **skill: ci-failure-triage** |
+| Opening / reviewing / merging a PR | **skill: pr-workflow** |
+| Writing tests | [docs/testing-strategy.md](docs/testing-strategy.md) — Classical: prefer feature/integration tests, mocks only at required boundaries, deterministic/offline by default, fuzz adversarial parsers |
+| Placing new code / reasoning about package deps | [docs/architecture/package-contracts.md](docs/architecture/package-contracts.md) (enforced by `internal/archtest`) |
+| Needing the full harness command / CI-parity contract | [docs/agent-quality-gates.md](docs/agent-quality-gates.md) |
+| Touching the TUI / terminal face | [internal/tui/CLAUDE.md](internal/tui/CLAUDE.md) (visual rules); full spec [docs/design/tui-visual-design.md](docs/design/tui-visual-design.md) |
+| Making a product / architecture decision | [docs/project/PRD.md](docs/project/PRD.md) Decision Log (D0–D9) |
