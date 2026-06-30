@@ -268,7 +268,22 @@ func (d *Daemon) RunOne(ctx context.Context) (store.Run, bool, error) {
 	if err != nil || !ok {
 		return store.Run{}, false, err
 	}
-	job := d.jobs[run.JobID]
+	// Fail closed if the claimed run's job is no longer loaded (spec deleted,
+	// renamed, or rejected on a reload while runs for it remain queued): a missing
+	// job must end the run, never pass a nil spec into the executor.
+	job, ok := d.jobs[run.JobID]
+	if !ok {
+		out := store.Outcome{
+			Status:       store.StatusFailed,
+			FailureClass: store.FailureInvalidSpec,
+			Error:        fmt.Sprintf("job spec %q not found", run.JobID),
+		}
+		if err := d.store.Finish(run.ID, out, d.now()); err != nil {
+			return run, true, err
+		}
+		updated, err := d.store.Run(run.ID)
+		return updated, true, err
+	}
 
 	runCtx := ctx
 	var cancel context.CancelFunc

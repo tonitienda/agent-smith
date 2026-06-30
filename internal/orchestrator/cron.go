@@ -110,29 +110,38 @@ func parseCronField(field string, f cronField) (bits uint64, star bool, err erro
 func (s cronSchedule) next(after time.Time, loc *time.Location) (time.Time, bool) {
 	t := after.In(loc).Truncate(time.Minute).Add(time.Minute)
 	limit := t.AddDate(4, 0, 0)
+	// Advance step-wise: when the month/day/hour does not match, jump to the start
+	// of the next candidate unit rather than crawling minute by minute. This keeps
+	// even an unsatisfiable schedule (e.g. Feb 30) bounded by months/days, not the
+	// ~2M minutes a full minute-by-minute scan of the 4-year window would take.
 	for t.Before(limit) {
-		if s.matches(t) {
-			return t, true
+		if s.month&(1<<uint(t.Month())) == 0 {
+			t = time.Date(t.Year(), t.Month()+1, 1, 0, 0, 0, 0, loc)
+			continue
 		}
-		t = t.Add(time.Minute)
+		if !s.dayMatches(t) {
+			t = time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, loc)
+			continue
+		}
+		if s.hour&(1<<uint(t.Hour())) == 0 {
+			t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour()+1, 0, 0, 0, loc)
+			continue
+		}
+		if s.min&(1<<uint(t.Minute())) == 0 {
+			t = t.Add(time.Minute)
+			continue
+		}
+		return t, true
 	}
 	return time.Time{}, false
 }
 
-func (s cronSchedule) matches(t time.Time) bool {
-	if s.min&(1<<uint(t.Minute())) == 0 {
-		return false
-	}
-	if s.hour&(1<<uint(t.Hour())) == 0 {
-		return false
-	}
-	if s.month&(1<<uint(t.Month())) == 0 {
-		return false
-	}
+// dayMatches applies the standard cron day-field quirk: when both day-of-month and
+// day-of-week are restricted, a match on either fires; otherwise the unrestricted
+// field is a wildcard and both must hold.
+func (s cronSchedule) dayMatches(t time.Time) bool {
 	domOK := s.dom&(1<<uint(t.Day())) != 0
 	dowOK := s.dow&(1<<uint(int(t.Weekday()))) != 0
-	// Standard cron quirk: when both day fields are restricted, a match on either
-	// fires; otherwise the unrestricted field is a wildcard and both must hold.
 	if s.domRestricted && s.dowRestricted {
 		return domOK || dowOK
 	}

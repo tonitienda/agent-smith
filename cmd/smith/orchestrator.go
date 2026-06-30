@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tonitienda/agent-smith/internal/cli"
@@ -137,7 +138,7 @@ func runsDaemonStart(c *cli.Context) error {
 		return err
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := d.Serve(ctx, orchTickInterval, orchStaleAfter); err != nil && ctx.Err() == nil {
 		return err
