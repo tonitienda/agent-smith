@@ -101,6 +101,19 @@ func TestModeBarTruncatesToWidth(t *testing.T) {
 	}
 }
 
+// TestModeBarDoubleWidthNoPanic guards the narrow-terminal cut against a panic
+// when the bar carries double-width runes: lipglossWidth then exceeds the rune
+// count, so an uncapped rune-slice at m.width would run off the end. The cut is
+// by rune (column-exact truncation is out of scope), so this only asserts the
+// render completes rather than a column bound.
+func TestModeBarDoubleWidthNoPanic(t *testing.T) {
+	m := newMetaModel(t, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123", Mode: "編碼模式", PhaseTracker: "想 · [析] · 劃"})
+	m = update(t, m, tea.WindowSizeMsg{Width: 5, Height: 24})
+	if got := m.modeBar(); got == "" {
+		t.Fatal("mode bar rendered empty under a narrow double-width cut")
+	}
+}
+
 // TestLeaderMOpensModePanel covers AC2: the leader chord ctrl+g then m opens the
 // richer mode panel (goal, tracker, phases) without typing the key, and the key
 // does not leak when no mode is active.

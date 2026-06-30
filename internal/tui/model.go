@@ -721,14 +721,21 @@ func (m model) modeBar() string {
 	// width-1 cells here, so a rune slice is an exact column cut; skip the
 	// per-segment colouring in this degraded case so the cut never lands mid-escape.
 	if lipglossWidth(plainLeft) > m.width && m.width >= 0 {
-		return modeBarStyle.Render(string([]rune(plainLeft)[:m.width]))
+		// Cut by runes, but cap at the rune count: a double-width rune makes the
+		// column width exceed len(runes), so m.width can be past the slice end.
+		if r := []rune(plainLeft); len(r) > m.width {
+			return modeBarStyle.Render(string(r[:m.width]))
+		}
+		return modeBarStyle.Render(plainLeft)
 	}
 	// Colour the mode name and phase track per the spec (§7.2): mode name in
 	// ColorModeName, idle phases dim, the active phase (already pre-bracketed by the
 	// controller) bright; the key hint sits right-aligned in ColorModeHint.
 	left := modeNameStyle.Render(m.meta.Mode)
 	if m.meta.PhaseTracker != "" {
-		left += "  " + colorPhaseTracker(m.meta.PhaseTracker)
+		// modeBarStyle-wrap the spacer: the mode-name render ends with a reset that
+		// would otherwise drop the bar background across the gap.
+		left += modeBarStyle.Render("  ") + colorPhaseTracker(m.meta.PhaseTracker)
 	}
 	hintStr := ""
 	if showHint {
