@@ -201,6 +201,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | needs-clarification | AS-077 |
+| [AS-162](AS-162-archtest-package-contracts-completeness.md) | Guard that every internal package is accounted for in package-contracts.md | quality | needs-clarification | AS-098, AS-146 |
 
 ## Index — Orchestrator dogfood wave (AS-159 … AS-161, AS-147 … AS-158)
 
