@@ -212,7 +212,7 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries (ADR) | orchestrator | done | — |
-| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | ready-to-implement | AS-159 |
+| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | ready-to-implement | AS-159, AS-160 |
 | [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | needs-clarification | AS-160, AS-161 |
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | needs-clarification | AS-159, AS-147 |

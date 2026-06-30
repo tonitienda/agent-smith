@@ -12,6 +12,7 @@ This directory documents Agent Smith's software architecture using the [C4 model
 6. [Package contracts](package-contracts.md) — dependency direction and ownership between core packages, where new code goes, and the guard test that enforces it.
 7. [Interface conventions](interface-conventions.md) — when a seam is an interface vs a concrete struct, the classification of every production interface, and where consumer-side seams live.
 8. [Orchestrator architecture (ADR)](orchestrator-architecture.md) — boundaries, deployment modes, non-goals, and open-question triage for the always-on deterministic workflow engine (AS-159).
+9. [Job spec / workflow DSL](../design/job-spec-dsl.md) — the versioned `.agent-smith/jobs/*.yaml` format, deterministic-action catalog, and validation contract the daemon loads (AS-160).
 
 ## Scope and source of truth
 
