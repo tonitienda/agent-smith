@@ -228,6 +228,28 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | needs-clarification | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | ready-to-implement | AS-159 |
 
+## Index — Orchestrator dogfood wave (`smith-orchestrator-dogfood-prd.md`)
+
+> The architecture/DSL/daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by the merged keychain/archtest tickets above) to AS-159–AS-161. The wave stays `needs-clarification` until the AS-159 architecture ADR lands.
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries | orchestrator | ready-to-implement | — |
+| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | needs-clarification | AS-159 |
+| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | needs-clarification | AS-159, AS-160 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | needs-clarification | AS-160, AS-161 |
+| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | needs-clarification | AS-159, AS-147 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | integrations | needs-clarification | AS-147, AS-148 |
+| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | provider | needs-clarification | AS-160 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | observability | needs-clarification | AS-161 |
+| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | dogfood | needs-clarification | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
+| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | security | needs-clarification | AS-159, AS-161, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | security | needs-clarification | AS-159, AS-148, AS-158 |
+| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
+| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | needs-clarification | AS-161, AS-148, AS-154 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | needs-clarification | AS-147, AS-148, AS-149 |
+| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | ready-to-implement | AS-159 |
+
 ## Suggested build order
 
 1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.

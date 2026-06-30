@@ -25,7 +25,3 @@ Define the minimal operator surface for inspecting and controlling always-on Smi
 ## Dependencies
 
 [AS-161, AS-151]
-
-## Open questions
-
-1. API/UI surface depends on the run-store schema and lifecycle verbs from AS-161; scope (read-only vs control) for the first cut is unresolved.

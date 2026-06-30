@@ -26,7 +26,3 @@ Design how orchestrated jobs bind workflow roles to provider/model routing polic
 ## Dependencies
 
 [AS-160]
-
-## Open questions
-
-1. Whether per-step routing reuses the existing routing policy surface (AS-042/AS-110) verbatim or needs an orchestrator-specific policy name space.
