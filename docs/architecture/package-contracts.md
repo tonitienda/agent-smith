@@ -245,12 +245,32 @@ maintenance point — append it to the allow-list.
   `tidy` (AS-043, lossless dedup of repeated reads via an appended exclusion
   event — peer of `clean` / `compact`), and `improve` (AS-058, consolidates the
   findings rollup into dismissible memory/skill edit proposals for `/improve` —
-  peer of `insights` / `skillrollup`). `/init` is split into `initscaffold`
+  peer of `insights` / `skillrollup`). The **context-window leaves** are
+  `composition` (AS-026, the per-segment `/context` projection over the live
+  blocks — note this is the package `internal/composition`, *not* a "composition
+  root"; it imports no orchestration and points inward like any leaf) and `clean`
+  (AS-028, the manual `/clean` edit that appends an exclusion event — peer of
+  `tidy` / `compact`). The **session-objective leaf** is `goal` (AS-040, the
+  `/goal` text block appended to the log, read straight back by `insights`). The
+  **conversation-edit leaves** are `rewind` (AS-037, `/rewind` as an appended
+  exclusion event, peer of `clean`) and `snapshot` (the projected point-in-time
+  view those edits rely on). The **capability leaves** — discovered/configured
+  extension points the loop and faces wire in but never reach back into — are
+  `credential` (AS-017, the OS-keychain key store behind the `credential.Store`
+  seam; the one core-adjacent third-party exception, see
+  [dependency-boundaries.md](dependency-boundaries.md)), `customcmd` (AS-033,
+  Markdown-defined slash commands as prompt templates), and `hook` (AS-035,
+  user-configured lifecycle hooks), alongside the already-documented `memory`,
+  `skill`, and `mcp`. The **async-runner store** is `run` (AS-054, the durable,
+  execution-free queue under the data directory; the worker in `cmd/smith` drives
+  the headless path and writes outcomes back). `/init` is split into `initscaffold`
   (AS-039, the deterministic scan and its `Enricher` seam) and `initenrich`
   (AS-087, the provider-backed `Enricher` impl kept out of the deterministic
   scaffold). Test/guard tooling (`archtest`, `harnessparity`, `schemajson`,
-  `capturefixture`, `e2e`) and derived caches/adapters (`statsindex`,
-  `insightsmodel`) sit at or above their feature's layer and need no separate seam.
+  `schemaguard`, `capturefixture`, `e2e`) and derived caches/adapters
+  (`statsindex`, `insightsmodel`) sit at or above their feature's layer and need
+  no separate seam. Build-metadata (`version`, `-ldflags`-injected) is a stdlib
+  leaf with no dependents to constrain.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
