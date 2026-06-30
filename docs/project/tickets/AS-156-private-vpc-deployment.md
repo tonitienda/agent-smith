@@ -1,7 +1,7 @@
 ---
 id: AS-156
 title: Private VPC deployment
-status: needs-clarification
+status: ready-to-implement
 area: deployment
 priority: P2
 depends_on: [AS-161, AS-148, AS-154]
@@ -22,7 +22,7 @@ Define the first always-on private deployment for the Smith orchestrator so dogf
 - [ ] Runbooks explain deploy, upgrade, rollback, pause all jobs, inspect failures, rotate credentials, and restore DB backup.
 - [ ] The design keeps hosted/multi-tenant assumptions out of MVP 1 while preserving future seams.
 
-## Research input (AS-158)
+## Clarification (resolved 2026-06-30) — research input (AS-158)
 
 See [orchestrator-competitive-research.md §3 AS-156](../../research/orchestrator-competitive-research.md#as-156--private-vpc-deployment):
 single-tenant VM-per-agent runner inside the maintainer's VPC (Ona AWS-runner

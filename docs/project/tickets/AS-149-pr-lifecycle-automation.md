@@ -1,7 +1,7 @@
 ---
 id: AS-149
 title: PR lifecycle automation
-status: needs-clarification
+status: ready-to-implement
 area: integrations
 priority: P2
 depends_on: [AS-147, AS-148]
@@ -27,6 +27,20 @@ Add the deterministic PR lifecycle actions required for Smith to implement Smith
 
 [AS-147, AS-148]
 
-## Open questions
+## Clarification (resolved 2026-06-30)
 
-1. Exact deterministic-action set and idempotency keys for create/update PR, comment, and status depend on AS-147 event normalization and AS-148 auth landing first.
+The blocker named here was sequencing, not an open product question: AS-147 and
+AS-148 are now both `ready-to-implement` with their design fixed, which is what
+this ticket was waiting on.
+
+1. **Idempotency keys.** AS-147's acceptance criteria already define the
+   trigger-record shape this ticket consumes — "repository, issue/PR number,
+   labels, actor, event time, delivery ID, and idempotency key" — so PR
+   create/update/comment/status actions key off that same `(delivery ID,
+   idempotency key)` pair rather than defining a second one; "duplicate webhook
+   delivery does not enqueue duplicate effective work" (AS-147 AC) is the
+   existing guarantee this ticket's actions build on.
+2. **Auth.** AS-148's clarified strategy (scoped maintainer token now, GitHub
+   App migration later, real credential kept in a proxy outside the runner,
+   push restricted to the run's own branch) is the credential path PR actions
+   use; no separate auth design is needed here.

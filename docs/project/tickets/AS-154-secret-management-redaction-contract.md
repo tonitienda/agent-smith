@@ -1,7 +1,7 @@
 ---
 id: AS-154
 title: Secret management and redaction contract
-status: needs-clarification
+status: ready-to-implement
 area: security
 priority: P2
 depends_on: [AS-159, AS-148, AS-158]
@@ -23,7 +23,7 @@ Define how orchestrated jobs declare, receive, audit, redact, and revoke secrets
 - [ ] Redaction-at-capture is applied before logs or artifacts leave the runner where possible.
 - [ ] The implementation plan reflects findings from AS-158.
 
-## Research input (AS-158)
+## Clarification (resolved 2026-06-30) — research input (AS-158)
 
 See [orchestrator-competitive-research.md §3 AS-154](../../research/orchestrator-competitive-research.md#as-154--secret-management-and-redaction-contract):
 declared named scopes per job with validation failing on undeclared reference

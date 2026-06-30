@@ -151,7 +151,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-114](AS-114-phase-skill-projection-scope.md) | Scope Coding Mode process-skill blocks to the active phase (spun out of AS-074) | coding-mode | done | 074, 006 |
 | [AS-115](AS-115-redaction-at-capture.md) | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | compliance | done | 005, 016 |
 | [AS-116](AS-116-escalation-visibility-wiring.md) | Surface auto-escalation in `/route` and `/cost` + wire the first producer (spun out of AS-110) | cost | done | 110 |
-| [AS-117](AS-117-tidy-dead-end-and-working-memory.md) | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | context-wedge | needs-clarification | 043, 048 |
+| [AS-117](AS-117-tidy-dead-end-and-working-memory.md) | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | context-wedge | ready | 043, 048 |
 | [AS-118](AS-118-json-root-help-output.md) | Root help ignores `--output json` | faces | done | 065, 070 |
 | [AS-119](AS-119-task-faces-and-tool-inheritance.md) | `task` delegation across faces + child tool inheritance (spun out of AS-046) | subagents | done | 046, 051, 077 |
 | [AS-120](AS-120-task-cost-itemization-and-budget.md) | `task` per-child cost itemization, prompt attribution, budget (spun out of AS-046) | cost | done | 046, 020, 041 |
@@ -217,40 +217,40 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
-| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | needs-clarification | AS-160, AS-161 |
-| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | needs-clarification | AS-159, AS-147 |
-| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | needs-clarification | AS-147, AS-148 |
-| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | needs-clarification | AS-160 |
-| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | needs-clarification | AS-161 |
-| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | needs-clarification | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
-| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | orchestrator | needs-clarification | AS-159, AS-161, AS-158 |
-| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | needs-clarification | AS-159, AS-148, AS-158 |
-| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
-| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | needs-clarification | AS-161, AS-148, AS-154 |
-| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | needs-clarification | AS-147, AS-148, AS-149 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | ready | AS-160, AS-161 |
+| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | ready | AS-159, AS-147 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | ready | AS-147, AS-148 |
+| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | ready | AS-160 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | ready | AS-161 |
+| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
+| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | orchestrator | ready | AS-159, AS-161, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | ready | AS-159, AS-148, AS-158 |
+| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | ready | AS-161, AS-151 |
+| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | ready | AS-161, AS-148, AS-154 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | ready | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | done | AS-159 |
 
 ## Index — Orchestrator dogfood wave (`smith-orchestrator-dogfood-prd.md`)
 
-> The architecture/DSL/daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by the merged keychain/archtest tickets above) to AS-159–AS-161. The wave stays `needs-clarification` until the AS-159 architecture ADR lands.
+> The architecture/DSL/daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by the merged keychain/archtest tickets above) to AS-159–AS-161. The AS-159 architecture ADR has landed (Accepted), so the wave below is clarified; see the index above for current status (most of AS-147…AS-162 are now `ready`, gated only on build order, not open design questions; AS-113 remains the sole product-decision blocker).
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries | orchestrator | ready-to-implement | — |
-| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | needs-clarification | AS-159 |
+| [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries | orchestrator | done | — |
+| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
-| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | needs-clarification | AS-160, AS-161 |
-| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | needs-clarification | AS-159, AS-147 |
-| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | integrations | needs-clarification | AS-147, AS-148 |
-| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | provider | needs-clarification | AS-160 |
-| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | observability | needs-clarification | AS-161 |
-| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | dogfood | needs-clarification | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
-| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | security | needs-clarification | AS-159, AS-161, AS-158 |
-| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | security | needs-clarification | AS-159, AS-148, AS-158 |
-| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
-| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | needs-clarification | AS-161, AS-148, AS-154 |
-| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | needs-clarification | AS-147, AS-148, AS-149 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | ready | AS-160, AS-161 |
+| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | ready | AS-159, AS-147 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | integrations | ready | AS-147, AS-148 |
+| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | provider | ready | AS-160 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | observability | ready | AS-161 |
+| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | dogfood | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
+| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | security | ready | AS-159, AS-161, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | security | ready | AS-159, AS-148, AS-158 |
+| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | ready | AS-161, AS-151 |
+| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | ready | AS-161, AS-148, AS-154 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | ready | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | done | AS-159 |
 
 ## Suggested build order
@@ -267,19 +267,25 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is **resolved** ([docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md)): closed in favour of 079 — `smith serve` ships for local use only and the public demo is the read-only inspector, since hosting strangers collides with D9 ("not a sandbox").
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
-13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL) / 161 (daemon + SQLite run store), with 158 (research spike, done — [research notes](../../research/orchestrator-competitive-research.md)) feeding 148/153/154/156/157. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157) stay needs-clarification until the DSL/daemon land and the product decisions resolve their Open questions.
+13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL, done) / 161 (daemon + SQLite run store, done), with 158 (research spike, done — [research notes](../../research/orchestrator-competitive-research.md)) feeding 148/153/154/156/157. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157, plus 162) are now `ready`, clarified against the landed ADR and research spike; build them in roughly their dependency order (147/150/151 first, then 148/149, then 153/154/156/157, then 155, with 152 last as it composes the rest).
 
 ## Needs clarification — decisions to make
 
 Previously listed `needs-clarification` tickets were triaged against the current
 repo documentation and clarified where the documented direction was sufficient.
-Two open items remain: **AS-113** (plugin consent screen), which has nothing to
-hang a consent flow on until a plugin-install/marketplace path exists (§7.26, not
-yet ticketed), and **AS-117** (`/tidy` dead-end collapse + working-memory
-promotion), whose surfaces need pinning before building — see each ticket's Open
-questions section. New bug follow-ons should stay `ready-to-implement` unless
-they truly need a product decision. New ambiguous follow-on work should be
-captured by adding a fresh ticket with a focused Open questions section.
+A 2026-06-30 QA pass re-triaged the remaining set, including the orchestrator
+dogfood wave (AS-147…AS-157, AS-162) and AS-117, against the now-landed AS-159
+ADR, the AS-158 research spike, and the AS-043/AS-048 implementations — all of
+those moved to `ready-to-implement`, with the resolution recorded in each
+ticket's "Clarification" section.
+
+One open item remains: **AS-113** (plugin consent screen), which has nothing to
+hang a consent flow on until a plugin-install/marketplace path exists (§7.26,
+not yet ticketed) — confirmed still blocked against `docs/design/plugin-trust.md`
+§8, which explicitly defers AS-113 until that path is filed. New bug follow-ons
+should stay `ready-to-implement` unless they truly need a product decision. New
+ambiguous follow-on work should be captured by adding a fresh ticket with a
+focused Open questions section.
 
 The clarified decisions are recorded in the individual ticket files rather than
 repeated here, so the ticket remains the source of truth for implementation.

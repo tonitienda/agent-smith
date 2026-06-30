@@ -1,7 +1,7 @@
 ---
 id: AS-153
 title: Sandbox abstraction and execution environments
-status: needs-clarification
+status: ready-to-implement
 area: security
 priority: P2
 depends_on: [AS-159, AS-161, AS-158]
@@ -22,7 +22,7 @@ Design the execution-environment seam for orchestrated work, starting from local
 - [ ] Later worker protocol needs are captured without blocking GitHub-triggered dogfood automation.
 - [ ] Documentation states which isolation guarantees each backend does and does not provide.
 
-## Research input (AS-158)
+## Clarification (resolved 2026-06-30) — research input (AS-158)
 
 See [orchestrator-competitive-research.md §3 AS-153](../../research/orchestrator-competitive-research.md#as-153--sandbox-abstraction-and-execution-environments):
 backends weakest→strongest (local checkout / VPC runner / rootless container /
