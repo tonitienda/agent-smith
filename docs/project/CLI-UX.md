@@ -17,6 +17,11 @@ It complements the locked UX decisions (UX.md §22) and the PRD Decision Log
 to the CLI contract too: flags, subcommands, output fields, and exit codes are
 **added, never removed or repurposed**.
 
+The command surface should also stay **progressively discoverable**: Smith can
+grow many capabilities internally, but the user-facing command tree should be
+collapsed into a small set of memorable nouns and flows so new users are not
+confronted with a scary wall of near-duplicate commands.
+
 ---
 
 ## Decision Log — CLI (D-CLI-N)
