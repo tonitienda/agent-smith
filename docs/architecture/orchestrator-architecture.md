@@ -119,7 +119,7 @@ AS-158 research spike (their ticket Open-questions sections name the blocker):
 AS-147, AS-148, AS-149, AS-150, AS-151, AS-152, AS-153, AS-154, AS-155, AS-156,
 AS-157.
 
-- **AS-158** — competitive workflow / sandbox / secrets research spike: stays **ready**; it feeds AS-148, AS-153, AS-154.
+- **AS-158** — competitive workflow / sandbox / secrets research spike: **done** ([research notes](../research/orchestrator-competitive-research.md)); it feeds AS-148, AS-153, AS-154, AS-156, AS-157.
 
 ## Consequences
 

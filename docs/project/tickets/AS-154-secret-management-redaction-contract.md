@@ -23,6 +23,16 @@ Define how orchestrated jobs declare, receive, audit, redact, and revoke secrets
 - [ ] Redaction-at-capture is applied before logs or artifacts leave the runner where possible.
 - [ ] The implementation plan reflects findings from AS-158.
 
+## Research input (AS-158)
+
+See [orchestrator-competitive-research.md §3 AS-154](../../research/orchestrator-competitive-research.md#as-154--secret-management-and-redaction-contract):
+declared named scopes per job with validation failing on undeclared reference
+(Copilot isolated bucket); a credential proxy so values never enter the
+runner/spec/DB/log (Ona, Claude web) as the primary control; setup-phase-only
+secrets removed before the agent phase (Codex); redaction-at-capture (`[REDACTED]`)
+and prefer file-type over env-var secrets (Ona); audit name/scope/expiry/recipient/
+run-IDs, never values.
+
 ## Dependencies
 
 [AS-159, AS-148, AS-158]

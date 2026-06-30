@@ -22,6 +22,15 @@ Design the execution-environment seam for orchestrated work, starting from local
 - [ ] Later worker protocol needs are captured without blocking GitHub-triggered dogfood automation.
 - [ ] Documentation states which isolation guarantees each backend does and does not provide.
 
+## Research input (AS-158)
+
+See [orchestrator-competitive-research.md §3 AS-153](../../research/orchestrator-competitive-research.md#as-153--sandbox-abstraction-and-execution-environments):
+backends weakest→strongest (local checkout / VPC runner / rootless container /
+microVM) with per-backend isolation guarantees documented (Ona model); adopt a
+two-phase lifecycle (network-on setup, default-deny-egress agent phase — Codex)
+with allowlist + clear deny errors (Claude `403 host_not_allowed`); MVP 0 ships
+the local backend only behind the interface with no security claims.
+
 ## Dependencies
 
 [AS-159, AS-161, AS-158]

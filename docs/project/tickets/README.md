@@ -226,7 +226,7 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 | [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
 | [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | needs-clarification | AS-161, AS-148, AS-154 |
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | needs-clarification | AS-147, AS-148, AS-149 |
-| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | ready-to-implement | AS-159 |
+| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | done | AS-159 |
 
 ## Index — Orchestrator dogfood wave (`smith-orchestrator-dogfood-prd.md`)
 
@@ -248,7 +248,7 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 | [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
 | [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | needs-clarification | AS-161, AS-148, AS-154 |
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | needs-clarification | AS-147, AS-148, AS-149 |
-| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | ready-to-implement | AS-159 |
+| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | done | AS-159 |
 
 ## Suggested build order
 
@@ -264,7 +264,7 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is **resolved** ([docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md)): closed in favour of 079 — `smith serve` ships for local use only and the public demo is the read-only inspector, since hosting strangers collides with D9 ("not a sandbox").
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
-13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL) / 161 (daemon + SQLite run store), with 158 (research spike) feeding 148/153/154. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157) stay needs-clarification until the DSL/daemon land and the spike + product decisions resolve their Open questions.
+13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL) / 161 (daemon + SQLite run store), with 158 (research spike, done — [research notes](../../research/orchestrator-competitive-research.md)) feeding 148/153/154/156/157. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157) stay needs-clarification until the DSL/daemon land and the product decisions resolve their Open questions.
 
 ## Needs clarification — decisions to make
 
