@@ -35,6 +35,7 @@ import (
 //     legitimately wire everything together.
 var orchestrationAndFacePackages = []string{
 	"internal/loop",
+	"internal/orchestrator",
 	"internal/benchmark",
 	"internal/delegate",
 	"internal/insights",

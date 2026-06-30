@@ -17,6 +17,7 @@ package will fail `make test`.
 | **Executable / composition** | `cmd/...` (e.g. `cmd/smith`) | Yes — process-edge wiring (terminal setup, the TUI face). |
 | **Face** | `internal/tui` | Yes — the interactive terminal UI builds on Bubble Tea / Lip Gloss / Glamour. |
 | **OS secret store** | `internal/credential` | Yes — the OS-keychain adapter wraps `go-keyring` (macOS Keychain / Linux Secret Service / Windows Credential Manager); there is no stdlib equivalent (AS-017, D9). |
+| **Orchestrator** | `internal/orchestrator` (+ `/store`) | Yes — the daemon needs a SQLite run store (pure-Go `modernc.org/sqlite`, no cgo) and a YAML job-spec loader (`gopkg.in/yaml.v3`); neither has a stdlib equivalent (AS-161, ADR D-ORCH-4). |
 | **Core** | everything else: `schema`, `internal/eventlog`, `internal/projection`, `internal/provider` (+ adapters), `internal/loop`, `internal/cost`, `internal/budget`, `internal/config`, `internal/permission`, `internal/tool` (+ `builtin`), `internal/command`, capability packages (`memory`, `skill`, `customcmd`, `hook`, `mcp`, `subagent`), `internal/compact`, `internal/clean`, `internal/rewind`, `internal/snapshot`, `internal/session`, `internal/smithapp`, `internal/cli`, … | **No** — Go standard library and this module only. |
 
 The **provider adapter** packages (`internal/provider/anthropic`,
@@ -36,3 +37,4 @@ otherwise, so the documentation and the enforcement cannot silently drift apart.
 | Exception | Package | Justification |
 |---|---|---|
 | `go-keyring` | `internal/credential` | OS-keychain key storage has no stdlib equivalent; the package is a thin adapter behind the `credential.Store` seam so the rest of core depends only on the interface (AS-017, PRD D9). |
+| `modernc.org/sqlite`, `gopkg.in/yaml.v3` | `internal/orchestrator` (+ `/store`) | The always-on orchestrator (AS-161, ADR D-ORCH-4) needs a durable run-control DB and a YAML job-spec loader; `modernc.org/sqlite` is pure-Go so `make build` stays a static, cgo-free binary. The stdlib-only job-spec *model* (`internal/orchestrator/spec`) stays third-party-free. |

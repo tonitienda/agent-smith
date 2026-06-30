@@ -215,7 +215,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 |---|---|---|---|---|
 | [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries (ADR) | orchestrator | done | — |
 | [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
-| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | ready-to-implement | AS-159, AS-160, AS-163 |
+| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
 | [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | needs-clarification | AS-160, AS-161 |
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | needs-clarification | AS-159, AS-147 |
@@ -238,7 +238,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 |---|---|---|---|---|
 | [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries | orchestrator | ready-to-implement | — |
 | [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | needs-clarification | AS-159 |
-| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | needs-clarification | AS-159, AS-160, AS-163 |
+| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
 | [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | needs-clarification | AS-160, AS-161 |
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | needs-clarification | AS-159, AS-147 |
