@@ -431,3 +431,16 @@ describe.
 | `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
 | `smith auth set openai` / `auth status` with no Secret Service | Pass (AS-144 holds) | `auth set` shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint and never writes a plaintext key; `auth status` shows `no keychain available (set OPENAI_API_KEY …)`. |
 | Campaign stale entries | Fixed | AS-080 (spike), AS-124, AS-139 moved from "Not implemented" → "Implemented (`done`)": removed from the not-implemented rows and added to the active lists — coverage matrix, a new Implemented quick-checklist row, the §6 and §8 `Covers` lists, the §9 header `Covers` list, and step 8.2c. All three confirmed `done` in their ticket frontmatter (AS-139 efficacy code in `internal/skillrollup`/`internal/stats`, AS-124 merged in #467). |
+
+## AS-161 — orchestrator daemon + SQLite run store (2026-06-30)
+
+`smith runs daemon` shipped (MVP 0). Manual retest surface (offline):
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `go test ./internal/orchestrator/...` | Pass | Loader, cron, scheduler, SQLite store, retry/concurrency/idempotency. |
+| `./smith runs daemon --help` | — | Lists `start/list/inspect/rerun/cancel/pause/resume/health` (nested under `runs` to avoid colliding with the AS-054 prompt-run verbs). |
+| `./smith runs daemon health --output json` | — | Reports `{jobs, runs{...}}` for the project-scoped run-control DB. |
+| `./smith runs daemon start` in a repo with `.agent-smith/jobs/*.yaml` | — | Loads + validates specs (fail-closed per spec), arms cron/manual/GitHub triggers; MVP-0 `StubExecutor` runs steps as no-ops (real executor: AS-147/149/150/151). |
+| `runs daemon list` / `inspect <id>` / `cancel <id>` / `rerun <id>` | — | Operator read/control over orchestrated runs and attempt history. |
+| `runs daemon pause <job>` / `resume <job>` | — | Job-level pause survives a spec reload. |

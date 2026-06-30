@@ -115,6 +115,7 @@ func runsCommand() *cli.Command {
 				Scriptability: command.Scriptable.String(),
 				Run:           runsResume,
 			},
+			daemonCommand(),
 		},
 	}
 }

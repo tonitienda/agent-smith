@@ -84,6 +84,18 @@ func TestLayeringContracts(t *testing.T) {
 			reason:       "the job-spec model + validator (AS-163) is a stdlib-only, decoding-agnostic leaf; the daemon (AS-161) feeds it decoded maps and the YAML/file plumbing lives there, not in the model",
 		},
 		{
+			name:      "orchestrator daemon does not import faces or composition roots",
+			pkgDir:    "internal/orchestrator",
+			forbidden: []string{"internal/tui", "internal/serve", "cmd"},
+			reason:    "the orchestrator is at the orchestration tier alongside the loop (ADR D-ORCH-3); faces and cmd/* wire it up, never the reverse",
+		},
+		{
+			name:      "orchestrator run store does not import the daemon, loop, or faces",
+			pkgDir:    "internal/orchestrator/store",
+			forbidden: []string{"internal/orchestrator/spec", "internal/loop", "internal/tui", "internal/serve", "cmd"},
+			reason:    "the SQLite run store (AS-161) is a storage leaf under the orchestrator; the daemon depends on it, not the reverse, and it holds run-control state only — it never reaches into the spec model, the loop, or a face",
+		},
+		{
 			name:      "loop does not import faces or composition roots",
 			pkgDir:    "internal/loop",
 			forbidden: []string{"internal/tui", "internal/serve", "cmd"},

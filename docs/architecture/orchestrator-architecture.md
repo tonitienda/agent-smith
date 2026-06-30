@@ -49,6 +49,14 @@ Surfaces:
   control over jobs and runs (CLI-first; the operator API/UI in AS-155 wraps the
   same verbs, it does not replace them).
 
+> **AS-161 implementation refinement.** `runs` already hosts the AS-054 async
+> prompt-run queue (`list/status/work/resume`) — a different notion of "run". To
+> avoid overloading those verbs, AS-161 nests the orchestrator one level deeper:
+> the process is `smith runs daemon start` and the operator verbs are
+> `smith runs daemon {list,inspect,rerun,cancel,pause,resume,health}`. This keeps
+> the `smith runs daemon` entry this ADR fixed while disambiguating the operator
+> surface from the prompt-run queue.
+
 ### D-ORCH-3 — New `internal/orchestrator` boundary at the orchestration tier
 
 The orchestrator lives behind a new `internal/orchestrator` package at the
@@ -112,7 +120,7 @@ Following AS-159, the architecture/boundary questions are resolved, so the two
 foundational build tickets move to **ready-to-implement**:
 
 - **AS-160** — job spec / DSL: location, shape, and declarative-action principle fixed here; the format is now specified in [job-spec-dsl.md](../design/job-spec-dsl.md) (status: done).
-- **AS-161** — daemon / scheduler / SQLite run store: command shape, package boundary, and store/session split fixed here.
+- **AS-161** — daemon / scheduler / SQLite run store: command shape, package boundary, and store/session split fixed here. **Status: done** — `internal/orchestrator` (+ `/store`) ships the loader, SQLite run store, cron/manual/GitHub scheduler, bounded execution, and the `smith runs daemon` operator surface; the real step `Executor` is wired by AS-147/149/150/151.
 
 These stay **needs-clarification**, each gated on a product decision and/or the
 AS-158 research spike (their ticket Open-questions sections name the blocker):

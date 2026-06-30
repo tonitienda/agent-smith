@@ -24,9 +24,10 @@ const modulePath = "github.com/tonitienda/agent-smith"
 // Adding an entry here is the documented escape hatch for a justified exception
 // (PRD D6); keep this list and the boundaries doc in lockstep.
 var thirdPartyAllowed = []string{
-	"internal/tui",        // the interactive TUI face (Bubble Tea / Lip Gloss / Glamour)
-	"internal/credential", // OS-keychain secret-store adapter (go-keyring); AS-017, D9
-	"cmd",                 // executable composition roots wire faces and terminal setup
+	"internal/tui",          // the interactive TUI face (Bubble Tea / Lip Gloss / Glamour)
+	"internal/credential",   // OS-keychain secret-store adapter (go-keyring); AS-017, D9
+	"internal/orchestrator", // orchestrator daemon: SQLite run store (modernc.org/sqlite) + YAML job loader (gopkg.in/yaml.v3); AS-161, ADR D-ORCH-4
+	"cmd",                   // executable composition roots wire faces and terminal setup
 }
 
 // TestCoreStaysStdlibFirst walks every non-test Go source in the module and

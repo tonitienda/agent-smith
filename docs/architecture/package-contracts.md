@@ -32,6 +32,7 @@ those lower layers never depend back up.
 | **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`, `internal/serve`), `cmd/*` |
 | **Orchestrator** | `internal/orchestrator` (orchestration tier, ADR D-ORCH-3) | core contracts (eventlog, provider, config, cost, async runner) | inward-core packages, faces, `cmd/*` |
 | **Job-spec model** | `internal/orchestrator/spec` (stdlib-only leaf) | `schema`-style stdlib only | everything else |
+| **Run-control store** | `internal/orchestrator/store` (SQLite leaf, AS-161) | stdlib + `modernc.org/sqlite` | the daemon depends on it; it imports no daemon/loop/faces |
 | **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 
@@ -45,7 +46,7 @@ The enforced contracts (guard test) are the corners most prone to drift:
 The blanket form of "dependencies point inward" is enforced too
 (`internal/archtest/inward_core_test.go`, AS-146): every first-party package
 that is not in the orchestration/face/composition-root layer
-(`orchestrationAndFacePackages` — the loop, `benchmark`, `delegate`, the
+(`orchestrationAndFacePackages` — the loop, the orchestrator, `benchmark`, `delegate`, the
 analytics consumers `insights`/`insightsmodel`/`stats`/`statsindex`/`improve`/
 `skillrollup`, the faces `tui`/`serve`, and the roots `smithapp`/`cmd/*`/`e2e`)
 must import nothing in that layer. Per-package guards in `layering_test.go` catch
