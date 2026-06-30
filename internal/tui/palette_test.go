@@ -377,6 +377,59 @@ func TestPaletteHeightClampedToShortTerminal(t *testing.T) {
 	}
 }
 
+// TestPaletteModalChrome covers the AS-127 redesign: a tall window renders the
+// palette as a bordered modal with a search field, a "N commands" count, the
+// selected-row caret, and the footer hint row.
+func TestPaletteModalChrome(t *testing.T) {
+	reg := sampleRegistry(t,
+		command.Command{Name: "cost", Summary: "show cost", Run: nopHandler},
+		command.Command{Name: "context", Summary: "show context", Run: nopHandler},
+		command.Command{Name: "serious", Summary: "mute theme", Run: nopHandler},
+	)
+	m := newCommandModel(t, reg)
+	m = typeString(t, m, "/co") // matches cost, context; cost selected
+
+	view := m.paletteView()
+	for _, want := range []string{
+		"╭",          // rounded modal border
+		"❯",          // search caret + selected-row caret
+		"2 commands", // match count
+		"/cost",      // command names listed
+		"/context",   // command names listed
+		"↑↓ move · ↵ run · tab complete · esc close", // footer hints
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("palette view missing %q:\n%s", want, view)
+		}
+	}
+	// The bordered modal must be taller than its match rows (search + rule +
+	// footer + border), and paletteHeight must match what is drawn.
+	if got := m.paletteHeight(); got != strings.Count(view, "\n")+1 {
+		t.Fatalf("paletteHeight()=%d, rendered rows=%d", got, strings.Count(view, "\n")+1)
+	}
+	if m.paletteHeight() <= len(m.palette.matches) {
+		t.Fatalf("modal height %d should exceed %d match rows", m.paletteHeight(), len(m.palette.matches))
+	}
+}
+
+// TestPaletteFitsTerminalWidth guards the modal against horizontal overflow: a
+// long summary in a narrow window must not push any rendered row (border
+// included) past the terminal width, which would garble the box border.
+func TestPaletteFitsTerminalWidth(t *testing.T) {
+	reg := sampleRegistry(t,
+		command.Command{Name: "context", Summary: strings.Repeat("very long summary ", 6), Run: nopHandler},
+	)
+	m := newCommandModel(t, reg)
+	m = update(t, m, tea.WindowSizeMsg{Width: 30, Height: 24})
+	m = typeString(t, m, "/context")
+
+	for _, line := range strings.Split(m.paletteView(), "\n") {
+		if w := lipglossWidth(line); w > m.width {
+			t.Fatalf("palette row width %d exceeds terminal width %d: %q", w, m.width, line)
+		}
+	}
+}
+
 // nopHandler is a do-nothing command handler for palette/registry tests.
 func nopHandler(context.Context, []string) (command.Output, error) {
 	return command.Output{}, nil
