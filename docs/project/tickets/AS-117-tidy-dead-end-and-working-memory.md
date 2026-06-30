@@ -1,7 +1,7 @@
 ---
 id: AS-117
 title: /tidy dead-end collapse + working-memory promotion (spun out of AS-043)
-status: needs-clarification
+status: ready-to-implement
 github_issue: 382
 depends_on: [AS-043, AS-048]
 area: context-wedge
@@ -11,7 +11,7 @@ source: PRD.md §7.13, §9; AS-043 clarified decisions
 
 # AS-117 · /tidy dead-end collapse + working-memory promotion
 
-**Status: needs clarification**
+**Status: ready to implement**
 
 ## Description
 
@@ -33,19 +33,32 @@ land as a separate, reviewed change rather than a second silent removal path
   **reuse AS-048's single memory-writing path**, not invent a second one; `/tidy`
   may surface candidates but the write goes through the shared mechanism.
 
-## Open questions
+## Clarification (resolved 2026-06-30)
 
-- **Dead-end heuristics:** what exact signals qualify a span as a dead end
-  (e.g. N consecutive failing `shell` results on the same command; a file read
-  then never referenced again; a tool error loop)? Reuse the AS-045/AS-048
-  signal definitions where they already exist rather than defining new ones.
-- **Working-memory block shape:** is the promoted block a derived `KindText`
-  system block, or does it ride on the AS-048 memory-file write? The §7.13 wedge
-  wants it *in the window*; AS-048 writes to a file picked up next session — these
-  are different surfaces and the relationship must be pinned before building.
-- **Composition with dedup:** when dead-end collapse and dedup both apply in one
-  `/tidy`, is it one combined fidelity diff + one exclusion event, or staged
-  steps? (Lean: one diff, one atomic event, mirroring the dedup path.)
+The three open questions below are already answered by the AS-043 "Clarified
+implementation decisions" (done) and AS-048's shipped behavior (done); nothing
+new needs deciding before implementation:
+
+- **Dead-end heuristics:** AS-043's clarified decisions already pin this down —
+  "group by phase/turn/file/tool spans, detect repeated failing shell commands
+  and abandoned file paths, then let the preview decide. No autonomous
+  deletion." That *is* the AS-045/AS-048-style signal definition this ticket
+  asked to reuse: (1) repeated failing `shell` results on the same command
+  within a span, and (2) a file read whose path is never referenced again
+  later in the session. No third "tool error loop" signal is needed for V1 —
+  it collapses into (1) for shell and is out of scope for other tools.
+- **Working-memory block shape:** AS-043 is explicit: "the promotion mechanism
+  is shared with AS-048; `/tidy` may surface candidates but must not invent a
+  second memory-writing path." So the promoted fact is **not** a derived
+  `KindText` window block — it rides on AS-048's existing memory-file write
+  (skill scope → deepest memory file → project-root fallback, per AS-048's
+  `Resolve` func), applied via the same diff-preview AS-048/AS-045 already use.
+  `/tidy` surfaces candidates in its fidelity diff but defers the actual write
+  to that single path, exactly as AS-043 already shipped for the dedupe half.
+- **Composition with dedup:** AS-043's own lean — "one diff, one atomic event,
+  mirroring the dedup path" — is the answer: dead-end collapse extends the same
+  `KindExclusion` event/fidelity-diff AS-043 ships for dedupe, combined into one
+  preview→apply/undo cycle rather than staged steps.
 
 ## Dependencies
 

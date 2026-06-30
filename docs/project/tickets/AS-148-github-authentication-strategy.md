@@ -1,7 +1,7 @@
 ---
 id: AS-148
 title: GitHub authentication strategy
-status: needs-clarification
+status: ready-to-implement
 area: integrations
 priority: P2
 depends_on: [AS-159, AS-147]
@@ -22,7 +22,7 @@ Decide and document how the first dogfood orchestrator receives limited GitHub a
 - [ ] Credential lifetime, storage location, rotation expectations, and audit behavior are documented.
 - [ ] Migration path from MVP dogfood auth to future GitHub App onboarding is documented.
 
-## Research input (AS-158)
+## Clarification (resolved 2026-06-30) — research input (AS-158)
 
 See [orchestrator-competitive-research.md §3 AS-148](../../research/orchestrator-competitive-research.md#as-148--github-authentication-strategy):
 MVP 0 = tightly scoped fine-grained maintainer token (Contents/PRs/Issues r/w,

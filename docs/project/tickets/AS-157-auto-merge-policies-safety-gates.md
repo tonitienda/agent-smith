@@ -1,7 +1,7 @@
 ---
 id: AS-157
 title: Auto-merge policies and safety gates
-status: needs-clarification
+status: ready-to-implement
 area: integrations
 priority: P2
 depends_on: [AS-147, AS-148, AS-149]
@@ -23,7 +23,7 @@ Define the deterministic policy that allows Smith-authored PRs to be merged auto
 - [ ] Every merge decision records all evaluated inputs and the final allow/deny reason in the run DB and Smith event log.
 - [ ] Manual override path is explicit and audited.
 
-## Research input (AS-158)
+## Clarification (resolved 2026-06-30) — research input (AS-158)
 
 See [orchestrator-competitive-research.md §3 AS-157](../../research/orchestrator-competitive-research.md#as-157--auto-merge-policies-and-safety-gates):
 no surveyed vendor ships prompt-driven auto-merge — all defer to GitHub branch
@@ -37,6 +37,15 @@ every evaluated input + reason in run DB and session log.
 
 [AS-147, AS-148, AS-149]
 
-## Open questions
+## Open questions (resolved)
 
-1. Exact acceptable auto-merge policy for Smith-authored PRs (PRD Q5) is a product decision pending AS-149 PR automation; the ADR fixes only the fail-closed constraints.
+1. ~~Exact acceptable auto-merge policy for Smith-authored PRs (PRD Q5) is a
+   product decision pending AS-149 PR automation; the ADR fixes only the
+   fail-closed constraints.~~ Resolved by the AS-158 research input above:
+   mirror Copilot's hard gate (independent human approval; the requester
+   cannot self-approve), auto-merge off unless both job spec and repo policy
+   explicitly allow it, and failed/pending/missing/unknown checks always block
+   — this is the concrete policy PRD Q5 asked for, validated against every
+   surveyed vendor ("no surveyed system ships prompt-driven auto-merge").
+   AS-149 (PR lifecycle automation) is now itself `ready-to-implement`, so the
+   sequencing blocker is also cleared.
