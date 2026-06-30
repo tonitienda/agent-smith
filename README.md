@@ -23,7 +23,7 @@ Today's coding agents (Claude Code, Codex, Cursor, Aider, …) optimize for capa
 
 ## How it's different
 
-Two structural decisions (see the PRD's [Decision Log](docs/project/PRD.md#decision-log--v03-post-grilling-where-this-conflicts-with-the-sections-below-this-wins), D0–D9, which overrides the rest of the document):
+Two structural decisions (see the [Decision Log](docs/project/decisions.md), D0–D9, which overrides the rest of the PRD):
 
 - **An open, stable data substrate.** Every session is an **append-only, immutable event log of content blocks**; the model-facing context is a *projection* over that log. Editing commands append exclusion/derived events with provenance — they never mutate history, so every edit is reversible and auditable by construction (D3). The schema is the designed-up-front union of mainstream agent/provider wire formats (D4) and is **additive-only forever** — no breaking changes, ever (D2). Incumbents keep the transcript as a private, churning internal artifact; Agent Smith publishes it as a stable API others can build on. That, plus provider neutrality, is the moat (D1).
 - **Cost/speed as a design criterion, not a marketing claim.** "Cheaper and faster than a naive harness on the same model" is an internal guardrail measured on a benchmark suite (D5). External positioning leads with control, observability, and neutrality.
