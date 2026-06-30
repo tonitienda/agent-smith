@@ -1,7 +1,7 @@
 ---
 id: AS-162
 title: Guard that every internal package is accounted for in package-contracts.md
-status: needs-clarification
+status: ready-to-implement
 github_issue: null
 depends_on: [AS-098, AS-146]
 area: quality
@@ -11,7 +11,7 @@ source: docs/architecture/package-contracts.md; QA pass 2026-06-30
 
 # AS-162 · Guard that every internal package is accounted for in package-contracts.md
 
-**Status: needs clarification** *(raised during a QA pass comparing the architecture docs, arch tests, and code; the doc claim that caused the drift is unenforced)*
+**Status: ready to implement** *(raised during a QA pass comparing the architecture docs, arch tests, and code; clarified against the existing `orchestrationAndFacePackages` guard pattern)*
 
 ## Description
 
@@ -37,28 +37,48 @@ This ticket asks whether to add a guard test (analogous to the existing
 mentioned in `package-contracts.md` nor on an explicit allowlist, so the doc and
 the code cannot silently diverge.
 
-## Open questions
+## Clarification (resolved 2026-06-30)
 
-1. **Is a completeness guard worth the maintenance cost?** It would require every
-   new package to be either named in the doc or added to an allowlist, on pain of
-   a failing test. That is the same trade the `orchestrationAndFacePackages`
-   allowlist already makes (a new orchestration package must be appended). Is the
-   doc-completeness payoff worth a second list to keep in sync, or is the
-   "map is complete" claim better *softened* (drop the completeness promise) so
-   the doc stays a curated guide rather than an exhaustive registry?
-2. **What counts as "accounted for"?** A crude check (package basename appears as
-   a backticked token somewhere in the file) is cheap but easy to satisfy
-   trivially and prone to false matches (e.g. `composition` the package vs.
-   "composition root"). A stricter check (an explicit per-package registry table)
-   is more honest but more boilerplate. Which granularity?
-3. **Where should the guard live and what is its allowlist seed?** Presumably a
-   new test in `internal/archtest` walking `internal/*` and `cmd/*`, seeded with
-   the packages intentionally not in the narrative map (pure leaves already
-   covered by `dependency-boundaries.md`, test tooling, etc.). Confirm the seam
-   and the initial allowlist before implementing.
-4. **Does the same drift risk apply to `dependency-boundaries.md`?** Its core
-   list is illustrative (ends in `…`), so it does not claim completeness today.
-   Should it, or is one enforced map enough?
+1. **Worth the maintenance cost? Yes.** `internal/archtest/inward_core_test.go`
+   already runs exactly this trade for `orchestrationAndFacePackages` and
+   documents why it's the right shape: "the lowest-maintenance form of the
+   guard... a new inward-core package is covered automatically... the cost is
+   that a *new* orchestration/face package must be appended below, or the guard
+   will treat it as inward and fail... that failure is the reminder to update
+   the list." A completeness guard for `package-contracts.md` is the same
+   precedent applied to the doc instead of the layering rule — proven cheap in
+   this codebase, not a new kind of cost. Softening the "map is complete" claim
+   instead would just relocate today's silent-drift failure mode rather than
+   close it, so keep the completeness promise and enforce it.
+2. **Granularity: start with the cheap backtick-token check, plus an
+   allowlist for the false-match it names.** A per-package registry table is
+   more boilerplate than the existing `package-contracts.md` narrative style
+   warrants and would itself drift from the prose. The `composition`-the-package
+   vs. "composition root" false-positive AS-162 itself names is a one-line fix:
+   require the token to appear as an inline-code span (`` `composition` ``)
+   immediately preceding or following a path-like context (e.g. `internal/...`)
+   — and where that's still ambiguous, add the package to the same allowlist
+   used for intentional omissions (Q3). This mirrors how
+   `orchestrationAndFacePackages` resolves its own edge cases: a short
+   maintained list beats a fully formal registry.
+3. **Guard location and allowlist seed.** A new test in `internal/archtest`
+   (sibling to `inward_core_test.go` and `layering_test.go`), walking
+   `internal/*` and `cmd/*` directories and asserting each is either named in
+   `package-contracts.md` or present in a small `docCompletenessAllowlist`
+   slice in the test file — same pattern as `orchestrationAndFacePackages`.
+   Seed the allowlist with packages already intentionally excluded from the
+   narrative map: pure test-tooling packages (`internal/archtest` itself,
+   `internal/e2e` fixtures) and any package whose only purpose is internal to
+   another package's tests. Since the QA pass already closed the specific gap
+   (`composition`, `credential`, `customcmd`, `hook`, `rewind`, `run`,
+   `snapshot`, `goal`, `version`, `schemaguard` are all now in the doc), the
+   seed allowlist should be small or empty at implementation time — confirm by
+   running the walk against current `package-contracts.md` content.
+4. **`dependency-boundaries.md` does not need the same guard.** Its "Core" row
+   already ends in `…` and is explicitly illustrative, not a completeness
+   claim — there is nothing for a guard to enforce there. One enforced map
+   (`package-contracts.md`) is enough; `dependency-boundaries.md` stays a
+   curated illustrative list as designed.
 
 ## Notes
 
