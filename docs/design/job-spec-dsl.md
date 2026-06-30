@@ -78,8 +78,8 @@ land silently (PRD D0). Until AS-161, no Go code parses these files.
 | `id` | yes | string | Stable, unique job identity. Never reused or renumbered. `[a-z0-9-]+`. |
 | `version` | yes | int | Spec format version. `1` today. |
 | `owner` | yes | string | Accountable maintainer/role for the job. |
-| `repository` | one of `repository`/`org` | string | `owner/repo` scope the job acts on. |
-| `org` | one of `repository`/`org` | string | Org scope, when the job spans repos. |
+| `repository` | exactly one of `repository`/`org` | string | `owner/repo` scope the job acts on. Mutually exclusive with `org`. |
+| `org` | exactly one of `repository`/`org` | string | Org scope, when the job spans repos. Mutually exclusive with `repository`. |
 | `description` | no | string | Human summary; surfaced by `smith runs inspect`. |
 | `triggers` | yes | list | What starts a run (§5). At least one. |
 | `concurrency` | yes | object | `key` (string, may interpolate `${repository}`) + `limit` (int ≥ 1). §6. |
@@ -87,6 +87,7 @@ land silently (PRD D0). Until AS-161, no Go code parses these files.
 | `retries` | no | object | `max` (int ≥ 0, default 0) + `backoff` (`fixed`/`exponential`) + `delay`. |
 | `budget` | yes | object | Run-level ceiling: `usd` (number > 0). Per-step budgets (§7) must not exceed it. |
 | `steps` | yes | list | Ordered units of work (§7). At least one. |
+| `labels` | no | list | The job's **known-label set**: every label any `github.add_label`/`remove_label`/`label_present` may reference. Makes label validation self-contained and offline (§12.4, §14). |
 | `hooks` | no | object | Lifecycle hooks: `on_success`, `on_failure`, `on_cancel` → lists of action steps (§8). |
 | `provider_routing` | no | map | Named routing policies referenced by steps (§9). |
 | `permissions` | yes | object | Declared GitHub permission scopes (§10). |
@@ -158,6 +159,17 @@ does. There are two kinds, and the distinction is load-time structural:
 Common fields: `id` (required, unique within the job), `uses` (required), `when` (an
 optional reference to a **declared policy predicate** such as `policy.auto_merge_allowed`
 — never a free-form expression), `budget` (cognitive steps only).
+
+**Budget bounding.** To avoid over-restricting conditional (`when`) steps, the run
+budget bounds the **worst-case execution path**, not the absolute sum of every
+declared step:
+
+- No single step `budget.usd` may exceed the run `budget.usd`.
+- The sum of all **unconditional** step budgets (steps without a `when`) must not
+  exceed the run budget.
+- Conditional (`when`) steps are bounded individually only — they are not added into
+  the unconditional sum, since at most the gated path runs. The run budget remains
+  the hard per-run ceiling enforced at execution regardless (AS-161).
 
 ### Deterministic action catalog (`version: 1`)
 
@@ -253,10 +265,11 @@ clear error** when any of the following holds (AC4). It MUST NOT load a partial 
    offset, or a non-IANA name. IANA names only.
 2. **Unbounded concurrency** — `concurrency` missing, or `limit` absent / `< 1` /
    non-integer / "unlimited".
-3. **Missing budget** — no top-level `budget.usd`, a cognitive step with no
-   `budget.usd`, or step budgets that sum/peak above the run budget.
+3. **Missing or over-run budget** — no top-level `budget.usd`, a cognitive step with
+   no `budget.usd`, any single step budget above the run budget, or the sum of the
+   **unconditional** step budgets above the run budget (worst-case-path rule, §7).
 4. **Unknown label** — `github.add_label`/`remove_label`/`label_present` referencing
-   a label not in the job's known-label set.
+   a label not in the job's `labels` known-label set (§4).
 5. **Unknown action** — a step or hook `uses` not in the §7 catalog for the declared
    `version`.
 6. **Undeclared secret scope** — a step referencing a secret scope absent from
@@ -265,9 +278,10 @@ clear error** when any of the following holds (AC4). It MUST NOT load a partial 
    not declare under `permissions.github`.
 8. **Unknown top-level field** — any unrecognized top-level key (§3 schema
    discipline).
-9. **Missing required field** — any §4 `Required: yes` field absent, or neither
-   `repository` nor `org` present.
-10. **Merge without policy** — a `github.enable_auto_merge`/`github.merge` step with
+9. **Missing required field** — any §4 `Required: yes` field absent.
+10. **Bad scope cardinality** — neither `repository` nor `org` present, **or both
+    present** (they are mutually exclusive, §4).
+11. **Merge without policy** — a `github.enable_auto_merge`/`github.merge` step with
     no `merge_policy`, or a `merge_policy` predicate outside the fixed vocabulary.
 
 These rules are the contract AS-161 implements and tests; the worked examples in §13
@@ -323,11 +337,12 @@ steps:
 permissions:
   github: { contents: write, pull_requests: write, issues: write, checks: read }
 secrets: [github-token, anthropic-api-key, openai-api-key]
+labels: [implementation, smith-generated]
 
 pr_policy: { branch_prefix: smith/, draft: false }
 merge_policy:
   mode: auto
-  required: [pr_author_is_smith, required_checks_green, label_present: smith-generated]
+  required: [pr_author_is_smith, required_checks_green, {label_present: smith-generated}]
   forbidden: [unknown_checks, branch_protection_bypass, force_push]
 
 hooks:
