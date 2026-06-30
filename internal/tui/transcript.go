@@ -758,6 +758,23 @@ var (
 	// distinct color from the status bar so entering the mode reads as crossing a
 	// threshold (D-CODE-4), not just another status row.
 	modeBarStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorFgDefault).Background(BgModeBar)
+
+	// Per-segment status-line styles (AS-125, §7.2). Each carries the status-bar
+	// background explicitly: lipgloss emits a reset after an inner span, which
+	// would otherwise drop the outer bar's background for the rest of the line
+	// (the same reason meter.go's gauge styles set Background) — see meter.go.
+	statusNeutralStyle = lipgloss.NewStyle().Foreground(ColorNeutral).Background(BgStatusLine)
+	statusBrightStyle  = lipgloss.NewStyle().Foreground(ColorFgDefault).Background(BgStatusLine)
+	statusGoalStyle    = lipgloss.NewStyle().Foreground(ColorAmberMuted).Background(BgStatusLine)
+	statusRunStyle     = lipgloss.NewStyle().Foreground(ColorAmberBright).Background(BgStatusLine)
+
+	// Per-segment mode-bar styles (AS-125, §7.2): mode name, the idle/active phase
+	// track, and the right-aligned key hint. Backgrounds match the mode bar for the
+	// same reset reason as the status styles above.
+	modeNameStyle    = lipgloss.NewStyle().Bold(true).Foreground(ColorModeName).Background(BgModeBar)
+	phaseIdleStyle   = lipgloss.NewStyle().Foreground(ColorPhaseIdle).Background(BgModeBar)
+	phaseActiveStyle = lipgloss.NewStyle().Bold(true).Foreground(ColorCommand).Background(BgModeBar)
+	modeHintStyle    = lipgloss.NewStyle().Foreground(ColorModeHint).Background(BgModeBar)
 )
 
 // lipglossWidth reports the rendered cell width of s, ignoring style escapes.

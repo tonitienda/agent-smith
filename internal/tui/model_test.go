@@ -314,6 +314,27 @@ func TestViewRendersStatusAndTranscript(t *testing.T) {
 	}
 }
 
+// TestStatusLineGoalAndBusy covers the AS-125 status-line layout: a set goal is
+// styled in the goal colour, and a running turn shows the shared braille spinner
+// plus the cancel hint rather than the idle "ready".
+func TestStatusLineGoalAndBusy(t *testing.T) {
+	m := newMetaModel(t, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123", Goal: "ship it"})
+	if want := statusGoalStyle.Render(goalLabel("ship it")); !strings.Contains(m.statusLine(), want) {
+		t.Errorf("goal not styled in status line:\n%q", m.statusLine())
+	}
+	m.busy = true
+	m.spinnerFrame = 2
+	line := m.statusLine()
+	for _, want := range []string{brailleSpinnerFrame(2), "working…", "(Esc to cancel)"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("busy status line missing %q:\n%q", want, line)
+		}
+	}
+	if strings.Contains(line, "ready") {
+		t.Errorf("busy status line still shows ready:\n%q", line)
+	}
+}
+
 func TestAltJKScrollTranscript(t *testing.T) {
 	m := newTestModel(t, &fakeRunner{})
 	m.segs = append(m.segs, segment{

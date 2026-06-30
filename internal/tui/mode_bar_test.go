@@ -46,6 +46,38 @@ func TestModeBarShownWhileInMode(t *testing.T) {
 	}
 }
 
+// TestModeBarColoursPhases covers the AS-125 mode-bar styling: the mode name, the
+// active (bracketed) phase, and the key hint each carry their spec colour.
+func TestModeBarColoursPhases(t *testing.T) {
+	m := newMetaModel(t, modeMeta())
+	bar := m.modeBar()
+	cases := map[string]string{
+		"mode name":    modeNameStyle.Render("coding"),
+		"active phase": phaseActiveStyle.Render("[analyse]"),
+		"idle phase":   phaseIdleStyle.Render("think"),
+		"key hint":     modeHintStyle.Render("Ctrl+G m"),
+	}
+	for what, want := range cases {
+		if !strings.Contains(bar, want) {
+			t.Errorf("%s not styled in mode bar:\n%q", what, bar)
+		}
+	}
+}
+
+// TestColorPhaseTracker pins the active-phase rule: the bracketed segment is the
+// one the controller marks active, the rest render idle.
+func TestColorPhaseTracker(t *testing.T) {
+	got := colorPhaseTracker("think · [analyse] · plan")
+	if want := phaseActiveStyle.Render("[analyse]"); !strings.Contains(got, want) {
+		t.Errorf("active phase not styled:\n%q", got)
+	}
+	for _, idle := range []string{"think", "plan"} {
+		if want := phaseIdleStyle.Render(idle); !strings.Contains(got, want) {
+			t.Errorf("idle phase %q not styled:\n%q", idle, got)
+		}
+	}
+}
+
 // TestModeBarHiddenWithoutMode covers AC3: with no mode active there is no
 // residual phase-tracker chrome.
 func TestModeBarHiddenWithoutMode(t *testing.T) {
@@ -66,6 +98,19 @@ func TestModeBarTruncatesToWidth(t *testing.T) {
 	m = update(t, m, tea.WindowSizeMsg{Width: 20, Height: 24})
 	if got := lipglossWidth(m.modeBar()); got > 20 {
 		t.Fatalf("mode bar width = %d, want <= 20:\n%q", got, m.modeBar())
+	}
+}
+
+// TestModeBarDoubleWidthNoPanic guards the narrow-terminal cut against a panic
+// when the bar carries double-width runes: lipglossWidth then exceeds the rune
+// count, so an uncapped rune-slice at m.width would run off the end. The cut is
+// by rune (column-exact truncation is out of scope), so this only asserts the
+// render completes rather than a column bound.
+func TestModeBarDoubleWidthNoPanic(t *testing.T) {
+	m := newMetaModel(t, Meta{Provider: "anthropic", Model: "claude-opus-4-8", Session: "abc123", Mode: "編碼模式", PhaseTracker: "想 · [析] · 劃"})
+	m = update(t, m, tea.WindowSizeMsg{Width: 5, Height: 24})
+	if got := m.modeBar(); got == "" {
+		t.Fatal("mode bar rendered empty under a narrow double-width cut")
 	}
 }
 

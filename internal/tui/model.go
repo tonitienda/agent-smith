@@ -702,27 +702,62 @@ func (m model) modeBarRows() int {
 // (Meta.PhaseTracker), so the face stays free of the mode package. The hint drops
 // first when the row is too narrow to fit both.
 func (m model) modeBar() string {
-	left := m.meta.Mode
+	plainLeft := m.meta.Mode
 	if m.meta.PhaseTracker != "" {
-		left = m.meta.Mode + "  " + m.meta.PhaseTracker
+		plainLeft = m.meta.Mode + "  " + m.meta.PhaseTracker
 	}
 	hint := "Ctrl+G m"
-	gap := m.width - lipglossWidth(left) - lipglossWidth(hint)
+	gap := m.width - lipglossWidth(plainLeft) - lipglossWidth(hint)
+	showHint := true
 	if gap < 1 {
-		hint, gap = "", m.width-lipglossWidth(left)
+		showHint, gap = false, m.width-lipglossWidth(plainLeft)
 	}
 	if gap < 0 {
 		gap = 0
 	}
-	s := left + strings.Repeat(" ", gap) + hint
 	// Hard-cap to the terminal width: a tracker longer than a narrow terminal
 	// would otherwise wrap, and modeBarRows() reserves only one row, so the wrap
-	// would overflow the layout (Gemini review). The bar is plain text of width-1
-	// cells, so a rune slice is an exact column cut.
-	if r := []rune(s); len(r) > m.width && m.width >= 0 {
-		s = string(r[:m.width])
+	// would overflow the layout (Gemini review). The left segment is plain text of
+	// width-1 cells here, so a rune slice is an exact column cut; skip the
+	// per-segment colouring in this degraded case so the cut never lands mid-escape.
+	if lipglossWidth(plainLeft) > m.width && m.width >= 0 {
+		// Cut by runes, but cap at the rune count: a double-width rune makes the
+		// column width exceed len(runes), so m.width can be past the slice end.
+		if r := []rune(plainLeft); len(r) > m.width {
+			return modeBarStyle.Render(string(r[:m.width]))
+		}
+		return modeBarStyle.Render(plainLeft)
 	}
-	return modeBarStyle.Render(s)
+	// Colour the mode name and phase track per the spec (§7.2): mode name in
+	// ColorModeName, idle phases dim, the active phase (already pre-bracketed by the
+	// controller) bright; the key hint sits right-aligned in ColorModeHint.
+	left := modeNameStyle.Render(m.meta.Mode)
+	if m.meta.PhaseTracker != "" {
+		// modeBarStyle-wrap the spacer: the mode-name render ends with a reset that
+		// would otherwise drop the bar background across the gap.
+		left += modeBarStyle.Render("  ") + colorPhaseTracker(m.meta.PhaseTracker)
+	}
+	hintStr := ""
+	if showHint {
+		hintStr = modeHintStyle.Render(hint)
+	}
+	return modeBarStyle.Render(left + modeBarStyle.Render(strings.Repeat(" ", gap)) + hintStr)
+}
+
+// colorPhaseTracker colours a pre-rendered phase track ("think · [analyse] ·
+// plan") segment by segment: the active phase is the one the controller wrapped
+// in brackets (§7.2). Separators stay in the bar's own colour. The controller
+// owns the bracketing, so the face never imports the mode package.
+func colorPhaseTracker(tracker string) string {
+	parts := strings.Split(tracker, " · ")
+	for i, p := range parts {
+		if strings.HasPrefix(strings.TrimSpace(p), "[") {
+			parts[i] = phaseActiveStyle.Render(p)
+		} else {
+			parts[i] = phaseIdleStyle.Render(p)
+		}
+	}
+	return strings.Join(parts, modeBarStyle.Render(" · "))
 }
 
 // panelFooterRows is the height the inspect-panel footer keybar occupies: one
@@ -864,8 +899,28 @@ func (m *model) applyCaret() {
 // statusLine renders provider · model · session on the left and, on the right,
 // the always-visible context meter followed by the working/ready state.
 func (m model) statusLine() string {
-	left := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model, m.meta.Session, goalLabel(m.meta.Goal)), " · ")
-	state := "ready"
+	// Provider/model "alive pulse" (§7.2): toggle between neutral and full
+	// foreground while the session is idle, driven off the existing caret blink
+	// tick (AS-122) so no second ticker is added — an accepted approximation of the
+	// 2.4 s opacity interpolation. The pulse stops during a turn, where the spinner
+	// already signals activity.
+	pulse := statusNeutralStyle
+	if !m.busy && m.caretVisible {
+		pulse = statusBrightStyle
+	}
+	segs := make([]string, 0, 3)
+	if pm := strings.Join(nonEmpty(m.meta.Provider, m.meta.Model), " · "); pm != "" {
+		segs = append(segs, pulse.Render(pm))
+	}
+	if s := m.meta.Session; s != "" {
+		segs = append(segs, statusNeutralStyle.Render(s))
+	}
+	if g := goalLabel(m.meta.Goal); g != "" {
+		segs = append(segs, statusGoalStyle.Render(g))
+	}
+	left := strings.Join(segs, statusNeutralStyle.Render(" · "))
+
+	state := statusNeutralStyle.Render("ready")
 	if m.busy {
 		work := "working…"
 		if m.workingLine != nil {
@@ -873,17 +928,19 @@ func (m model) statusLine() string {
 				work = line
 			}
 		}
-		state = m.spinner.View() + work + " (Esc to cancel)"
+		// Shared amber braille spinner (spinner.go), not the bubbles dot, so every
+		// in-flight indicator reads identically (AS-124/AS-130).
+		state = statusRunStyle.Render(brailleSpinnerFrame(m.spinnerFrame) + " " + work + " (Esc to cancel)")
 	}
 	right := state
 	if gauge := m.meterState.render(); gauge != "" {
-		right = gauge + "  " + state
+		right = gauge + statusNeutralStyle.Render("  ") + state
 	}
 	gap := m.width - lipglossWidth(left) - lipglossWidth(right)
 	if gap < 1 {
 		gap = 1
 	}
-	return statusBarStyle.Render(left + strings.Repeat(" ", gap) + right)
+	return statusBarStyle.Render(left + statusNeutralStyle.Render(strings.Repeat(" ", gap)) + right)
 }
 
 // goalLabel formats the active session goal (AS-040) for the status line,
