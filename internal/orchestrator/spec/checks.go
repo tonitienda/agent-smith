@@ -101,9 +101,12 @@ func (l *loader) checkLabels(s *Spec) {
 	if s.MergePolicy != nil {
 		for _, p := range s.MergePolicy.Required {
 			if p.Name == "label_present" {
-				if label, ok := asString(p.Arg); ok {
-					ref("merge_policy.required.label_present", label)
+				label, ok := asString(p.Arg)
+				if !ok {
+					l.add(12, "merge_policy.required.label_present", "label_present argument must be a string label")
+					continue
 				}
+				ref("merge_policy.required.label_present", label)
 			}
 		}
 	}
@@ -120,13 +123,8 @@ func (l *loader) checkSecretBindings(s *Spec) {
 			l.add(9, path, "%s requires secret scope %q, which is not listed under secrets", why, scope)
 		}
 	}
-	all := append([]Step(nil), s.Steps...)
-	for _, point := range sortedKeys(s.Hooks) {
-		all = append(all, s.Hooks[point]...)
-	}
 	githubFlagged := false
-	for i, st := range all {
-		path := fmt.Sprintf("steps[%d]", i)
+	checkStep := func(path string, st Step) {
 		if strings.HasPrefix(st.Uses, "github.") && !githubFlagged {
 			need(path, "github-token", "github.* actions")
 			githubFlagged = true // one report is enough; the fix is the same
@@ -137,6 +135,14 @@ func (l *loader) checkSecretBindings(s *Spec) {
 					need(path, scope, fmt.Sprintf("agent step routed to %q", r.Provider))
 				}
 			}
+		}
+	}
+	for i, st := range s.Steps {
+		checkStep(fmt.Sprintf("steps[%d]", i), st)
+	}
+	for _, point := range sortedKeys(s.Hooks) {
+		for i, st := range s.Hooks[point] {
+			checkStep(fmt.Sprintf("hooks.%s[%d]", point, i), st)
 		}
 	}
 }

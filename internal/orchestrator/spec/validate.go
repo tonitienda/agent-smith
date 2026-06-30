@@ -236,7 +236,15 @@ func (l *loader) loadTriggers(s *Spec, raw map[string]any) (declaredInputs []map
 			declaredInputs = append(declaredInputs, nil)
 			continue
 		}
-		args, _ := asMap(m[kind])
+		var args map[string]any
+		if av := m[kind]; av != nil {
+			var ok bool
+			if args, ok = asMap(av); !ok {
+				l.add(5, path+"."+kind, "trigger arguments must be a map")
+				declaredInputs = append(declaredInputs, nil)
+				continue
+			}
+		}
 		t := Trigger{Kind: kind, Args: args}
 		s.Triggers = append(s.Triggers, t)
 		declaredInputs = append(declaredInputs, l.validateTrigger(path, kind, args))
@@ -359,7 +367,12 @@ func (l *loader) loadPermissions(s *Spec, raw map[string]any) {
 	}
 	l.closedKeys("permissions", m, set("github"), 1)
 	s.Permissions.GitHub = map[string]string{}
-	if gh, ok := asMap(m["github"]); ok {
+	if gv, ok := m["github"]; ok {
+		gh, ok := asMap(gv)
+		if !ok {
+			l.add(1, "permissions.github", "github permissions must be a map")
+			return
+		}
 		for res, av := range gh {
 			if !githubPermResources[res] {
 				l.add(1, "permissions.github."+res, "unknown GitHub permission resource %q", res)

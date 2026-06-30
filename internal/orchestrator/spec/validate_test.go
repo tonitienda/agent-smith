@@ -193,6 +193,17 @@ func TestValidationRules(t *testing.T) {
 		}},
 		{"duration bad grammar", 16, func(m map[string]any) { m["timeout"] = "1h30m" }},
 		{"duration bare int", 16, func(m map[string]any) { m["timeout"] = "45" }},
+		{"duration overflow", 16, func(m map[string]any) { m["timeout"] = "99999999999999999999d" }},
+		{"github perms not a map", 1, func(m map[string]any) {
+			m["permissions"] = map[string]any{"github": "write"}
+		}},
+		{"trigger args not a map", 5, func(m map[string]any) {
+			m["triggers"] = []any{map[string]any{"manual": "go"}}
+		}},
+		{"label_present arg not string", 12, func(m map[string]any) {
+			req := m["merge_policy"].(map[string]any)["required"].([]any)
+			m["merge_policy"].(map[string]any)["required"] = append(req, map[string]any{"label_present": true})
+		}},
 		{"merge predicate not single-key map", 17, func(m map[string]any) {
 			m["merge_policy"].(map[string]any)["required"] = []any{
 				map[string]any{"pr_author_is_smith": true, "extra": true},
@@ -260,7 +271,10 @@ func TestParseDuration(t *testing.T) {
 			t.Fatalf("ParseDuration(%q) = %v, want %v s", in, d, wantSec)
 		}
 	}
-	for _, bad := range []string{"", "45", "1h30m", "1.5h", "-5m", "5y", "h", "5 m"} {
+	// Out-of-int64 magnitude and multiply overflow are both rejected, never
+	// wrapped to a negative duration.
+	for _, bad := range []string{"", "45", "1h30m", "1.5h", "-5m", "5y", "h", "5 m",
+		"99999999999999999999d", "9999999999999d"} {
 		if _, err := ParseDuration(bad); err == nil {
 			t.Fatalf("ParseDuration(%q) should fail", bad)
 		}

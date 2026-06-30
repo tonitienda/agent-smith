@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -36,10 +37,11 @@ func ParseDuration(s string) (Duration, error) {
 		// fractional / bare-int values all land here).
 		return Duration{}, fmt.Errorf("duration %q must match ^[0-9]+(s|m|h|d)$", s)
 	}
-	// Parse the integer manually; it is already known to be all digits.
-	var n int64
-	for _, c := range s[:i] {
-		n = n*10 + int64(c-'0')
+	// Parse via strconv so an out-of-int64 magnitude is rejected rather than
+	// silently wrapping to a negative duration.
+	n, err := strconv.ParseInt(s[:i], 10, 64)
+	if err != nil {
+		return Duration{}, fmt.Errorf("duration %q out of range: %w", s, err)
 	}
 	var unit time.Duration
 	switch s[i] {
@@ -54,5 +56,10 @@ func ParseDuration(s string) (Duration, error) {
 	default:
 		return Duration{}, fmt.Errorf("duration %q has unknown unit %q; want s|m|h|d", s, string(s[i]))
 	}
-	return Duration{d: time.Duration(n) * unit}, nil
+	d := time.Duration(n) * unit
+	if n != 0 && d/unit != time.Duration(n) {
+		// The multiply itself overflowed time.Duration's int64 nanoseconds.
+		return Duration{}, fmt.Errorf("duration %q overflows the representable range", s)
+	}
+	return Duration{d: d}, nil
 }
