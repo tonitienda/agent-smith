@@ -138,7 +138,7 @@ Covers AS-020, AS-025 through AS-029, AS-041, AS-042, AS-043, AS-063, AS-068, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-124, AS-126.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-123, AS-126.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -149,6 +149,7 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.5 | Add a ```` ```smith-method ```` block (`phases: think, plan, implement, verify`) to the project `CLAUDE.md`/`AGENTS.md`, start a session, and `/feature`. | The phase tracker reflects the overridden phase sequence (reordered/skipped); a malformed block degrades to the default (AS-075). |
 | 6.6 | In Coding Mode, `/phase reflect`, then ask Smith to wrap up the feature (AS-076). | The reflect-artifacts skill drives three artifacts: a measurable success metric (citing the signal to read), an instrumentation proposal as a diff, and a check-back ticket draft (house `AS-NNN` format in this repo, markdown elsewhere — a draft only, no `cmd/ticket-sync`/remote issue). Smith never claims to read shipped-app runtime data. |
 | 6.7 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
+| 6.9 | Launch `./smith tui`, send a message, and watch the assistant reply land (AS-123). | The reply types in letter-by-letter (~40 ms/char) with a green `█` block cursor trailing the last character; a large token burst still reveals at the steady cadence rather than flashing all at once; the cursor disappears the instant the turn ends and finished text stays static. `--no-splash`/headless modes are unaffected. |
 | 6.8 | Launch `./smith tui` and look at the empty startup screen, then type a character and clear it (AS-122). | Logo `▞▞ AGENT SMITH`, a full-width underrule, and the `path · model · mode` context line render; the invite headline and command-hint row show below; at default (medium) Matrix intensity the rain renders behind the copy and the idle phrase replaces the hint after ~3s; the `┃` gutter caret blinks while empty and goes solid the instant you type. `--no-splash` shows nothing above the input bar. |
 | 6.9 | Launch `./smith tui` and compare colours across surfaces: input bar, transcript, status line, inspect panels, and the command palette. | Every surface draws from the centralized phosphor colour tokens — a consistent green-on-black phosphor palette with no ad-hoc per-surface colours. (AS-121) |
 
