@@ -78,6 +78,12 @@ func TestLayeringContracts(t *testing.T) {
 			reason:       "stream I/O primitives are a stdlib-only leaf shared by adapters and transports",
 		},
 		{
+			name:         "orchestrator job-spec model does not import module packages",
+			pkgDir:       "internal/orchestrator/spec",
+			forbidModule: true,
+			reason:       "the job-spec model + validator (AS-163) is a stdlib-only, decoding-agnostic leaf; the daemon (AS-161) feeds it decoded maps and the YAML/file plumbing lives there, not in the model",
+		},
+		{
 			name:      "loop does not import faces or composition roots",
 			pkgDir:    "internal/loop",
 			forbidden: []string{"internal/tui", "internal/serve", "cmd"},
