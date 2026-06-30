@@ -26,7 +26,3 @@ Define how orchestrated jobs declare, receive, audit, redact, and revoke secrets
 ## Dependencies
 
 [AS-159, AS-148, AS-158]
-
-## Open questions
-
-1. Concrete secret-store backend (PRD Q7) is gated on the AS-158 research spike; this ticket fixes only the contract (declared scopes, no plaintext, redaction-at-capture, fail-closed).

@@ -67,7 +67,7 @@ second execution path.
 | Daemon / scheduler | `internal/orchestrator` (AS-161) | Long-lived process; load+validate specs; cron/manual/GitHub enqueue; bounded concurrency; lifecycle verbs. |
 | Run store | `internal/orchestrator` SQLite (AS-161) | Jobs, triggers, queued runs, leases, attempts, terminal state, idempotency keys, audit entries. **Run-control state only** — narrative/cost stays in the session log. |
 | Smith session / event log | core (AS-005/006/007) | Each run is a normal append-only Smith session; `/context`, `/cost`, `/insights`, replay reuse existing readers (AS-151). No second observability path. |
-| Job spec / DSL | `.agent-smith/jobs/*.yaml` (AS-160) | Repo-reviewed, versioned, declarative. Steps/hooks/actions/routing/policy declared, never prompt-controlled. |
+| Job spec / DSL | `.agent-smith/jobs/*.yaml` (AS-160, format in [job-spec-dsl.md](../design/job-spec-dsl.md)) | Repo-reviewed, versioned, declarative. Steps/hooks/actions/routing/policy declared, never prompt-controlled. |
 | GitHub integration | `internal/orchestrator` (AS-147/149) | Normalize webhooks → trigger events; deterministic action steps (labels, PR create/update, comment, status, guarded merge). |
 | Provider routing | core routing (AS-042/110) via per-step policy (AS-150) | Role↔provider separation; explicit per step or a named routing policy. |
 | Secrets | secret contract (AS-154) | Declared scopes; no plaintext in specs/logs; redaction-at-capture (AS-115); fail closed on missing scope. |
@@ -111,7 +111,7 @@ Explicitly **out of scope**, and the engine must refuse them rather than degrade
 Following AS-159, the architecture/boundary questions are resolved, so the two
 foundational build tickets move to **ready-to-implement**:
 
-- **AS-160** — job spec / DSL: location, shape, and declarative-action principle fixed here.
+- **AS-160** — job spec / DSL: location, shape, and declarative-action principle fixed here; the format is now specified in [job-spec-dsl.md](../design/job-spec-dsl.md) (status: done).
 - **AS-161** — daemon / scheduler / SQLite run store: command shape, package boundary, and store/session split fixed here.
 
 These stay **needs-clarification**, each gated on a product decision and/or the

@@ -226,9 +226,7 @@ Desired properties:
 
 ## 7. Ticket wave
 
-This PRD is decomposed into the tickets below. (The wave was renumbered to
-AS-159/AS-160/AS-161 for its first three items because AS-144/145/146 were
-already taken by shipped tickets; IDs are stable, never reused.)
+This PRD is decomposed into the orchestrator wave below. The architecture, DSL, and daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by merged keychain/archtest tickets) to AS-159–AS-161:
 
 1. AS-159 — Orchestrator architecture and product boundaries.
 2. AS-160 — Job specification and workflow DSL.

@@ -25,7 +25,3 @@ Design the execution-environment seam for orchestrated work, starting from local
 ## Dependencies
 
 [AS-159, AS-161, AS-158]
-
-## Open questions
-
-1. First sandbox backend after local-checkout (rootless container vs microVM) is gated on the AS-158 research spike.

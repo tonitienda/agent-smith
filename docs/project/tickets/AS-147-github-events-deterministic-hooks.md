@@ -26,8 +26,3 @@ Add the GitHub event and deterministic hook layer needed for Smith to react to l
 ## Dependencies
 
 [AS-160, AS-161]
-
-## Open questions
-
-1. Webhook delivery for the local/VPC daemon (AS-148 auth + AS-161 daemon) — polling vs a public webhook endpoint vs a relay — is unresolved pending AS-148 and the AS-158 spike.
-2. Which GitHub events are normalized in MVP 0 beyond issue/PR labeled and PR merged?

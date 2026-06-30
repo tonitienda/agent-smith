@@ -25,7 +25,3 @@ Ensure every orchestrated job/run is persisted as a normal Smith append-only ses
 ## Dependencies
 
 [AS-161]
-
-## Open questions
-
-1. Which run metadata (job ID, trigger, provider role, GitHub refs, PR links, run-DB ID, policy decisions) lives as session blocks vs run-store rows is pending the AS-161 schema.

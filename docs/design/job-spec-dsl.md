@@ -1,443 +1,523 @@
-# Job specification and workflow DSL (AS-160)
+# Job specification and workflow DSL
 
-> Status: **Accepted** · Ticket: AS-160 · Source PRD:
-> [smith-orchestrator-dogfood-prd.md](../project/smith-orchestrator-dogfood-prd.md) §4.1 ·
-> Architecture: [orchestrator-architecture.md](../architecture/orchestrator-architecture.md)
-> (AS-159). Where this spec and the draft PRD disagree, this spec wins; where this
-> spec and the AS-159 ADR disagree, the ADR wins.
+> Status: **Accepted (design)** · Ticket: AS-160 · Depends on ADR
+> [orchestrator-architecture.md](orchestrator-architecture.md) (AS-159) · Source PRD:
+> [smith-orchestrator-dogfood-prd.md](../project/smith-orchestrator-dogfood-prd.md) §4.1
+>
+> This document fixes the **format** of `.agent-smith/jobs/*.yaml` — the
+> declarative, versioned, repo-reviewed unit the orchestrator loads. It is the
+> contract; the **loader/validator and run store are AS-161**, GitHub action
+> semantics are AS-147/AS-149, routing-policy resolution is AS-150, secret
+> resolution is AS-154, and merge gating is AS-157. Where this doc and the draft
+> PRD example disagree, this doc wins.
 
-This document defines the versioned, declarative job-spec format the orchestrator
-loads from `.agent-smith/jobs/*.yaml`. It fixes the **schema** and the **validation
-contract**; the daemon that loads, validates at runtime, and executes these specs is
-**AS-161**, and the loader's YAML-parser dependency is introduced there (see
-[Format and dependency](#format-and-dependency)). Per the AS-159 ADR, Smith owns the
-deterministic shell — schedules, triggers, GitHub actions, permissions, budgets,
-labels, and merge policy are declared here, never decided by prompt text.
+## 1. Scope and non-scope
 
-## 1. Scope
+AS-160 defines **what a valid job spec looks like and what makes one invalid**.
+It deliberately does *not* implement:
 
-This spec is the design deliverable for AS-160:
+- the YAML loader, the run store, or the daemon (**AS-161**);
+- the runtime behaviour of any `uses:` action (**AS-147/AS-149/AS-150**);
+- secret backends or the redaction pipeline (**AS-154/AS-115**); or
+- the merge decision engine (**AS-157**).
 
-- **In scope:** file location and discovery, format and version policy, every
-  top-level field, the trigger set, the step/hook/action model, provider routing,
-  permission and secret-scope declarations, PR/merge policy, retention, and the
-  normative validation rules a conformant loader MUST enforce.
-- **Out of scope (owned elsewhere):** runtime loading and validation enforcement,
-  the run store, scheduling, and execution → **AS-161**; GitHub event normalization
-  and the action implementations → **AS-147/AS-149**; provider-routing mechanism →
-  **AS-150**; secret contract → **AS-154**; sandbox seam → **AS-153**; auto-merge
-  policy gates → **AS-157**. This spec declares the *surface* those tickets bind to.
+Those tickets consume this format; they do not redefine it. Keeping the format
+frozen first lets the daemon, the action library, and the dogfood workflow pack
+(AS-152) be built against a stable target.
 
-The product non-goals in [ADR-159 D-ORCH-6](../architecture/orchestrator-architecture.md#d-orch-6--non-goals-fail-closed)
-apply: a job may not edit its own spec, create other jobs, or let a prompt decide
-labels, permissions, retries, merges, or state transitions. The format has no field
-that expresses any of those — that is enforced structurally, not by validation.
+The format follows the same principles as the rest of Smith's persisted formats:
+**additive-only after first ship** (PRD D2 — `version` is the break valve before
+then), **fail-closed** on anything underspecified (ADR D-ORCH-1/D-ORCH-6), and
+**deterministic** — every label, permission, retry, route, and merge is declared
+data, never prompt output (ADR D-ORCH-6, PRD §2).
 
-## 2. File location and discovery
+## 2. File location and identity
 
 - Specs live under `.agent-smith/jobs/*.yaml`, one job per file, committed to the
-  repository and reviewed through normal PRs (AS-159 ADR Q4: repo is the source of
-  truth; no cloud UI may be required to read, write, or load a spec — AC5).
-- The directory is discovered relative to the repository root the daemon is pointed
-  at. Files that do not end in `.yaml` are ignored. A file that fails validation is
-  rejected with a clear error and does **not** partially load (fail closed).
-- See [`.agent-smith/jobs/README.md`](../../.agent-smith/jobs/README.md) for the
-  live directory convention.
+  repository they automate. The repo is the source of truth; no UI edits specs
+  (ADR Q4, non-goal "Smith editing its own job specs").
+- The file name is **not** the identity — the `id` field is (§4.1). The loader
+  (AS-161) rejects two files that declare the same `id`.
+- A spec is reviewed and merged like any other code change. The daemon only ever
+  loads specs that are present on the checked-out ref it is running against.
 
-## 3. Format and dependency
-
-The on-disk format is **YAML**, as fixed by the AS-159 ADR (D-ORCH-4) and PRD §4.1.
-This is a deliberate divergence from [ADR-0002](adr-0002-config-format.md), which
-chose JSON for the *layered config substrate* specifically to stay stdlib-only. Job
-specs are different: they are **human-authored and human-reviewed** artifacts where
-comments, block scalars, and anchors materially help a maintainer reason about
-schedules, budgets, and merge gates in review. YAML is worth a parser dependency
-here; JSON config is not.
-
-The stdlib-only lean (CLAUDE.md) is scoped to *repo tooling*. Job-spec loading is
-product code, so introducing a YAML parser (`gopkg.in/yaml.v3` or equivalent) is
-permitted — but it is a **real dependency decision and belongs to AS-161**, the
-ticket that adds the loader. This spec flags it explicitly rather than letting it
-land silently (PRD D0). Until AS-161, no Go code parses these files.
-
-### Schema discipline (additive-only, PRD D2)
-
-- Every spec declares an integer `version`. `version: 1` is defined here.
-- The schema is **additive-only**: new concepts are new optional fields; existing
-  fields are never removed, renamed, or repurposed. A `version: 1` loader MUST
-  tolerate unknown top-level keys it does not understand by **rejecting the spec
-  with a clear "unknown field" error** rather than silently ignoring it — job specs
-  govern money and merges, so an unrecognized key is a load-time failure, not a
-  tolerated no-op. (This is stricter than config-layer D2 tolerance on purpose; the
-  blast radius differs.) Raising `version` is how new required semantics opt in.
-
-## 4. Top-level fields
-
-| Field | Required | Type | Meaning |
-| --- | --- | --- | --- |
-| `id` | yes | string | Stable, unique job identity. Never reused or renumbered. `[a-z0-9-]+`. |
-| `version` | yes | int | Spec format version. `1` today. |
-| `owner` | yes | string | Accountable maintainer/role for the job. |
-| `repository` | exactly one of `repository`/`org` | string | `owner/repo` scope the job acts on. Mutually exclusive with `org`. |
-| `org` | exactly one of `repository`/`org` | string | Org scope, when the job spans repos. Mutually exclusive with `repository`. |
-| `description` | no | string | Human summary; surfaced by `smith runs inspect`. |
-| `triggers` | yes | list | What starts a run (§5). At least one. |
-| `concurrency` | yes | object | `key` (string, may interpolate `${repository}`) + `limit` (int ≥ 1). §6. |
-| `timeout` | yes | duration | Wall-clock ceiling per run (e.g. `30m`). |
-| `retries` | no | object | `max` (int ≥ 0, default 0) + `backoff` (`fixed`/`exponential`) + `delay`. |
-| `budget` | yes | object | Run-level ceiling: `usd` (number > 0). Per-step budgets (§7) must not exceed it. |
-| `steps` | yes | list | Ordered units of work (§7). At least one. |
-| `labels` | no | list | The job's **known-label set**: every label any `github.add_label`/`remove_label`/`label_present` may reference. Makes label validation self-contained and offline (§12.4, §14). |
-| `hooks` | no | object | Lifecycle hooks: `on_success`, `on_failure`, `on_cancel` → lists of action steps (§8). |
-| `provider_routing` | no | map | Named routing policies referenced by steps (§9). |
-| `permissions` | yes | object | Declared GitHub permission scopes (§10). |
-| `secrets` | no | list | Declared secret **scope names** — never values (§10). |
-| `pr_policy` | no | object | Branch/PR conventions for PR-producing jobs (§11). |
-| `merge_policy` | no | object | Merge gate (§11). Required only if a step uses `github.enable_auto_merge`/`github.merge`. |
-| `retention` | no | object | `runs` (count or duration) + `artifacts` (duration) the run store keeps. |
-
-`${repository}`, `${org}`, and `${trigger.*}` are the only interpolations; they are
-substituted by the loader from deterministic run context, never from model output.
-
-## 5. Triggers
-
-A job lists one or more triggers. Each is a single-key object naming the trigger
-type. The six required example shapes (AC2):
+## 3. Top-level shape
 
 ```yaml
-triggers:
-  # 1. cron — timezone is REQUIRED and must be an IANA name (no bare offsets).
-  - cron:
-      expr: "0 7 * * 1-5"
-      timezone: Europe/Madrid
+id: <stable-slug>          # required, immutable identity
+version: <int>             # required, schema version of THIS spec format
+owner: <handle>            # required, accountable human
+repository: <owner/name>   # required for repo-scoped jobs (xor `org`)
+org: <org>                 # required for org-scoped jobs (xor `repository`)
+description: <text>        # optional, human summary
 
-  # 2. manual dispatch — operator-initiated via `smith runs rerun`/dispatch.
-  - manual: {}
-
-  # 3. GitHub issue labeled
-  - github.issue_labeled:
-      label: implementation
-
-  # 4. GitHub PR labeled
-  - github.pr_labeled:
-      label: implementation
-
-  # 5. GitHub PR merged
-  - github.pr_merged:
-      base: main
-
-  # 6. bounded follow-up — a run may enqueue ONE follow-up of the same job,
-  #    decremented from `max_followups`; the chain is bounded and cannot fan out.
-  - followup:
-      max_followups: 1
+triggers:    [ ... ]       # required, >=1
+concurrency: { ... }       # required
+timeout:     <duration>    # required
+retries:     { ... }       # optional, defaults to no retry
+budget:      { ... }       # required
+permissions: { ... }       # required (may be empty maps, but the block is explicit)
+secrets:     [ ... ]       # optional, declared scopes only
+routing:     { ... }       # optional named policies referenced by steps
+steps:       [ ... ]       # required, >=1
+hooks:       { ... }       # optional lifecycle hooks
+merge_policy: { ... }      # optional; required when any step enables merge
+retention:   { ... }       # optional, defaults applied by daemon
 ```
 
-`followup` is how "keep working until CI is green" is expressed without a job
-creating new jobs (ADR-159 non-goal): the run store decrements a counter and refuses
-to enqueue past zero (fail closed).
+Every top-level key is **closed**: an unknown key is a validation error, not a
+silently ignored extension (fail-closed). New keys arrive only via this document
+plus a `version` bump or an additive optional (D2).
 
-## 6. Concurrency
+## 4. Field reference
 
-`concurrency.key` groups runs that must not overlap; `concurrency.limit` caps how
-many run at once for that key. `limit` MUST be a finite integer ≥ 1 — there is no
-"unlimited". The key may interpolate `${repository}` so per-repo serialization is
-expressible (`repo:${repository}:implementation`).
+### 4.1 Identity and scope
 
-## 7. Steps and deterministic actions
-
-`steps` is an ordered list. Each step has a stable `id` and a `uses` naming what it
-does. There are two kinds, and the distinction is load-time structural:
-
-- **Cognitive steps** (`agent.*`) — a model does bounded work (implement, review,
-  architecture check, manual-test simulation). They carry `role`, optional
-  `provider_policy` (§9), and a `budget.usd`.
-- **Deterministic action steps** (`github.*` and other `*.` namespaces) — Smith
-  performs a fixed action. They never run a model and never read budget. **Labels,
-  PR creation/update, comments, status, and merge are steps — never prompt text**
-  (AC3, ADR-159 D-ORCH-1).
-
-Common fields: `id` (required, unique within the job), `uses` (required), `when` (an
-optional reference to a **declared policy predicate** such as `policy.auto_merge_allowed`
-— never a free-form expression), `budget` (cognitive steps only).
-
-**Budget bounding.** To avoid over-restricting conditional (`when`) steps, the run
-budget bounds the **worst-case execution path**, not the absolute sum of every
-declared step:
-
-- No single step `budget.usd` may exceed the run `budget.usd`.
-- The sum of all **unconditional** step budgets (steps without a `when`) must not
-  exceed the run budget.
-- Conditional (`when`) steps are bounded individually only — they are not added into
-  the unconditional sum, since at most the gated path runs. The run budget remains
-  the hard per-run ceiling enforced at execution regardless (AS-161).
-
-### Deterministic action catalog (`version: 1`)
-
-| `uses` | Effect | Notable inputs |
+| Field | Type | Rules |
 | --- | --- | --- |
-| `github.add_label` | Add a label | `label` (must be a declared/known label) |
-| `github.remove_label` | Remove a label | `label` |
-| `github.create_or_update_pr` | Create or update the Smith-authored PR | `base`, `title_template` |
-| `github.comment` | Post a run-summary comment | `body_template` |
-| `github.set_status` | Report a commit status/check summary | `context`, `state` |
-| `github.enable_auto_merge` | Enable native auto-merge | gated by `merge_policy` |
-| `github.merge` | Merge directly (fallback) | gated by `merge_policy` |
-| `agent.implement` | Implementation work | `role`, `provider_policy`, `budget` |
-| `agent.review` | PR review | `role`, `provider_policy`, `budget` |
-| `agent.architecture_check` | Scheduled architecture pass | `role`, `provider_policy`, `budget` |
+| `id` | string | Required. `^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$`. Stable for the life of the job; renaming is a new job. Unique across loaded specs. |
+| `version` | int ≥ 1 | Required. The version of *this DSL*, not the job's edit count. The loader refuses a `version` it does not understand. |
+| `owner` | string | Required. Accountable handle for audit; not a permission grant. |
+| `repository` | `owner/name` | Repo-scoped jobs. Mutually exclusive with `org`. |
+| `org` | string | Org-scoped jobs. Mutually exclusive with `repository`. |
+| `description` | string | Optional free text. Never interpreted. |
 
-The catalog is additive: new actions are new `uses` names; a loader rejects unknown
-`uses` (§12). Action *implementations* are AS-147/AS-149.
+Exactly one of `repository` / `org` must be present (fail-closed: neither, or
+both, is invalid).
 
-## 8. Hooks
+### 4.2 Triggers
 
-`hooks.on_success`, `hooks.on_failure`, and `hooks.on_cancel` each hold a list of
-deterministic action steps (same shape as §7 action steps) run at the named
-lifecycle point. Hooks are deterministic-only — no `agent.*` in a hook — so failure
-handling cannot itself burn budget or block on a model.
+`triggers` is a non-empty list. Each entry is a single-key map naming the trigger
+kind. MVP 0 kinds:
 
-## 9. Provider routing
+| Kind | Args | Meaning |
+| --- | --- | --- |
+| `cron` | `schedule` (5-field cron), `timezone` (IANA name) | Time-based. `timezone` is **required** — a bare offset or a missing zone is rejected (ADR fail-closed; ambiguous-timezone AC). |
+| `manual` | `inputs` (optional typed map) | Operator-dispatched via `smith runs` / future API. |
+| `github.issue_labeled` | `label` | Fires when the named label is added to an issue. |
+| `github.pr_labeled` | `label` | Fires when the named label is added to a PR. |
+| `github.pr_merged` | `base` (optional branch filter) | Fires when a PR merges. |
+| `github.comment_command` | `command` | Fires on an allow-listed `/command` comment. |
+| `followup` | `of` (step id), `max_runs` (int ≥ 1) | Bounded continuation of a prior run. `max_runs` is **required** — unbounded follow-up is rejected. |
 
-Role and provider are separate (PRD §4.4, ADR-159 D-ORCH-4/Q6). A cognitive step
-sets a `role` and selects a provider one of two ways:
+`github.*` triggers are only valid on a job whose `permissions.github` grants at
+least read on the relevant resource; the loader cross-checks this (§4.6). Labels
+referenced here must be declared by the job (a label the job never adds must
+still be listed under `known_labels`, see §4.6) so an unknown label fails
+validation rather than silently never firing.
 
-- **Named policy** — `provider_policy: anthropic-implementation`, defined under the
-  top-level `provider_routing` map.
-- **Inline** — a step may name a provider/model directly for one-off routing.
+### 4.3 Concurrency
 
 ```yaml
-provider_routing:
-  anthropic-implementation:
+concurrency:
+  key: repo:${repository}:implementation   # required, interpolated template
+  limit: 1                                   # required int >= 1
+  on_conflict: queue                         # queue | cancel-running | drop ; default queue
+```
+
+`limit` is **required and bounded** — there is no "unlimited" value; omitting it
+or setting `0`/negative is invalid (unbounded-concurrency AC). `key` may
+interpolate `${repository}`, `${org}`, `${id}`, and trigger inputs
+(`${trigger.inputs.*}`); unknown interpolation variables are an error.
+
+**Trigger-specific variables in multi-trigger jobs.** `${trigger.inputs.*}`
+resolves only for triggers that declare that input. If a job lists more than one
+trigger and its `concurrency.key` (or any `when` guard / step `with`) references
+`${trigger.inputs.X}`, then **every** trigger on the job must declare input `X`;
+otherwise the spec is **rejected at load** (fail-closed) rather than producing an
+undefined value at runtime when fired by a trigger that lacks it. In practice a
+key that keys off a manual input belongs on a single-trigger (manual) job, or
+each trigger must supply the same input set. This makes interpolation a
+load-time-checkable property, never a runtime surprise.
+
+### 4.4 Timeout and retries
+
+```yaml
+timeout: 45m            # required duration (see "Duration format" below)
+retries:
+  max: 2                # int >= 0, default 0
+  backoff: exponential  # fixed | exponential ; default exponential
+  initial: 30s          # required when max > 0
+```
+
+`timeout` bounds a single run; the daemon fails the run closed when it elapses.
+Retries re-run the whole job under a fresh idempotency key derived from the run
+(AS-161 owns the key scheme).
+
+**Duration format.** Every duration in this DSL — `timeout`, `retries.initial`,
+and `retention.*` — uses the grammar `^[0-9]+(s|m|h|d)$`, where `d` = 24h. Note
+this is **wider than Go's `time.ParseDuration`**, which has no `d` unit. The
+AS-161 loader therefore uses the orchestrator's own small parser (parse the
+integer, multiply by the unit, with `d`→24h) rather than `time.ParseDuration`;
+authors may write `90d` instead of `2160h`. Anything outside the grammar (bare
+ints, compound `1h30m`, fractional units) is rejected.
+
+### 4.5 Budget
+
+```yaml
+budget:
+  run: 6.00             # required USD ceiling for one run
+  monthly: 200.00       # optional rolling ceiling for the job
+```
+
+`budget.run` is **required** — a job with no run budget is invalid (missing-budget
+AC). Step-level `budget` (§4.7) must sum to ≤ `budget.run`; the loader rejects a
+step budget total that exceeds the run ceiling. Enforcement reuses the existing
+budget guardrails (AS-041/AS-086); this format only declares the ceilings.
+
+### 4.6 Permissions, known labels, secrets
+
+```yaml
+permissions:
+  github:
+    contents: write
+    pull_requests: write
+    issues: write
+    checks: read
+known_labels:
+  - implementation
+  - smith-generated
+  - smith-auto-merge
+secrets:
+  - github-token
+  - anthropic-api-key
+  - openai-api-key
+```
+
+- `permissions.github` uses GitHub's own resource → access vocabulary
+  (`read`/`write`); any other key or value is rejected.
+- Every label any trigger or step references must appear in `known_labels`;
+  an undeclared label is a validation error (unknown-label AC).
+- `secrets` lists **scope names only** — never values. A step that needs a secret
+  not listed here fails validation (undeclared-secret-scope AC). Plaintext in a
+  spec (anything matching a secret pattern) is rejected at load and redacted at
+  capture (AS-154/AS-115). The mapping from scope name to a real credential is
+  AS-154's job, not this format's.
+
+**How a step references a secret.** Two mechanisms, both load-time checkable:
+
+  1. **Implicit binding (default).** An action declares which secret scopes it
+     needs (e.g. `github.*` actions need `github-token`, `agent.*` steps need the
+     API-key scope of their resolved provider). The loader binds those from the
+     job's `secrets` list automatically; no syntax in the step. This is the
+     normal path and keeps specs free of credential plumbing.
+  2. **Explicit interpolation.** Where an action arg must carry a scope by name,
+     reference it as `${secrets.<scope-name>}` inside a `with:` value. The value
+     interpolated at runtime is the secret's *handle*, never its plaintext.
+
+  In both cases the referenced scope (whether bound implicitly or named via
+  `${secrets.*}`) must appear in the job's `secrets` list, or validation rule 9
+  fails. `${secrets.*}` is the **only** way a secret enters a step — a literal
+  that looks like a credential is rejected (rule 14).
+
+### 4.7 Steps
+
+`steps` is a non-empty ordered list. Steps run in declaration order unless a
+`when` guard skips one. Each step:
+
+```yaml
+- id: implement                 # required, unique within the job
+  uses: agent.implement         # required, must name a known action
+  role: implementation          # required for agent.* steps
+  provider_policy: anthropic-impl  # optional; names a routing entry (§4.8)
+  budget: 4.00                  # optional per-step USD ceiling
+  when: policy.auto_merge_allowed  # optional declarative guard
+  with: { ... }                 # optional action-specific args
+```
+
+Two action families exist, and the distinction is load-time enforced:
+
+- **`agent.*`** — bounded *cognitive* steps (`agent.implement`, `agent.review`,
+  `agent.architecture_check`, `agent.manual_test_sim`, …). They require a `role`
+  and may carry a `provider_policy` and `budget`. Their *output* never decides
+  labels/merges/permissions.
+- **`github.*`** — *deterministic* action steps (`github.add_label`,
+  `github.remove_label`, `github.create_or_update_pr`, `github.comment`,
+  `github.set_status`, `github.enable_auto_merge`, `github.merge`). They take
+  declarative args under `with:`, never a `role`. Modelling these as steps — not
+  as prose an agent emits — is the core safety property (ADR D-ORCH-6).
+
+All action-specific arguments live under the step's `with:` map. The step's own
+keys (`id`, `uses`, `role`, `provider_policy`, `budget`, `when`, `with`) are the
+**only** keys allowed directly on a step; any other key — e.g. a bare `label:` at
+step level — is rejected by rule 1. Put it under `with:` instead.
+
+`uses` must name an action from the known catalogue; an unknown action is
+rejected (unknown-action AC). The action *semantics* are defined by AS-147/AS-149;
+this format only fixes the call shape and the agent-vs-deterministic split.
+
+`when` is a **declarative** guard holding **exactly one** boolean identifier from
+a closed namespace (`policy.*`, `trigger.*`, `steps.<id>.outcome`). It is boolean
+data, not an expression an agent fills in; unknown identifiers are rejected. v1
+deliberately supports **no logical operators** (`and`/`or`/`not`) and no
+comparisons — a single named predicate only. Compound conditions are expressed by
+defining a named `policy.*` predicate (catalogue owned by AS-157/AS-152) rather
+than by embedding logic in the spec, keeping `when` trivially parseable and
+review-legible. Operators may be added additively in a later `version` if a real
+need appears.
+
+### 4.8 Routing
+
+```yaml
+routing:
+  anthropic-impl:
     provider: anthropic
     model: claude-opus-4-8
   gpt-review:
     provider: openai
-    model: gpt-5
+    model: gpt-5-review
 ```
 
-The routing *mechanism* (resolution, fallback, skills/subagents) is **AS-150**; this
-spec only fixes the declaration surface.
+`routing` declares named policies that steps reference by `provider_policy`. A
+`provider_policy` on a step that has no matching `routing` entry is an error.
+This keeps **role separate from provider** (PRD §4.4): the step says *what role*,
+the routing entry says *which provider/model*. The resolution mechanism (named
+policy vs. skill/subagent delegation) is AS-150; here it is a static reference
+that must resolve at load time.
 
-## 10. Permissions and secret scopes
+### 4.9 Hooks
 
-- `permissions.github` declares the GitHub scopes the job needs (`contents`,
-  `pull_requests`, `issues`, `checks`, …) at `read`/`write`. A step that performs an
-  action requiring a scope the job did not declare is a **load-time rejection** (§12)
-  — fail closed, no escalation at runtime.
-- `secrets` is a list of declared **scope names** (e.g. `github-token`,
-  `openai-api-key`). **Values never appear in a spec or a log** (PRD §4.6, secret
-  contract AS-154; redaction-at-capture AS-115). A step that references an undeclared
-  secret scope is rejected.
+```yaml
+hooks:
+  on_failure:
+    - uses: github.comment
+      with: { body_template: run-failed }
+  on_success:
+    - uses: github.comment
+      with: { body_template: run-summary }
+```
 
-## 11. PR and merge policy
+Hooks are lists of **deterministic** (`github.*`) steps run at lifecycle points
+(`on_start`, `on_success`, `on_failure`, `on_cancel`). They obey the same
+action-catalogue and permission rules as steps. Agent steps are not allowed in
+hooks (a hook is bookkeeping, not cognition).
 
-`pr_policy` declares branch/PR conventions (branch prefix, title template, draft
-default) for PR-producing jobs. `merge_policy` is the gate for
-`github.enable_auto_merge`/`github.merge`:
+### 4.10 Merge policy
 
 ```yaml
 merge_policy:
-  mode: auto            # auto | manual | off
-  required:
-    - pr_author_is_smith
-    - required_checks_green
+  mode: auto                          # off | auto | manual ; default off
+  required:                           # uniform list of single-key maps
+    - pr_author_is_smith: true
+    - required_checks_green: true
     - label_present: smith-generated
     - label_present: smith-auto-merge
   forbidden:
-    - unknown_checks
-    - branch_protection_bypass
-    - force_push
+    - unknown_checks: true
+    - branch_protection_bypass: true
+    - force_push: true
 ```
 
-`required`/`forbidden` entries are drawn from a **fixed predicate vocabulary**; an
-unknown predicate is rejected. The concrete gate semantics (and any additions) are
-**AS-157**; this spec fixes that merging is policy-gated and that bypassing
-protection, force-push, and merging on unknown/failed checks are structurally
-forbidden, never expressible as "allowed".
+`required` and `forbidden` are **uniform single-key maps**, never a mix of bare
+strings and maps: each item is `predicate: <arg>`, and a nullary predicate
+(`pr_author_is_smith`, `unknown_checks`, …) takes `true`. This deserialises in Go
+as a plain `[]map[string]Value` with no custom unmarshaler and no string-vs-map
+branching. (`label_present` repeats with different args, which a YAML list
+permits and a map would not — another reason these are lists, not maps.)
 
-## 12. Validation contract (normative)
+`merge_policy` is **required whenever** a step or hook uses
+`github.enable_auto_merge` or `github.merge`; such a step without a policy is
+rejected (fail-closed). The predicate names come from a closed catalogue defined
+by AS-157; an unknown predicate is an error. The format guarantees the
+*forbidden* set can never be emptied below the protection invariants (no
+`branch_protection_bypass`, `force_push`, or `unknown_checks` merge is
+expressible as allowed).
 
-A conformant loader (AS-161) MUST **reject the whole spec, fail closed, and report a
-clear error** when any of the following holds (AC4). It MUST NOT load a partial or
-"best-effort" job.
-
-1. **Ambiguous timezone** — a `cron` trigger with a missing timezone, a bare UTC
-   offset, or a non-IANA name. IANA names only.
-2. **Unbounded concurrency** — `concurrency` missing, or `limit` absent / `< 1` /
-   non-integer / "unlimited".
-3. **Missing or over-run budget** — no top-level `budget.usd`, a cognitive step with
-   no `budget.usd`, any single step budget above the run budget, or the sum of the
-   **unconditional** step budgets above the run budget (worst-case-path rule, §7).
-4. **Unknown label** — `github.add_label`/`remove_label`/`label_present` referencing
-   a label not in the job's `labels` known-label set (§4).
-5. **Unknown action** — a step or hook `uses` not in the §7 catalog for the declared
-   `version`.
-6. **Undeclared secret scope** — a step referencing a secret scope absent from
-   `secrets`.
-7. **Undeclared permission scope** — an action requiring a GitHub scope the job did
-   not declare under `permissions.github`.
-8. **Unknown top-level field** — any unrecognized top-level key (§3 schema
-   discipline).
-9. **Missing required field** — any §4 `Required: yes` field absent.
-10. **Bad scope cardinality** — neither `repository` nor `org` present, **or both
-    present** (they are mutually exclusive, §4).
-11. **Merge without policy** — a `github.enable_auto_merge`/`github.merge` step with
-    no `merge_policy`, or a `merge_policy` predicate outside the fixed vocabulary.
-
-These rules are the contract AS-161 implements and tests; the worked examples in §13
-are the canonical conformance fixtures.
-
-## 13. Worked examples
-
-### 13.1 Implement labeled work (issue/PR labeled → implement → review → PR → auto-merge)
+### 4.11 Retention
 
 ```yaml
-id: implement-labeled-work
-version: 1
-owner: maintainer
-repository: tonitienda/agent-smith
-description: Implement issues/PRs labeled `implementation`, review, open a PR, auto-merge when clean.
-
-triggers:
-  - github.issue_labeled: { label: implementation }
-  - github.pr_labeled: { label: implementation }
-
-concurrency:
-  key: repo:${repository}:implementation
-  limit: 1
-timeout: 45m
-retries: { max: 1, backoff: exponential, delay: 30s }
-budget: { usd: 8.00 }
-
-provider_routing:
-  anthropic-implementation: { provider: anthropic, model: claude-opus-4-8 }
-  gpt-review: { provider: openai, model: gpt-5 }
-
-steps:
-  - id: implement
-    uses: agent.implement
-    role: implementation
-    provider_policy: anthropic-implementation
-    budget: { usd: 4.00 }
-  - id: review
-    uses: agent.review
-    role: pr-review
-    provider_policy: gpt-review
-    budget: { usd: 2.00 }
-  - id: open-pr
-    uses: github.create_or_update_pr
-    base: main
-  - id: mark-generated
-    uses: github.add_label
-    label: smith-generated
-  - id: enable-auto-merge
-    uses: github.enable_auto_merge
-    when: policy.auto_merge_allowed
-
-permissions:
-  github: { contents: write, pull_requests: write, issues: write, checks: read }
-secrets: [github-token, anthropic-api-key, openai-api-key]
-labels: [implementation, smith-generated]
-
-pr_policy: { branch_prefix: smith/, draft: false }
-merge_policy:
-  mode: auto
-  required: [pr_author_is_smith, required_checks_green, {label_present: smith-generated}]
-  forbidden: [unknown_checks, branch_protection_bypass, force_push]
-
-hooks:
-  on_failure:
-    - id: report-failure
-      uses: github.comment
-      body_template: "Run failed; see linked Smith session."
-
-retention: { runs: 200, artifacts: 30d }
+retention:
+  runs: 90d                  # how long run-control rows are kept (AS-161)
+  artifacts: 30d             # how long step artifacts are kept
 ```
 
-### 13.2 Scheduled architecture check (cron with required timezone)
+Narrative and cost stay in the Smith session log (ADR D-ORCH-4); `retention`
+only bounds run-store rows and artifacts. Omitted values take daemon defaults.
+
+## 5. Validation rules (normative)
+
+A spec is **rejected at load** (the daemon refuses to schedule it) when any of:
+
+1. An unknown top-level key, step key, or trigger/action name appears.
+2. `id` is missing/malformed or collides with another loaded spec.
+3. `version` is missing or unsupported by the loader.
+4. Neither or both of `repository`/`org` are set.
+5. `triggers` is empty, or a `cron` trigger lacks a `timezone` / uses a bare
+   offset, or a `followup` trigger lacks `max_runs`.
+6. `concurrency.limit` is missing, `< 1`, or absent (no unbounded concurrency).
+7. `budget.run` is missing, or summed step budgets exceed it.
+8. A referenced label is absent from `known_labels`.
+9. A step references a secret scope not listed under `secrets`.
+10. A step's `provider_policy` has no matching `routing` entry.
+11. An `agent.*` step omits `role`, or a `github.*` step declares a `role`.
+12. A merge-enabling step/hook exists without a `merge_policy`, or a
+    `merge_policy` tries to permit a forbidden-invariant action.
+13. A `when` guard holds anything other than a single known boolean identifier
+    (no operators), or a `concurrency.key`/`with` template references an unknown
+    identifier.
+14. Any plaintext value matches a secret pattern (fail-closed; secrets are
+    names); a `${secrets.*}` reference names a scope absent from `secrets`.
+15. A `${trigger.inputs.X}` reference appears on a multi-trigger job whose triggers
+    do not all declare input `X` (undefined-at-runtime guard).
+16. Any duration field is outside `^[0-9]+(s|m|h|d)$`.
+17. A `merge_policy.required`/`forbidden` item is not a single-key map.
+
+Every rejection names the file, the field path, and the rule — specs are
+repo-reviewable, so validation must read like a review comment, not a stack
+trace.
+
+## 6. Examples
+
+The PRD example in §4.1 is the canonical *implementation* job. The examples
+below cover the remaining trigger kinds from the acceptance criteria. They are
+illustrative (this ticket ships the format, not running jobs); committing live
+`.agent-smith/jobs/*.yaml` waits for the AS-161 daemon.
+
+### 6.1 Cron — scheduled architecture check
 
 ```yaml
 id: nightly-architecture-check
 version: 1
 owner: maintainer
 repository: tonitienda/agent-smith
+description: One architecture-perspective review pass each night.
+
 triggers:
-  - cron: { expr: "0 3 * * *", timezone: Europe/Madrid }
-concurrency: { key: repo:${repository}:arch, limit: 1 }
+  - cron:
+      schedule: "0 3 * * *"
+      timezone: Europe/Madrid
+
+concurrency: { key: "repo:${repository}:arch", limit: 1 }
 timeout: 30m
-budget: { usd: 3.00 }
-provider_routing:
-  arch: { provider: anthropic, model: claude-opus-4-8 }
+budget: { run: 3.00, monthly: 60.00 }
+
+permissions:
+  github: { contents: read, issues: write }
+known_labels: [architecture-finding]
+secrets: [github-token, anthropic-api-key]
+
+routing:
+  arch:
+    provider: anthropic
+    model: claude-opus-4-8
+
 steps:
-  - id: arch-pass
+  - id: review
     uses: agent.architecture_check
     role: architecture
     provider_policy: arch
-    budget: { usd: 3.00 }
+    budget: 3.00
   - id: report
     uses: github.comment
-    body_template: "Architecture check summary attached."
-permissions: { github: { contents: read, pull_requests: read, issues: write } }
-secrets: [github-token, anthropic-api-key]
+    with: { body_template: arch-summary }
 ```
 
-### 13.3 Manual dispatch (operator-initiated, single step)
+### 6.2 Manual dispatch — bounded manual-test simulation
 
 ```yaml
-id: manual-manual-test-sim
+id: manual-test-sim
 version: 1
 owner: maintainer
 repository: tonitienda/agent-smith
+
 triggers:
-  - manual: {}
-concurrency: { key: repo:${repository}:manual-test, limit: 1 }
+  - manual:
+      inputs:
+        scenario: { type: string, required: true }
+
+concurrency: { key: "repo:${repository}:mtsim:${trigger.inputs.scenario}", limit: 1 }
 timeout: 20m
-budget: { usd: 2.00 }
-steps:
-  - id: simulate
-    uses: agent.review
-    role: manual-test-sim
-    budget: { usd: 2.00 }
+budget: { run: 2.00 }
+
 permissions: { github: { contents: read } }
 secrets: [anthropic-api-key]
+routing: { sim: { provider: anthropic, model: claude-opus-4-8 } }
+
+steps:
+  - id: simulate
+    uses: agent.manual_test_sim
+    role: manual-test
+    provider_policy: sim
+    budget: 2.00
+    with: { scenario: "${trigger.inputs.scenario}" }
 ```
 
-### 13.4 PR merged → bounded follow-up (post-merge tidy, one follow-up max)
+### 6.3 Issue labeled / PR labeled
+
+See the canonical PRD §4.1 `implement-labeled-work` job — it binds both
+`github.issue_labeled` and `github.pr_labeled` on `implementation`, runs an
+`agent.implement` → `agent.review` pair on separate providers, and gates merge
+behind `merge_policy`.
+
+### 6.4 PR merged — bounded follow-up
 
 ```yaml
 id: post-merge-followup
 version: 1
 owner: maintainer
 repository: tonitienda/agent-smith
+description: After a Smith PR merges, run one bounded follow-up tidy pass.
+
 triggers:
   - github.pr_merged: { base: main }
-  - followup: { max_followups: 1 }
-concurrency: { key: repo:${repository}:post-merge, limit: 1 }
+  - followup:
+      of: tidy
+      max_runs: 1
+
+concurrency: { key: "repo:${repository}:followup", limit: 1, on_conflict: drop }
 timeout: 25m
-budget: { usd: 3.00 }
+retries: { max: 1, backoff: exponential, initial: 30s }
+budget: { run: 3.00 }
+
+permissions:
+  github: { contents: write, pull_requests: write, checks: read }
+known_labels: [smith-generated, smith-auto-merge]
+secrets: [github-token, anthropic-api-key]
+routing: { impl: { provider: anthropic, model: claude-opus-4-8 } }
+
 steps:
   - id: tidy
     uses: agent.implement
     role: implementation
-    budget: { usd: 3.00 }
+    provider_policy: impl
+    budget: 3.00
   - id: open-pr
     uses: github.create_or_update_pr
-    base: main
-permissions: { github: { contents: write, pull_requests: write } }
-secrets: [github-token, anthropic-api-key]
-pr_policy: { branch_prefix: smith/followup-, draft: false }
+  - id: mark
+    uses: github.add_label
+    with:
+      label: smith-generated
+
+merge_policy:
+  mode: manual
+  required:
+    - pr_author_is_smith: true
+    - required_checks_green: true
+    - label_present: smith-generated
+  forbidden:
+    - unknown_checks: true
+    - branch_protection_bypass: true
+    - force_push: true
 ```
 
-## 14. Loadability and the AS-161 boundary
+## 7. Versioning and evolution
 
-A spec is **loadable by the daemon without a cloud UI** (AC5): it is plain YAML on
-disk, fully reviewable in a PR, and self-contained (no field requires resolving
-external UI state to validate). The daemon (`smith runs daemon`, AS-161) discovers
-`.agent-smith/jobs/*.yaml`, applies §12, and either loads the job or rejects it with
-a clear error. Nothing here depends on a hosted service.
+`version` is the only break valve. After AS-161 ships a loader for `version: 1`,
+changes are **additive-only** (D2): new optional fields, new trigger/action
+kinds, new routing/merge predicates — never a removed or repurposed field. A
+genuinely breaking change increments `version` and the loader supports both until
+old specs migrate. This mirrors the block-schema additive discipline
+([block-schema-union.md](block-schema-union.md)) for the orchestrator's own
+persisted format.
 
-What AS-160 does **not** do, deferred to the named tickets: the YAML parser
-dependency and runtime validator (AS-161), action implementations (AS-147/AS-149),
-routing resolution (AS-150), the secret contract (AS-154), and merge-gate semantics
-(AS-157). Those tickets bind to the surface fixed here; this spec is the contract,
-not the engine.
+## 8. Downstream consumers
+
+| Ticket | Consumes from this format |
+| --- | --- |
+| AS-161 | Loader + validator (§5), run store, `version: 1` parsing. |
+| AS-147 / AS-149 | `github.*` action + trigger semantics, `merge_policy` wiring. |
+| AS-150 | `routing` resolution (named policy vs. delegated). |
+| AS-151 | Per-run metadata (`id`, trigger, role, refs) into the session log. |
+| AS-152 | The concrete dogfood job specs written against this format. |
+| AS-154 | `secrets` scope resolution + plaintext rejection. |
+| AS-157 | `merge_policy` predicate catalogue + gating. |

@@ -25,7 +25,3 @@ Define the first always-on private deployment for the Smith orchestrator so dogf
 ## Dependencies
 
 [AS-161, AS-148, AS-154]
-
-## Open questions
-
-1. Host/runbook specifics depend on the AS-154 secret backend and AS-148 auth decisions.

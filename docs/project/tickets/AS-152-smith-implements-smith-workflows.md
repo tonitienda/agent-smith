@@ -25,7 +25,3 @@ Define the first private job specs that let Smith implement and maintain Agent S
 ## Dependencies
 
 [AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157]
-
-## Open questions
-
-1. First monthly/per-run budget ceilings (PRD Q9) and the concrete dogfood job set depend on AS-160/AS-161 and the policy tickets (AS-157) landing.

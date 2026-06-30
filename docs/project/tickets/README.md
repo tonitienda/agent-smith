@@ -175,8 +175,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 |---|---|---|---|---|
 | [AS-121](AS-121-tui-phosphor-palette.md) | TUI phosphor palette — centralize colour tokens and apply to all surfaces | tui | done | 021, 053 |
 | [AS-122](AS-122-tui-splash-screen.md) | TUI splash screen — logo, divider rule, invite text, blinking caret | tui | done | 121, 126 |
-| [AS-123](AS-123-tui-typewriter-streaming.md) | TUI typewriter streaming — char-by-char reveal with trailing block cursor | tui | ready | 121, 021 |
-| [AS-124](AS-124-tui-tool-card-polish.md) | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | tui | done | 121, 024 |
+| [AS-123](AS-123-tui-typewriter-streaming.md) | TUI typewriter streaming — char-by-char reveal with trailing block cursor | tui | done | 121, 021 |
+| [AS-124](AS-124-tui-tool-card-polish.md) | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | tui | ready | 121, 024 |
 | [AS-125](AS-125-tui-status-line-polish.md) | TUI status line + mode bar visual polish — spec-compliant layout and colours | tui | ready | 121, 025, 073 |
 | [AS-126](AS-126-tui-matrix-rain-medium-default.md) | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | tui | done | 121, 053 |
 | [AS-127](AS-127-tui-command-palette-visual.md) | TUI command palette visual redesign — search border, per-command styling, footer hints | tui | ready | 121, 022 |
@@ -200,7 +200,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | needs-clarification | AS-077 |
+| [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | done | AS-077 |
+| [AS-162](AS-162-archtest-package-contracts-completeness.md) | Guard that every internal package is accounted for in package-contracts.md | quality | needs-clarification | AS-098, AS-146 |
 
 ## Index — Orchestrator dogfood wave (AS-159 … AS-161, AS-147 … AS-158)
 
@@ -226,6 +227,28 @@ architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-arc
 | [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | needs-clarification | AS-161, AS-148, AS-154 |
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | needs-clarification | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | ready-to-implement | AS-159 |
+
+## Index — Orchestrator dogfood wave (`smith-orchestrator-dogfood-prd.md`)
+
+> The architecture/DSL/daemon tickets were renumbered from the colliding AS-144–AS-146 (already owned by the merged keychain/archtest tickets above) to AS-159–AS-161. The wave stays `needs-clarification` until the AS-159 architecture ADR lands.
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries | orchestrator | ready-to-implement | — |
+| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | needs-clarification | AS-159 |
+| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | needs-clarification | AS-159, AS-160 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | needs-clarification | AS-160, AS-161 |
+| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | needs-clarification | AS-159, AS-147 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | integrations | needs-clarification | AS-147, AS-148 |
+| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | provider | needs-clarification | AS-160 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | observability | needs-clarification | AS-161 |
+| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | dogfood | needs-clarification | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
+| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | security | needs-clarification | AS-159, AS-161, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | security | needs-clarification | AS-159, AS-148, AS-158 |
+| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
+| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | needs-clarification | AS-161, AS-148, AS-154 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | needs-clarification | AS-147, AS-148, AS-149 |
+| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | ready-to-implement | AS-159 |
 
 ## Suggested build order
 

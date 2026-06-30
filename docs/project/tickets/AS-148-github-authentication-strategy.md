@@ -25,8 +25,3 @@ Decide and document how the first dogfood orchestrator receives limited GitHub a
 ## Dependencies
 
 [AS-159, AS-147]
-
-## Open questions
-
-1. GitHub App vs tightly-scoped maintainer token for MVP 0 is deferred to this ticket and the AS-158 research spike (ADR Q-148).
-2. Where short-lived credentials are minted and how scopes map to job-spec permission blocks.
