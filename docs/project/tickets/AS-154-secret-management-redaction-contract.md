@@ -4,7 +4,7 @@ title: Secret management and redaction contract
 status: needs-clarification
 area: security
 priority: P2
-depends_on: [AS-144, AS-148, AS-158]
+depends_on: [AS-159, AS-148, AS-158]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -25,4 +25,8 @@ Define how orchestrated jobs declare, receive, audit, redact, and revoke secrets
 
 ## Dependencies
 
-[AS-144, AS-148, AS-158]
+[AS-159, AS-148, AS-158]
+
+## Open questions
+
+1. Concrete secret-store backend (PRD Q7) is gated on the AS-158 research spike; this ticket fixes only the contract (declared scopes, no plaintext, redaction-at-capture, fail-closed).
