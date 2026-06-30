@@ -4,7 +4,7 @@ title: Daemon, scheduler, and SQLite run store
 status: ready-to-implement
 area: orchestrator
 priority: P2
-depends_on: [AS-159, AS-160]
+depends_on: [AS-159, AS-160, AS-163]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -13,6 +13,12 @@ source: docs/project/smith-orchestrator-dogfood-prd.md
 ## Description
 
 Design and implement the first always-on Smith orchestrator process for loading job specs, receiving triggers, queuing work, tracking run state, and running dogfood jobs without requiring the maintainer laptop to stay open.
+
+> **Scope note:** the job-spec *model + validator* (the §5 load-time validity
+> contract) is carved out to **AS-163** (`internal/orchestrator/spec`, done). This
+> ticket builds on it: the YAML/file loader over `.agent-smith/jobs/`, cross-file
+> `id` collision (`spec.CheckUnique`), the SQLite run store, the scheduler, and the
+> `smith runs daemon` + operator surfaces.
 
 ## Acceptance criteria
 

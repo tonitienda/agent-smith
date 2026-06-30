@@ -30,6 +30,8 @@ those lower layers never depend back up.
 | **Run manifest** | `internal/manifest` | `schema`, `internal/cost`, `internal/render` | provider, loop, faces, `cmd/*` |
 | **OTel export** | `internal/otelexport` | `schema`, `internal/eventlog`, `internal/cost` | provider, loop, projection, faces, `cmd/*` |
 | **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`, `internal/serve`), `cmd/*` |
+| **Orchestrator** | `internal/orchestrator` (orchestration tier, ADR D-ORCH-3) | core contracts (eventlog, provider, config, cost, async runner) | inward-core packages, faces, `cmd/*` |
+| **Job-spec model** | `internal/orchestrator/spec` (stdlib-only leaf) | `schema`-style stdlib only | everything else |
 | **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 
