@@ -113,7 +113,7 @@ curl -fsSL https://raw.githubusercontent.com/tonitienda/agent-smith/main/install
 Install a specific release tag:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tonitienda/agent-smith/main/install.sh | bash -- v0.0.3
+curl -fsSL https://raw.githubusercontent.com/tonitienda/agent-smith/main/install.sh | bash -s -- v0.0.3
 ```
 
 By default the installer writes to `/usr/local/bin` when it is writable, otherwise `~/.local/bin`. Override that with `INSTALL_DIR=/some/path`.

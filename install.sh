@@ -48,20 +48,23 @@ resolve_version() {
 checksum_verify() {
   checksum_file="$1"
   archive_name="$2"
+  checksum_line="$(
+    awk -v name="${archive_name}" '
+      $2 == name || substr($2, 2) == name {
+        print
+        exit
+      }
+    ' "${checksum_file}"
+  )"
+  [ -n "${checksum_line}" ] || fail "missing checksum entry for ${archive_name}"
 
   if command -v sha256sum >/dev/null 2>&1; then
-    (
-      cd "$(dirname "${checksum_file}")"
-      sha256sum -c --ignore-missing "$(basename "${checksum_file}")"
-    )
+    printf '%s\n' "${checksum_line}" | (cd "$(dirname "${checksum_file}")" && sha256sum -c -)
     return
   fi
 
   if command -v shasum >/dev/null 2>&1; then
-    expected="$(grep " ${archive_name}\$" "${checksum_file}" | awk '{print $1}')"
-    [ -n "${expected}" ] || fail "missing checksum entry for ${archive_name}"
-    actual="$(shasum -a 256 "$(dirname "${checksum_file}")/${archive_name}" | awk '{print $1}')"
-    [ "${expected}" = "${actual}" ] || fail "checksum mismatch for ${archive_name}"
+    printf '%s\n' "${checksum_line}" | (cd "$(dirname "${checksum_file}")" && shasum -a 256 -c -)
     return
   fi
 
@@ -76,7 +79,7 @@ main() {
 
   os="$(detect_os)"
   arch="$(detect_arch)"
-  version="$(resolve_version)"
+  version="$(resolve_version)" || fail "could not resolve release version"
   [ -n "${version}" ] || fail "could not resolve release version"
 
   archive_name="${BINARY}_${version#v}_${os}_${arch}.tar.gz"
