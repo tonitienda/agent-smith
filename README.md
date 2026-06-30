@@ -100,6 +100,24 @@ internal/loop/             agentic turn loop: projection → stream → tool dis
 scripts/agent-quality-gate.sh  shared deterministic pre-submit gate for humans and agents
 ```
 
+## Installation
+
+Tagged pushes that match `v*.*.*` publish GitHub releases with versioned `smith` archives for Linux and macOS. Each release embeds the tag into the binary by building with `VERSION=<tag> make build` and attaches per-archive SHA-256 checksums.
+
+Install the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tonitienda/agent-smith/main/install.sh | bash
+```
+
+Install a specific release tag:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/tonitienda/agent-smith/main/install.sh | bash -s -- v0.0.3
+```
+
+By default the installer writes to `/usr/local/bin` when it is writable, otherwise `~/.local/bin`. Override that with `INSTALL_DIR=/some/path`.
+
 ## Development
 
 The primary binary is `smith`. Before handing off changes, humans and agents should run `./scripts/agent-quality-gate.sh` (documented in [Agent quality gates](docs/agent-quality-gates.md)) so formatting, unit tests, vet, and lint match CI.
