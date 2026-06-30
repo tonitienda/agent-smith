@@ -1,7 +1,7 @@
 ---
 id: AS-159
 title: Orchestrator architecture and product boundaries
-status: ready-to-implement
+status: done
 area: orchestrator
 priority: P2
 depends_on: []

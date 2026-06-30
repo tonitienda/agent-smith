@@ -1,7 +1,7 @@
 ---
 id: AS-161
 title: Daemon, scheduler, and SQLite run store
-status: needs-clarification
+status: ready-to-implement
 area: orchestrator
 priority: P2
 depends_on: [AS-159, AS-160]

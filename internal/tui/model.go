@@ -87,6 +87,10 @@ type model struct {
 	textarea textarea.Model
 	viewport viewport.Model
 	spinner  spinner.Model
+	// spinnerFrame advances once per spinner.TickMsg while a turn is busy; the
+	// braille tool-card/status spinners index brailleSpinnerFrames with it so they
+	// share the one tick cadence rather than each owning a ticker (AS-124).
+	spinnerFrame int
 
 	segs         []segment
 	curAssistant int
@@ -149,6 +153,10 @@ type model struct {
 	// expandTools, when set, shows tool results in full rather than a preview; the
 	// leader chord Ctrl+G then t toggles it (AS-024 AC1).
 	expandTools bool
+
+	// typingTick is true while a typewriter reveal Tick is in flight, so deltas
+	// arriving between ticks don't start a second, faster ticker (AS-123).
+	typingTick bool
 
 	busy   bool
 	cancel context.CancelFunc
@@ -278,6 +286,20 @@ func caretBlink() tea.Cmd {
 	return tea.Tick(caretBlinkInterval, func(time.Time) tea.Msg { return caretBlinkMsg{} })
 }
 
+// typewriterInterval is the per-rune cadence of the streaming typewriter reveal
+// (AS-123, §6): ~40ms/char, a distinct period from the caret/rain/spinner tickers
+// per the colors.go shared-tick contract.
+const typewriterInterval = 40 * time.Millisecond
+
+// typewriterTickMsg advances the streaming reveal by one rune.
+type typewriterTickMsg struct{}
+
+// typewriterTick schedules the next reveal step. It is re-armed only while a
+// streaming run still has hidden runes, so it goes quiet over finished content.
+func typewriterTick() tea.Cmd {
+	return tea.Tick(typewriterInterval, func(time.Time) tea.Msg { return typewriterTickMsg{} })
+}
+
 // glitchClearMsg ends the one-shot startup logo glitch-in.
 type glitchClearMsg struct{}
 
@@ -318,8 +340,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case uiEventMsg:
 		m.apply(loop.UIEvent(msg))
 		m.refresh()
-		// Re-arm the drain so the next event streams in too.
-		return m, waitForEvent(m.events)
+		// Re-arm the drain so the next event streams in too, and start the
+		// typewriter drip if fresh text arrived and no reveal is already pending.
+		cmds := []tea.Cmd{waitForEvent(m.events)}
+		if !m.typingTick && m.firstHiddenSeg() >= 0 {
+			m.typingTick = true
+			cmds = append(cmds, typewriterTick())
+		}
+		return m, tea.Batch(cmds...)
+
+	case typewriterTickMsg:
+		m.typingTick = false
+		if i := m.firstHiddenSeg(); i >= 0 {
+			m.segs[i].revealed++
+			m.refresh()
+			// One rune per tick, never skip ahead: a fast token burst still reveals
+			// at a steady ~40ms/char cadence (AS-123). Re-arm only while text remains.
+			if m.firstHiddenSeg() >= 0 {
+				m.typingTick = true
+				return m, typewriterTick()
+			}
+		}
+		return m, nil
 
 	case permPromptMsg:
 		m.enqueuePerm(msg)
@@ -375,6 +417,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
+		// Only advance the shared braille frame when the spinner actually accepted
+		// the tick (a non-nil follow-up cmd). A stale or mismatched TickMsg is
+		// rejected by spinner.Update with a nil cmd, so gating here keeps the card
+		// spinner in lockstep rather than racing on duplicate tick chains.
+		if cmd != nil {
+			m.spinnerFrame++
+		}
 		return m, cmd
 	}
 

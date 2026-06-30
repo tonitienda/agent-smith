@@ -1,8 +1,8 @@
 ---
 id: AS-140
 title: Manual test campaign — add detailed scenarios for newly-completed tickets
-status: ready-to-implement
-github_issue: null
+status: done
+github_issue: 431
 type: bug
 depends_on: [AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138]
 area: quality
@@ -41,8 +41,8 @@ tickets.
 
 ## Acceptance criteria
 
-- [ ] Each ticket in the table above has at least one numbered step in the
+- [x] Each ticket in the table above has at least one numbered step in the
       appropriate campaign section with a concrete action and expected result.
-- [ ] The quick campaign checklist table is updated to reference the new steps.
-- [ ] The ticket coverage matrix links to the steps.
-- [ ] Campaign still passes `./scripts/agent-quality-gate.sh` after edits.
+- [x] The quick campaign checklist table is updated to reference the new steps.
+- [x] The ticket coverage matrix links to the steps.
+- [x] Campaign still passes `./scripts/agent-quality-gate.sh` after edits.

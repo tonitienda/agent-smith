@@ -26,3 +26,7 @@ Define the deterministic policy that allows Smith-authored PRs to be merged auto
 ## Dependencies
 
 [AS-147, AS-148, AS-149]
+
+## Open questions
+
+1. Exact acceptable auto-merge policy for Smith-authored PRs (PRD Q5) is a product decision pending AS-149 PR automation; the ADR fixes only the fail-closed constraints.
