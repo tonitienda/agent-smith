@@ -1,7 +1,7 @@
 ---
 id: AS-162
 title: Guard that every internal package is accounted for in package-contracts.md
-status: needs-clarification
+status: done
 github_issue: null
 depends_on: [AS-098, AS-146]
 area: quality
@@ -11,7 +11,7 @@ source: docs/architecture/package-contracts.md; QA pass 2026-06-30
 
 # AS-162 · Guard that every internal package is accounted for in package-contracts.md
 
-**Status: needs clarification** *(raised during a QA pass comparing the architecture docs, arch tests, and code; the doc claim that caused the drift is unenforced)*
+**Status: done** *(raised during a QA pass comparing the architecture docs, arch tests, and code; the doc claim that caused the drift is now enforced)*
 
 ## Description
 
@@ -37,28 +37,39 @@ This ticket asks whether to add a guard test (analogous to the existing
 mentioned in `package-contracts.md` nor on an explicit allowlist, so the doc and
 the code cannot silently diverge.
 
-## Open questions
+## Resolved decisions
 
-1. **Is a completeness guard worth the maintenance cost?** It would require every
-   new package to be either named in the doc or added to an allowlist, on pain of
-   a failing test. That is the same trade the `orchestrationAndFacePackages`
-   allowlist already makes (a new orchestration package must be appended). Is the
-   doc-completeness payoff worth a second list to keep in sync, or is the
-   "map is complete" claim better *softened* (drop the completeness promise) so
-   the doc stays a curated guide rather than an exhaustive registry?
-2. **What counts as "accounted for"?** A crude check (package basename appears as
-   a backticked token somewhere in the file) is cheap but easy to satisfy
-   trivially and prone to false matches (e.g. `composition` the package vs.
-   "composition root"). A stricter check (an explicit per-package registry table)
-   is more honest but more boilerplate. Which granularity?
-3. **Where should the guard live and what is its allowlist seed?** Presumably a
-   new test in `internal/archtest` walking `internal/*` and `cmd/*`, seeded with
-   the packages intentionally not in the narrative map (pure leaves already
-   covered by `dependency-boundaries.md`, test tooling, etc.). Confirm the seam
-   and the initial allowlist before implementing.
-4. **Does the same drift risk apply to `dependency-boundaries.md`?** Its core
-   list is illustrative (ends in `…`), so it does not claim completeness today.
-   Should it, or is one enforced map enough?
+1. **Worth the guard, not a softened claim.** The doc keeps its completeness
+   promise and a test enforces it — the same trade `orchestrationAndFacePackages`
+   and `thirdPartyAllowed` already make. The QA pass that filed this ticket is the
+   proof the review-only path drifts; a ~110-line stdlib guard is cheaper than the
+   recurring manual audit.
+2. **"Accounted for" = an exact backticked token.** The guard collects every
+   ``-quoted span in `package-contracts.md` and requires each package directory to
+   appear as either its basename (`goal`) or its full module-relative path
+   (`internal/loop`). Exact-token matching avoids the false-positive the question
+   flagged (`composition` the package vs. the prose "composition root", which is
+   unbackticked). No separate per-package registry table — the prose mentions the
+   doc already carries are the registry.
+3. **Lives in `internal/archtest`**, walking the immediate children of `internal/`
+   and `cmd/` that ship production (non-test) Go. Test-only dirs (e.g. `archtest`
+   itself) are skipped. Allowlist seed = repo tooling outside the architecture map:
+   `cmd/capture-fixture`, `cmd/schema-guard`, `cmd/ticket-sync`. The three core
+   seams the prose never named explicitly — `permission`, `session`, `budget` —
+   were given a backticked callout in the doc rather than allowlisted, since they
+   are real architecture, not tooling.
+4. **One enforced map is enough.** `dependency-boundaries.md` stays illustrative
+   (its core list ends in `…` and claims no completeness), so it needs no guard.
+
+## Implementation
+
+- `internal/archtest/package_contracts_completeness_test.go` —
+  `TestPackageContractsCompleteness` walks `internal/*` and `cmd/*` and fails when
+  a production package is neither named in `package-contracts.md` nor on
+  `docCompletenessAllowlist`.
+- `docs/architecture/package-contracts.md` — added the cross-cutting-seam callout
+  (`permission`/`session`/`budget`) and a note that the map's completeness is now
+  guarded by the test.
 
 ## Notes
 

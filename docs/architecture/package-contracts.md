@@ -273,7 +273,21 @@ maintenance point — append it to the allow-list.
   `schemaguard`, `capturefixture`, `e2e`) and derived caches/adapters
   (`statsindex`, `insightsmodel`) sit at or above their feature's layer and need
   no separate seam. Build-metadata (`version`, `-ldflags`-injected) is a stdlib
-  leaf with no dependents to constrain.
+  leaf with no dependents to constrain. The **cross-cutting core seams** the
+  layers above share are `permission` (AS-016, the tool permission gate every
+  face builds and the loop consults before a tool runs), `session` (AS-007, the
+  append-only session store behind `session.CreateChild` and `/resume`), and
+  `budget` (AS-041, the spend guard the loop and `/cost` enforce); each points
+  inward like any core package and is wired up by the composition root, never the
+  reverse.
+
+This narrative map is kept *complete* by a guard test
+(`internal/archtest/package_contracts_completeness_test.go`, AS-162): every
+first-party package directory under `internal/` and `cmd/` must be named here as
+a backticked token (its basename or full module-relative path) or sit on that
+test's explicit allowlist of repo tooling, so a new package cannot be added with
+correct layering yet silently never appear in this doc.
+
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
