@@ -7,9 +7,13 @@
 
 ## 1. Executive Summary
 
-We're building **Agent Smith**, a fast, low-cost, provider-agnostic coding agent (core in Go) for developers who already live in Claude Code / Codex / Grok but are frustrated by **opaque context, runaway cost, and zero feedback on how their sessions actually went**. Agent Smith treats the LLM as a swappable reasoning engine and concentrates its own value on the **harness layer**: visualizing and surgically editing context, tidying messy conversations into clean reusable context, routing work to the cheapest capable model, and producing a **model-assisted session dashboard** ("what went well, what burned tokens, what to improve"). The result is an agent that feels powerful and delightful while being measurably cheaper and faster — and a natural fit as an **optimized engine for async/background tasks**.
+We're building **Agent Smith**, a fast, low-cost, provider-agnostic coding agent (core in Go) for developers who already live in Claude Code / Codex / Grok but are frustrated by **opaque context, runaway cost, and zero feedback on how their sessions actually went**. Agent Smith treats the LLM as a swappable reasoning engine and concentrates its own value on the **harness layer**: visualizing and surgically editing context, tidying messy conversations into clean reusable context, routing work to the cheapest capable model, and producing a **model-assisted session dashboard** ("what went well, what burned tokens, what to improve"). The result is an agent that feels powerful and delightful while being measurably cheaper and faster, a natural fit as an **optimized engine for async/background tasks**, and intentionally **approachable at first use** rather than overwhelming users with a long wall of commands.
 
 **One-liner:** *The models do the thinking; Agent Smith makes the thinking observable, controllable, portable, and reusable.*
+
+### Product premise
+
+Agent Smith should follow **progressive disclosure**: advanced users can reach advanced controls, but a new user should not need to memorize a large slash-command catalog before the product feels usable. Power should be composable and discoverable, not noisy.
 
 ---
 
@@ -34,6 +38,7 @@ Today's agents optimize almost entirely for **capability**, and leave four thing
 2. **A session leaves no learning behind.** When a session ends, there's no retrospective — no "you re-read the same file 6 times," "this 40k-token tool dump added nothing," "your CLAUDE.md is missing the test command you typed 4 times." The user repeats the same friction forever.
 3. **Cost and speed are afterthoughts.** Most agents don't expose a budget, don't auto-route cheap subtasks to cheap models, don't surface cache savings, and don't tell you *how to make the next turn cheaper*.
 4. **Config is vendor-locked.** CLAUDE.md, skills, MCP wiring, and hooks don't port cleanly between Anthropic and OpenAI, so switching providers (for cost, speed, or availability) is painful.
+5. **Command surfaces sprawl as features grow.** Rich slash commands are powerful, but a long list of similar verbs is intimidating and makes the product feel harder to learn than it should.
 
 ### Why is it painful?
 - **Money:** Long, messy contexts are re-sent every turn. A bloated window is a recurring tax, paid silently.

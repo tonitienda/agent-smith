@@ -12,7 +12,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 - One file per ticket: `AS-NNN-slug.md`. Frontmatter fields:
   - `id` — stable ticket ID (`AS-NNN`), used in `depends_on` references.
-  - `status` — `ready-to-implement` | `needs-clarification` | `done` (later: `in-progress`).
+  - `status` — `ready-to-implement` | `needs-clarification` | `done` | `Pending Debrief` (later: `in-progress`). Use `Pending Debrief` for product-management discovery items that need human debrief before normal backlog triage.
   - `github_issue` — `null` until the GitHub issue is created; then the issue number. Keep it in sync.
   - `type` — optional ticket kind such as `bug`; when present, `ticket-sync` applies it as a `type:<value>` GitHub label. Use `type: bug` for defects found during manual or automated test passes.
   - `depends_on` — ticket IDs that should land (or at least be designed) first.
@@ -253,6 +253,24 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | ready | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | done | AS-159 |
 
+## Index — PM discovery backlog (Pending Debrief)
+
+These items come from competitor/product research and are intentionally marked `Pending Debrief` until the team reviews scope, priority, and sequencing.
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-164](AS-164-run-verify-skill-generator.md) | Run/verify skill generator | skills | ready-to-implement | AS-034, AS-035, AS-058, AS-099 |
+| [AS-165](AS-165-background-cost-ledger.md) | Background cost ledger and autonomous activity attribution | cost | ready-to-implement | AS-020, AS-041, AS-054, AS-120, AS-132 |
+| [AS-166](AS-166-shareable-session-bundles.md) | Shareable redacted session bundles | collaboration | ready-to-implement | AS-005, AS-055, AS-079, AS-115, AS-154 |
+| [AS-167](AS-167-command-surface-simplification.md) | Command surface simplification and progressive disclosure audit | commands | Pending Debrief | AS-022, AS-066, AS-090, AS-104, AS-105 |
+
+## PM discovery PRDs (Pending Debrief)
+
+| PRD | Status | Primary opportunity |
+|---|---|---|
+| [Project Intelligence Map](../project-intelligence-map-prd.md) | Pending Debrief | Inspectable repo map with citations, freshness, and cheap context slices |
+| [Local Agent Workboard](../agent-workboard-prd.md) | Pending Debrief | Local-first board for parallel/background Smith tasks across worktrees and daemon jobs |
+
 ## Suggested build order
 
 1. **Substrate first** (the moat): 001 → 002 → 003 → 004, then 005–007 in parallel with 008. Run **060** (capture real vendor sessions, refine the schema) before the V1 freeze of 003 — D2 makes the schema additive-only only *from* V1.
@@ -268,6 +286,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
 13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL, done) / 161 (daemon + SQLite run store, done), with 158 (research spike, done — [research notes](../../research/orchestrator-competitive-research.md)) feeding 148/153/154/156/157. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157, plus 162) are now `ready`, clarified against the landed ADR and research spike; build them in roughly their dependency order (147/150/151 first, then 148/149, then 153/154/156/157, then 155, with 152 last as it composes the rest).
+14. **PM discovery backlog**: debrief the competitor-driven PRDs and tickets before implementation. AS-164…AS-166 have been accepted into `ready-to-implement`; the remaining open PM work is to split the Project Intelligence Map and Local Agent Workboard PRDs into numbered implementation tickets and debrief AS-167 before deciding which command families to collapse.
 
 ## Needs clarification — decisions to make
 
