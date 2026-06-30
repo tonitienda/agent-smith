@@ -23,6 +23,16 @@ Define the deterministic policy that allows Smith-authored PRs to be merged auto
 - [ ] Every merge decision records all evaluated inputs and the final allow/deny reason in the run DB and Smith event log.
 - [ ] Manual override path is explicit and audited.
 
+## Research input (AS-158)
+
+See [orchestrator-competitive-research.md §3 AS-157](../../research/orchestrator-competitive-research.md#as-157--auto-merge-policies-and-safety-gates):
+no surveyed vendor ships prompt-driven auto-merge — all defer to GitHub branch
+protection + a human gate. Mirror Copilot's hard rule (agent PRs need an
+independent human approval; the requester cannot self-approve); auto-merge off
+unless both job spec and repo policy allow; failed/pending/missing/unknown checks
+block merge; use GitHub native auto-merge; deny-list high-risk paths; record
+every evaluated input + reason in run DB and session log.
+
 ## Dependencies
 
 [AS-147, AS-148, AS-149]
