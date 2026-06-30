@@ -1,6 +1,7 @@
 package archtest
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -34,7 +35,9 @@ var backtickToken = regexp.MustCompile("`([^`]+)`")
 // docs/architecture/package-contracts.md stays complete: every first-party
 // package directory under internal/ and cmd/ that ships production code must be
 // named in the doc (as a backticked basename or full module-relative path) or be
-// on docCompletenessAllowlist (AS-162).
+// on docCompletenessAllowlist (AS-162). It recurses, so nested packages
+// (internal/provider/anthropic, internal/tool/builtin, internal/orchestrator/spec,
+// …) are guarded too, not only the immediate children.
 //
 // The directional contracts in the doc are already enforced (layering_test.go,
 // inward_core_test.go, boundaries_test.go), but the *completeness* of the map was
@@ -54,24 +57,36 @@ func TestPackageContractsCompleteness(t *testing.T) {
 	}
 
 	for _, parent := range []string{"internal", "cmd"} {
-		entries, err := os.ReadDir(filepath.Join(root, parent))
+		err := filepath.WalkDir(filepath.Join(root, parent), func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			switch {
+			case d.Name() == "testdata", d.Name() == "vendor", strings.HasPrefix(d.Name(), "."):
+				return fs.SkipDir
+			}
+			if !hasProductionGo(t, path) {
+				// Test-only or intermediate directories (e.g. internal/archtest,
+				// or a parent that only groups subpackages) carry no production
+				// seam to document.
+				return nil
+			}
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				return relErr
+			}
+			relDir := filepath.ToSlash(rel)
+			if accountedFor(relDir, d.Name(), documented) {
+				return nil
+			}
+			t.Errorf("package %s is not named in docs/architecture/package-contracts.md and is not on docCompletenessAllowlist (AS-162). Add a backticked mention (`%s` or `%s`) to the doc, or append it to docCompletenessAllowlist if it is repo tooling outside the architecture map.", relDir, d.Name(), relDir)
+			return nil
+		})
 		if err != nil {
-			t.Fatalf("read %s/: %v", parent, err)
-		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			relDir := parent + "/" + e.Name()
-			if !hasProductionGo(t, filepath.Join(root, parent, e.Name())) {
-				// Test-only directories (e.g. internal/archtest) carry no
-				// production seam to document.
-				continue
-			}
-			if accountedFor(relDir, e.Name(), documented) {
-				continue
-			}
-			t.Errorf("package %s is not named in docs/architecture/package-contracts.md and is not on docCompletenessAllowlist (AS-162). Add a backticked mention (`%s` or `%s`) to the doc, or append it to docCompletenessAllowlist if it is repo tooling outside the architecture map.", relDir, e.Name(), relDir)
+			t.Fatalf("walk %s/: %v", parent, err)
 		}
 	}
 }
