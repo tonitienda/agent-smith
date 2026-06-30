@@ -26,3 +26,7 @@ Add the deterministic PR lifecycle actions required for Smith to implement Smith
 ## Dependencies
 
 [AS-147, AS-148]
+
+## Open questions
+
+1. Exact deterministic-action set and idempotency keys for create/update PR, comment, and status depend on AS-147 event normalization and AS-148 auth landing first.

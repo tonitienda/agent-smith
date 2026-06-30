@@ -4,7 +4,7 @@ title: Smith implements Smith dogfood workflow pack
 status: needs-clarification
 area: dogfood
 priority: P2
-depends_on: [AS-145, AS-146, AS-147, AS-149, AS-150, AS-151, AS-157]
+depends_on: [AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157]
 source: docs/project/smith-orchestrator-dogfood-prd.md
 ---
 
@@ -24,4 +24,8 @@ Define the first private job specs that let Smith implement and maintain Agent S
 
 ## Dependencies
 
-[AS-145, AS-146, AS-147, AS-149, AS-150, AS-151, AS-157]
+[AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157]
+
+## Open questions
+
+1. First monthly/per-run budget ceilings (PRD Q9) and the concrete dogfood job set depend on AS-160/AS-161 and the policy tickets (AS-157) landing.
