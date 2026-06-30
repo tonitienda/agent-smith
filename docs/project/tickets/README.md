@@ -189,16 +189,44 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-140](AS-140-campaign-missing-scenarios.md) | Manual test campaign — add detailed scenarios for newly-completed tickets | quality | ready-to-implement | AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138 |
+| [AS-140](AS-140-campaign-missing-scenarios.md) | Manual test campaign — add detailed scenarios for newly-completed tickets | quality | done | AS-029, AS-043, AS-054, AS-057, AS-110, AS-119, AS-120, AS-132, AS-133, AS-135, AS-136, AS-138 |
 | [AS-141](AS-141-archtest-serve-face-layering.md) | Archtest: add `internal/serve` to faces forbidden list in layering contracts | quality | done | AS-098 |
 | [AS-142](AS-142-archtest-conformance-schema-guard.md) | Archtest: add layering guard for `internal/provider/conformance` and `schema` | quality | done | AS-098, AS-141 |
 | [AS-144](AS-144-keychain-unreachable-error-classification.md) | `auth set/status` leaks a raw dbus error instead of the actionable env-var hint when no Secret Service is reachable | faces | done | AS-017 |
+| [AS-145](AS-145-archtest-loop-cmd-and-face-cross-imports.md) | Archtest: guard loop↛cmd and face↛face/cmd, the documented-but-unenforced layering rules | quality | done | AS-098, AS-141 |
+| [AS-146](AS-146-archtest-inward-core-no-orchestration.md) | Archtest: guard that inward-core packages do not import orchestration packages | quality | done | AS-098 |
 
 ## Index — Architecture documentation follow-ons
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | needs-clarification | AS-077 |
+| [AS-162](AS-162-archtest-package-contracts-completeness.md) | Guard that every internal package is accounted for in package-contracts.md | quality | needs-clarification | AS-098, AS-146 |
+
+## Index — Orchestrator dogfood wave (AS-159 … AS-161, AS-147 … AS-158)
+
+The always-on deterministic workflow engine from
+[smith-orchestrator-dogfood-prd.md](../smith-orchestrator-dogfood-prd.md);
+architecture fixed by the [orchestrator ADR](../../architecture/orchestrator-architecture.md).
+(Renumbered: the first three items are AS-159/160/161 because AS-144/145/146 were already taken.)
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-159](AS-159-orchestrator-architecture-boundaries.md) | Orchestrator architecture and product boundaries (ADR) | orchestrator | done | — |
+| [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
+| [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | ready-to-implement | AS-159, AS-160 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | needs-clarification | AS-160, AS-161 |
+| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | needs-clarification | AS-159, AS-147 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | needs-clarification | AS-147, AS-148 |
+| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | needs-clarification | AS-160 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | needs-clarification | AS-161 |
+| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | needs-clarification | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
+| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | orchestrator | needs-clarification | AS-159, AS-161, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | needs-clarification | AS-159, AS-148, AS-158 |
+| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | needs-clarification | AS-161, AS-151 |
+| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | needs-clarification | AS-161, AS-148, AS-154 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | needs-clarification | AS-147, AS-148, AS-149 |
+| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | ready-to-implement | AS-159 |
 
 ## Suggested build order
 
@@ -214,6 +242,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 10. **GUI wave** (graphical faces, after 051): 077 (`smith serve`, the JSON-RPC/WS spine — the Q5 JSON-RPC-first fallback that ACP later re-skins) → 078 (web thin client) and 081 (Viscose extension, once its wiring question is answered). 079 (WASM read-only session inspector) is largely independent — it needs the substrate (005/006/020/061) plus 038 for the `/compact` preview view, but none of the GUI-wave serve/client work — and is the genuine WASM payoff plus the safe public demo. 080 (hosted multi-tenant sandboxing) is **resolved** ([docs/design/hosted-agent-sandboxing.md](../../design/hosted-agent-sandboxing.md)): closed in favour of 079 — `smith serve` ships for local use only and the public demo is the read-only inspector, since hosting strangers collides with D9 ("not a sandbox").
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
+13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL) / 161 (daemon + SQLite run store), with 158 (research spike) feeding 148/153/154. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157) stay needs-clarification until the DSL/daemon land and the spike + product decisions resolve their Open questions.
 
 ## Needs clarification — decisions to make
 

@@ -1,6 +1,8 @@
 # Agent Smith manual test campaign
 
-_Last updated: 2026-06-25 (QA pass: corrected stale not-implemented entries, added coverage for AS-029, AS-043, AS-054, AS-057, AS-061, AS-110, AS-119, AS-120, AS-133, AS-135, AS-136, AS-138; added TUI visual polish wave AS-121–AS-131 and AS-139 to coverage matrix)._
+_Last updated: 2026-06-26 (AS-140: added dedicated detailed scenario steps for AS-029, AS-043, AS-054/AS-132, AS-057/AS-136, AS-110, AS-119/AS-120, AS-133/AS-135, AS-138, and AS-121 that previously only appeared in the coverage matrix or as composite footnotes)._
+
+_Earlier: 2026-06-25 (QA pass: corrected stale not-implemented entries, added coverage for AS-029, AS-043, AS-054, AS-057, AS-061, AS-110, AS-119, AS-120, AS-133, AS-135, AS-136, AS-138; added TUI visual polish wave AS-121–AS-131 and AS-139 to coverage matrix)._
 
 This campaign is the human smoke/regression pass to run after a burst of ticket work when nobody has recently driven the application end-to-end. It covers every ticket in the backlog: completed tickets have concrete actions and expected results; not-yet-implemented tickets are explicitly marked so testers do not mistake absence for a regression.
 
@@ -36,10 +38,12 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-030, AS-095–AS-103, AS-112 | Implemented | Run harness commands and benchmark smoke. | Quality gates and architecture/parity guards pass; benchmark report writes under `.cache/bench/`. |
 | AS-084 | Implemented | In a disposable repo: have the agent write/edit a file, drop a `/rewind --mark`, change it again, then `/rewind <handle> --restore-files`. Also hand-edit a file after Smith wrote it, and try restoring it. | Files modified after the checkpoint are restored to their checkpoint state (new files deleted); a file changed outside Smith is flagged as a conflict and left untouched; oversized files are skipped with a note. |
 | AS-060 | Manual capture | Follow section "AS-060 vendor session captures": grab a handful of redacted session artifacts (offline ones first, then one cheap live turn per vendor), run each through the `schema` types, record dispositions. | Each surface has at least one redacted capture round-tripped through AS-003; fields-without-a-home are classified promote / `ext` / out-of-scope; proposed additive deltas linked to AS-003. No CI keys needed. |
-| AS-017, AS-050, AS-054, AS-057–AS-058, AS-061, AS-077, AS-110, AS-119–AS-120, AS-132–AS-133, AS-135–AS-136, AS-138 | Implemented | See detailed sections 3.5–3.7, 8.2a–8.2c, 3.4a, 5.7, 8.0, 9.3; run the CLI subcommands (`smith auth`, `smith stats`, `smith stats all`, `smith stats rebuild`, `smith improve`, `smith runs`). | Auth, stats, background runner, self-improving config, block-schema JSON, task delegation, vendor simulators, and route escalation are all implemented; see per-feature sections for details. |
-| AS-052, AS-078–AS-081, AS-111, AS-124–AS-125, AS-127–AS-131, AS-139 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
+| AS-017, AS-050, AS-054, AS-057–AS-058, AS-061, AS-077, AS-110, AS-119–AS-120, AS-132–AS-133, AS-135–AS-136, AS-138 | Implemented | See detailed sections 3.4b, 3.5–3.7, 5.7/5.7a, 8.0/8.0a, 8.2a–8.2d, 8.5, 9.3; run the CLI subcommands (`smith auth`, `smith stats`, `smith stats all`, `smith stats rebuild`, `smith improve`, `smith runs`). | Auth, stats, background runner, self-improving config, block-schema JSON, task delegation, vendor simulators, and route escalation are all implemented; see per-feature sections for details. |
+| AS-029, AS-043, AS-121 | Implemented | See detailed steps 5.3a (`/clean "<topic>"`), 5.8 (`/tidy`), and 6.9 (phosphor palette). | Semantic clean previews/excludes only matching segments; `/tidy` dedups reversibly; all TUI surfaces share the phosphor palette. |
+| AS-052, AS-078–AS-079, AS-081, AS-111, AS-123, AS-125, AS-127–AS-131 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
 | AS-087 | Implemented | In a repo with a README, run `/init --describe` (or `smith init --describe`) with a provider configured, review the preview, then `/init --apply`. Compare against plain `/init`. | `--describe` adds model-authored prose sections (e.g. `## Overview`) after the deterministic Build & test / Layout sections; the commands are never restated or replaced; plain `/init` stays deterministic and prose-free; nothing is written until `--apply`. |
 | AS-137 | Implemented | With `subagents.insights_writer.model` **unset**, run a session with tool use, then `/insights` (and `smith insights describe`). The dashboard offers the on-demand retro; running `describe` adds grounded `(model)` suggestions and the spend shows in `/cost`. Set a tiny `/budget` first to see it skip with "Budget reached". | Base `/insights` stays free and offers the retro only when the model layer is off; `describe` merges only evidence-citing suggestions, charges the session budget, and is skipped (no model call) with no budget room. |
+| AS-080, AS-124, AS-139 | Implemented | Spike doc (AS-080); TUI tool-card polish under §6 (AS-124); `/improve` efficacy via `smith stats` per step 8.2c (AS-139). | Spike shipped as a design doc; tool cards show borders/left rule/truncation/elapsed time; applied-remedy before/after friction delta is computed in `internal/skillrollup` and surfaced in `smith stats`. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -89,7 +93,7 @@ For every capture: parse it into the `schema` block types, re-emit, and record w
 
 ### 3. Providers, prompt caching, and provider conformance
 
-Covers AS-008 through AS-012 and AS-092.
+Covers AS-008 through AS-012, AS-092, AS-133, AS-135.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -98,6 +102,7 @@ Covers AS-008 through AS-012 and AS-092.
 | 3.3 | Repeat a prompt with cache-eligible context. | Prompt-cache usage/savings appear in `/cost` when the provider reports them. |
 | 3.4 | Run provider conformance tests from the quality gate. | Recorded fixtures pass offline; no live network is needed for default tests. |
 | 3.4a | Run the offline E2E suite: `go test ./internal/e2e/...` (also covered by `make test`). | Scripted whole-session scenarios (large tool payloads, parallel calls, denied-permission recovery, two-child delegation, resume) drive the recorded vendor simulators and assert transcript, UIEvent stream, cost/ledger, and append-only JSONL — deterministic, no keys, no network. (AS-133/AS-134; see [offline-e2e-suite.md](../testing/offline-e2e-suite.md)) |
+| 3.4b | Read the capture-to-fixture workflow ([offline-e2e-suite.md](../testing/offline-e2e-suite.md) and AS-135), then run `go test ./internal/e2e/...`. | The redacted capture-to-fixture workflow (AS-135) produces the recorded vendor simulators (AS-133) that drive the offline E2E suite deterministically — no API keys, no live network. |
 | 3.5 | `smith auth set anthropic` (paste a key at the hidden prompt), then `smith auth status`. | Key stored in the OS keychain, never a plaintext file; status shows `set (keychain)` without revealing the value. (AS-017) |
 | 3.6 | Export `ANTHROPIC_API_KEY` and re-run `smith auth status anthropic`. | Reports `set (env ANTHROPIC_API_KEY)` — the env var overrides the stored key. (AS-017) |
 | 3.7 | On a host with no Secret Service running, `smith auth set openai`. | Fails with an actionable error pointing at `OPENAI_API_KEY`; no plaintext file is written. (AS-017) — **Fixed (AS-144):** the credential store now classifies Secret-Service-unreachable failures (missing `dbus-launch`, D-Bus refused, `org.freedesktop.secrets` not provided) as `ErrUnavailable`, so `auth set` shows the `OPENAI_API_KEY` hint and `auth status` shows the `no keychain available` line instead of a raw dbus error. |
@@ -116,17 +121,20 @@ Covers AS-013 through AS-016, AS-019, AS-024, AS-062, AS-094.
 
 ### 5. Cost, context, cleaning, budgets, and routing
 
-Covers AS-020, AS-025 through AS-028, AS-041, AS-042, AS-063, AS-068, AS-085, AS-086, AS-110.
+Covers AS-020, AS-025 through AS-029, AS-041, AS-042, AS-043, AS-063, AS-068, AS-085, AS-086, AS-110.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
 | 5.1 | After several turns and at least one tool result, run `/cost` and `./smith cost`. | Per-turn input/output/cache token counts and dollar totals appear; unknown model pricing is marked unknown rather than guessed. |
 | 5.2 | Open `/context` and sort by size, age, and type. | The composition view shows segment handles, token shares, dollar estimates, type rollups, duplicate reads, stale candidates, and excluded blocks. |
 | 5.3 | Run `/clean <handle>` and inspect the preview; then `/clean --apply`, `/context`, and `/clean --undo`. | Preview is non-mutating; apply excludes the selected segment/tool pair; undo restores it by appending a reversal. |
+| 5.3a | After several distinct topics have accumulated, run `/clean "<topic>"` with a natural-language topic (e.g. `/clean "the dependency upgrade discussion"`); inspect the preview, then `/clean --apply` and `/context`. | Semantic matching previews only the segments whose topic labels match the phrase; non-matching segments are untouched; apply excludes only the matched segments and `/context` reflects the removal. (AS-029) |
 | 5.4 | Use interactive `/clean` multi-select from the context panel. | Multi-select removal and per-item archive restore work from the panel. |
 | 5.5 | Configure a very small budget and run a prompt. | Conservative pre-turn budget enforcement blocks or warns before an unpriced/over-budget turn. |
 | 5.6 | Configure auto-compact off and near-limit context. | Auto-compact does not surprise the user unless explicitly enabled. |
 | 5.7 | Use `/route` and configured model tiers; then run `/route <feature> <tier>` or `/route <tier> <vendor> <model>` to set a per-session override, and run `/clear` to confirm it resets. | Current routing policy is visible. Per-session overrides layer over the config policy for the rest of the session and reset on `/clear`; auto-escalation on structured low-confidence results is logged with a reason and visible in `/route` and `/cost`. (AS-110) |
+| 5.7a | Run the concrete per-session override `/route cheap anthropic claude-haiku-4-5`, open `/route` to confirm it is active, then `/clear` and reopen `/route`. | The override shows as the active `cheap`-tier mapping for the rest of the session (config file unchanged) and reverts to the config policy after `/clear`. (AS-110) |
+| 5.8 | After the session has read the same file two or more times, run `/tidy`; inspect the preview, `/tidy --apply`, then `/tidy --undo`. | `/tidy` dedups the repeated file reads; the preview shows the token delta without mutating; apply collapses the duplicates and undo reverses it by appending (lossless, no summarization). (AS-043) |
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
@@ -143,6 +151,7 @@ Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS
 | 6.7 | Resume a prior session through the picker. | Picker lists sessions and restored transcript is readable. |
 | 6.9 | Launch `./smith tui`, send a message, and watch the assistant reply land (AS-123). | The reply types in letter-by-letter (~40 ms/char) with a green `█` block cursor trailing the last character; a large token burst still reveals at the steady cadence rather than flashing all at once; the cursor disappears the instant the turn ends and finished text stays static. `--no-splash`/headless modes are unaffected. |
 | 6.8 | Launch `./smith tui` and look at the empty startup screen, then type a character and clear it (AS-122). | Logo `▞▞ AGENT SMITH`, a full-width underrule, and the `path · model · mode` context line render; the invite headline and command-hint row show below; at default (medium) Matrix intensity the rain renders behind the copy and the idle phrase replaces the hint after ~3s; the `┃` gutter caret blinks while empty and goes solid the instant you type. `--no-splash` shows nothing above the input bar. |
+| 6.9 | Launch `./smith tui` and compare colours across surfaces: input bar, transcript, status line, inspect panels, and the command palette. | Every surface draws from the centralized phosphor colour tokens — a consistent green-on-black phosphor palette with no ad-hoc per-surface colours. (AS-121) |
 
 ### 7. Configuration, memory, skills, hooks, MCP, and living-skills substrate
 
@@ -159,22 +168,25 @@ Covers AS-031, AS-032, AS-034 through AS-036, AS-047, AS-048, AS-071, AS-082, AS
 
 ### 8. Subagents, insights, and plugin trust boundaries
 
-Covers AS-044, AS-045, AS-046, AS-050, AS-054, AS-056, AS-057, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113, AS-119, AS-120, AS-132, AS-136, AS-138.
+Covers AS-044, AS-045, AS-046, AS-050, AS-054, AS-056, AS-057, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113, AS-119, AS-120, AS-132, AS-136, AS-138, AS-139.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
 | 8.0 | In an interactive session, prompt the model to use the `task` tool to delegate a self-contained subtask (or two in parallel); also run `smith run "…" --queue` to enqueue a headless task and `smith runs work` to drain it. | The child runs in its own session (visible via `/resume` as a `task: …` session linked to the parent); its summary returns into the parent context attributed to `task`; the child's spend is included in `/cost`. Child tool calls prompt through the same permission gate. Headless/serve task delegation (AS-119) and per-child cost itemization (AS-120) are implemented. |
+| 8.0a | After draining a delegated/headless task (`smith run "…" --queue` + `smith runs work`, or an in-session `task` delegation), run `smith cost` / `/cost`. | Each child run is itemized as its own line with prompt attribution and per-child token/dollar spend, and the parent totals include the children (AS-119/AS-120). |
 | 8.1 | Run a session that should invoke built-in subagent/living-skill lifecycle hooks. | Built-in system subagents are registered by the composition root and run through the turn lifecycle. |
 | 8.2 | Run `/insights` after a session with a goal, tool use, and context churn. | Dashboard summarizes cost/context/session findings and reports whether the `/goal` objective was met (AS-109 goal anchoring: in-progress while live, met once `/goal done` retires it), grounded in measured signals. The model-assisted suggestion layer is opt-in via `subagents.insights_writer.model` (cheap-tier, budget-capped, session-end); when that layer is off, `/insights` offers a one-time on-demand model retro via `/insights describe` (AS-137), which adds grounded `(model)` suggestions and charges the session budget. |
 | 8.2a | Across several sessions in the same project, rediscover the same fact (and/or enable the skill-expectation analyzer), then run `/skills`. | The per-session findings list plus a cross-session rollup render; a fact seen in 3+ sessions is flagged escalated; `/skills apply <n>` lands the remedy's diff into its target file and marks the finding resolved (it stops pending and survives a restart). |
-| 8.2b | After a few sessions with cost/tool activity in the project, run `/stats` (and `smith stats`); then `smith stats all` across more than one project; then `smith stats rebuild` to verify the index refreshes. | Cross-session analytics render offline: spend total, per-model and (with `all`) per-project breakdowns, a per-day spend trend, the top-3 grounded "ways to save" (each citing a measured number), and recurring friction linked to example session ids. `smith stats all` widens the spend view to every project. `smith stats rebuild` forces an index refresh. Persisted index/rebuild (AS-136) is implemented. |
-| 8.2c | Across ≥2 sessions in the same project, rediscover the same fact carrying a remedy, then run `/improve` (and `smith improve`). | The pending self-improving-config queue renders: one consolidated proposal per gap seen in ≥2 distinct sessions, each with target file, proposed edit, and cross-session evidence. `/improve apply <n>` lands the edit through a shown diff and marks it resolved; `/improve dismiss <n>` / `/improve snooze <n>` suppress it (the decision survives a restart). A finding seen in only one session is not yet proposed. High-confidence single-fact promotion is implemented (AS-138): a fact with a pinned remedy seen in 3+ sessions is auto-promoted without waiting for the second-session dedup threshold. Efficacy measurement (AS-139) remains **Not implemented**. |
+| 8.2b | After a few sessions with cost/tool activity in the project, run `/stats` (and `smith stats`); then `smith stats all` across more than one project; then `smith stats rebuild` to verify the index refreshes. | Cross-session analytics render offline: spend total, per-model and (with `all`) per-project breakdowns, a per-day spend trend, the top-3 grounded "ways to save" (each citing a measured number), and recurring friction linked to example session ids. `smith stats all` widens the spend view to every project. `smith stats rebuild` forces an index refresh. Persisted index/rebuild (AS-136) is implemented. With sessions in more than one project, the cross-project friction merge renders recurring friction lines grouped per project after `smith stats rebuild` (AS-057/AS-136). |
+| 8.2c | Across ≥2 sessions in the same project, rediscover the same fact carrying a remedy, then run `/improve` (and `smith improve`). | The pending self-improving-config queue renders: one consolidated proposal per gap seen in ≥2 distinct sessions, each with target file, proposed edit, and cross-session evidence. `/improve apply <n>` lands the edit through a shown diff and marks it resolved; `/improve dismiss <n>` / `/improve snooze <n>` suppress it (the decision survives a restart). A finding seen in only one session is not yet proposed. High-confidence single-fact promotion is implemented (AS-138): a fact with a pinned remedy seen in 3+ sessions is auto-promoted without waiting for the second-session dedup threshold. Efficacy measurement (AS-139) is implemented: applied-remedy before/after friction deltas are computed in `internal/skillrollup` and surfaced via `smith stats` (improvements). |
+| 8.2d | Rediscover the same fact carrying a pinned remedy across 3+ distinct sessions in a project, then run `smith improve` / `/improve`. | The high-confidence fact is auto-promoted into the proposal queue on its own — without relying on the normal 2-session dedup threshold; a fact seen in only one session still does not appear. (AS-138) |
+| 8.5 | Enqueue two tasks (`smith run "task one" --queue`, `smith run "task two" --queue`), list them with `smith runs list`, then start `smith runs work --watch --concurrency 2`; while it watches, enqueue a third task; Ctrl+C to stop. Separately, run plain `smith runs work`. | Two workers pick up the two queued tasks without double-running a record; the third task enqueued after start is also drained (`--watch`); Ctrl+C drains in-flight work cleanly; plain `smith runs work` drains-and-exits. (AS-054/AS-132) |
 | 8.3 | Inspect plugin/subagent registry docs and tests. | Third-party plugin boundary remains declarative-only and guarded. |
 | 8.4 | Read AS-113. | Plugin consent screen remains **Needs clarification** because plugin install/marketplace flow is not ticketed yet. |
 
 ### 9. Headless, serve, GUI-adjacent faces, and external integrations
 
-Covers AS-051, AS-077, AS-110; not-yet-implemented: AS-052, AS-078 through AS-081.
+Covers AS-051, AS-077, AS-080, AS-110; not-yet-implemented: AS-052, AS-078, AS-079, AS-081.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -227,7 +239,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-026 | /context — context composition view (flagship wedge, v1 scope) | Implemented (`done`) |
 | AS-027 | Segment topic labeling engine | Implemented (`done`) |
 | AS-028 | /clean — manual segment removal with preview, archive, and undo | Implemented (`done`) |
-| AS-029 | /clean "<topic>" — natural-language semantic matching | Implemented (`done`) — `/clean "<topic>"` palette entry is in the binary; see step 5.3 |
+| AS-029 | /clean "<topic>" — natural-language semantic matching | Implemented (`done`) — see step 5.3a |
 | AS-030 | Cost/speed benchmark suite (the D5 internal guardrail) | Implemented (`done`) |
 | AS-031 | Layered configuration system | Implemented (`done`) |
 | AS-032 | Memory files — AGENT.md, CLAUDE.md, AGENTS.md loaded and merged hierarchically | Implemented (`done`) |
@@ -241,7 +253,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-040 | /goal — explicit session objective that anchors insights | Implemented (`done`) |
 | AS-041 | Budget guardrails + /budget command | Implemented (`done`) |
 | AS-042 | Model routing/tiering + /route command | Implemented (`done`) |
-| AS-043 | /tidy — context reorganization without lossy summarization (flagship wedge) | Implemented (`done`) — mechanical dedup core shipped as TUI `/tidy` slash command; dead-end collapse + working-memory promotion spun out to AS-117 (needs-clarification) |
+| AS-043 | /tidy — context reorganization without lossy summarization (flagship wedge) | Implemented (`done`) — mechanical dedup core shipped as TUI `/tidy` slash command (see step 5.8); dead-end collapse + working-memory promotion spun out to AS-117 (needs-clarification) |
 | AS-044 | System sub-agent lifecycle framework + plugin registry | Implemented (`done`) |
 | AS-045 | /insights — model-assisted session retrospective dashboard (flagship wedge) | Implemented (`done`) |
 | AS-046 | User-delegated subagents (scoped child agents with own context) | Implemented (`done`) — interactive face; headless/serve + per-child cost itemization spun out to AS-119/AS-120 |
@@ -252,10 +264,10 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-051 | Headless CLI mode (scripting / CI) | Implemented (`done`) |
 | AS-052 | ACP server (editor / programmatic protocol face) | Not implemented (`ready-to-implement`) |
 | AS-053 | The Matrix layer — personality theme + /serious kill switch | Implemented (`done`) |
-| AS-054 | Background/async runner (queue, scheduled, resumable, budget-capped) | Implemented (`done`) — `smith run --queue`, `smith runs list/status/work/resume`; daemon + concurrency spun out to AS-132 (also done); see step 8.0 |
+| AS-054 | Background/async runner (queue, scheduled, resumable, budget-capped) | Implemented (`done`) — `smith run --queue`, `smith runs list/status/work/resume`; daemon + concurrency spun out to AS-132 (also done); see steps 8.0 and 8.5 |
 | AS-055 | Replayable run logs + OpenTelemetry export | Implemented (`done`) |
 | AS-056 | Design spike: compliance archiving — immutability vs right-to-erasure | Implemented (`done`) |
-| AS-057 | Cross-session analytics (portfolio dashboard) | Implemented (`done`) — `smith stats` and `smith stats all`; see step 8.2b |
+| AS-057 | Cross-session analytics (portfolio dashboard) | Implemented (`done`) — `smith stats` and `smith stats all`; per-project friction merge in step 8.2b |
 | AS-058 | Self-improving config (aggregated insights propose memory/skill/command edits) | Implemented (`done`) — see step 8.2c |
 | AS-059 | Design spike: third-party sub-agent plugin trust, permissions, and sandboxing | Implemented (`done`) |
 | AS-060 | Capture & compare real vendor session files to refine the block schema before V1 freeze | Manual capture (`ready-to-implement`) — see section 2A; deps AS-002/AS-003 done, no CI keys needed |
@@ -278,7 +290,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-077 | `smith serve` — local JSON-RPC/WebSocket session server | Implemented (`done`) |
 | AS-078 | Web GUI — thin client over `smith serve` | Not implemented (`ready-to-implement`) |
 | AS-079 | WASM observability core + static session inspector | Not implemented (`ready-to-implement`) |
-| AS-080 | Spike: hosted multi-tenant live-agent sandboxing | Not implemented (`ready-to-implement`) |
+| AS-080 | Spike: hosted multi-tenant live-agent sandboxing | Implemented (`done`) — design spike; no runtime feature, see ticket |
 | AS-081 | Viscose (VS Code) extension over `smith serve` | Not implemented (`ready-to-implement`) |
 | AS-082 | Memory file @import-style includes | Implemented (`done`) |
 | AS-083 | MCP resources, prompts, reconnect, and tools/list pagination | Implemented (`done`) |
@@ -308,7 +320,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-107 | Wire a sub-agent Runner into the composition root (register built-ins + install WithSubAgents) | Implemented (`done`) |
 | AS-108 | Persist the rediscovered-fact ledger and wire a memory/skill-aware save-target resolver | Implemented (`done`) |
 | AS-109 | /insights model-assisted layer + goal anchoring (spun out of AS-045) | Implemented (`done`) |
-| AS-110 | Model routing escalation + per-session /route overrides | Implemented (`done`) — see step 5.7 |
+| AS-110 | Model routing escalation + per-session /route overrides | Implemented (`done`) — see steps 5.7 and 5.7a |
 | AS-111 | Scope-gated context slices for third-party sub-agents | Not implemented (`ready-to-implement`) |
 | AS-112 | Guard the declarative-only plugin boundary with a test + archtest | Implemented (`done`) |
 | AS-113 | Plugin consent screen + scope→sentence table | Needs clarification (`needs-clarification`) |
@@ -317,16 +329,16 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-116 | Surface auto-escalation in `/route` and `/cost` + wire the first producer | Implemented (`done`) |
 | AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Needs clarification (`needs-clarification`) |
 | AS-118 | Root help ignores `--output json` | Implemented (`done`) |
-| AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
-| AS-133 | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | Implemented (`done`) — used by `internal/e2e`; see step 3.4a |
+| AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — see step 8.5; enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
+| AS-133 | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | Implemented (`done`) — used by `internal/e2e`; see steps 3.4a and 3.4b |
 | AS-134 | Offline E2E regression suite over recorded providers, TUI, and append-only logs | Implemented (`done`) — `internal/e2e`, runs in `make test`; see row 3.4a |
-| AS-135 | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | Implemented (`done`) — supports the AS-133 recorded simulators |
-| AS-119 | `task` delegation across faces + child tool inheritance | Implemented (`done`) — see step 8.0; `smith run --queue` + headless delegation; child tool calls through the same permission gate |
-| AS-120 | `task` per-child cost itemization, prompt attribution, budget | Implemented (`done`) — see step 8.0; child spend included in `/cost` |
-| AS-121 | TUI phosphor palette — centralize colour tokens and apply to all surfaces | Implemented (`done`) — visual pass; verified by running `./smith tui` |
+| AS-135 | Capture-to-fixture workflow for redacted vendor sessions and CI-safe regressions | Implemented (`done`) — supports the AS-133 recorded simulators; see step 3.4b |
+| AS-119 | `task` delegation across faces + child tool inheritance | Implemented (`done`) — see steps 8.0 and 8.0a; `smith run --queue` + headless delegation; child tool calls through the same permission gate |
+| AS-120 | `task` per-child cost itemization, prompt attribution, budget | Implemented (`done`) — see steps 8.0 and 8.0a; child spend included in `/cost` |
+| AS-121 | TUI phosphor palette — centralize colour tokens and apply to all surfaces | Implemented (`done`) — visual pass; see step 6.9 |
 | AS-122 | TUI splash screen — logo, divider rule, invite text, blinking caret | Implemented (`done`) — see step 6.8 |
-| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Implemented (`done`) — see step 6.9 |
-| AS-124 | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | Not implemented (`ready-to-implement`) |
+| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Not implemented (`ready-to-implement`) |
+| AS-124 | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | Implemented (`done`) — bordered tool cards, left rule, truncation, elapsed time; visual pass (see §6) |
 | AS-125 | TUI status line + mode bar visual polish — spec-compliant layout and colours | Not implemented (`ready-to-implement`) |
 | AS-126 | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | Implemented (`done`) — see step 6.8 |
 | AS-127 | TUI command palette visual redesign — search border, per-command styling, footer hints | Not implemented (`ready-to-implement`) |
@@ -336,8 +348,8 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-131 | TUI /insights panel visual redesign — stat cards, timeline, tool histogram | Not implemented (`ready-to-implement`) |
 | AS-136 | Persisted cross-session stats index + cross-project friction merge | Implemented (`done`) — `smith stats rebuild`; see step 8.2b |
 | AS-137 | `/insights describe` on-demand model retro when the session-end model layer is off | Implemented (`done`) — see row 8.2 |
-| AS-138 | `/improve` high-confidence single-fact threshold | Implemented (`done`) — see step 8.2c; facts with remedy in 3+ sessions auto-promoted |
-| AS-139 | `/improve` proposal efficacy measurement (before/after friction delta) | Not implemented (`ready-to-implement`) |
+| AS-138 | `/improve` high-confidence single-fact threshold | Implemented (`done`) — see steps 8.2c and 8.2d; facts with remedy in 3+ sessions auto-promoted |
+| AS-139 | `/improve` proposal efficacy measurement (before/after friction delta) | Implemented (`done`) — before/after remedy efficacy in `internal/skillrollup`, surfaced via `smith stats`; see step 8.2c |
 
 ## Current local smoke pass (2026-06-22)
 
@@ -392,3 +404,30 @@ Secret Service). One bug found at step 3.7 and filed as AS-144.
 | `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
 | `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (AS-017 step 3.6). |
 | `smith auth set openai` / `auth status` with no Secret Service | **Fail → AS-144** | Leaks raw `keychain … exec: "dbus-launch": …` error instead of the actionable `OPENAI_API_KEY` hint promised by AS-017 / step 3.7. Bug ticket AS-144 filed. |
+
+## QA campaign pass (2026-06-30)
+
+Campaign re-run against `make build` binary (commit `1787378`). All automated
+suites pass; CLI scenarios re-checked on a headless Linux host (no D-Bus /
+Secret Service). No product bugs found; the AS-144 fix from the previous pass
+now holds. Three coverage-matrix rows had gone stale (the ticket was marked
+`done` but the matrix still said "Not implemented") and were corrected in this
+pass — no bug tickets were filed because the product behaves as the tickets
+describe.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `make build` | Pass | Static binary builds; `./smith --version` reports `smith dev (1787378)`. |
+| `make test` | Pass | All packages pass, including `internal/e2e` offline suite (AS-134). |
+| `scripts/harness/arch.sh` | Pass | Architecture contract tests pass. |
+| `go test ./internal/e2e/...` | Pass | Offline E2E suite passes (AS-133/AS-134/AS-135). |
+| `./smith --help --output json` + leaf `run --help --output json` | Pass | Both parse as JSON (AS-118 holds). |
+| `./smith does-not-exist` | Pass | Exits 2 (invalid usage). |
+| `./smith run "say hello"` without credentials | Pass | Exits 6; concise error. `--output json` emits a machine-readable `{…,"error":…}` and still exits 6. |
+| `run -f` / `run --queue` / `serve --unsafe-bind` / `runs work --watch/--concurrency` help | Pass | AS-069, AS-054, AS-077, AS-132 surfaces documented. |
+| `./smith serve` startup | Pass | Binds `ws://127.0.0.1:8765` (loopback only) and notes Ctrl+C to stop. |
+| `./smith stats` / `stats all` / `stats rebuild` | Pass | Cross-session analytics; rebuild refreshes index. |
+| `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
+| `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
+| `smith auth set openai` / `auth status` with no Secret Service | Pass (AS-144 holds) | `auth set` shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint and never writes a plaintext key; `auth status` shows `no keychain available (set OPENAI_API_KEY …)`. |
+| Campaign stale entries | Fixed | AS-080 (spike), AS-124, AS-139 moved from "Not implemented" → "Implemented (`done`)": removed from the not-implemented rows and added to the active lists — coverage matrix, a new Implemented quick-checklist row, the §6 and §8 `Covers` lists, the §9 header `Covers` list, and step 8.2c. All three confirmed `done` in their ticket frontmatter (AS-139 efficacy code in `internal/skillrollup`/`internal/stats`, AS-124 merged in #467). |

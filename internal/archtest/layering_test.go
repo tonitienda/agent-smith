@@ -78,10 +78,22 @@ func TestLayeringContracts(t *testing.T) {
 			reason:       "stream I/O primitives are a stdlib-only leaf shared by adapters and transports",
 		},
 		{
-			name:      "loop does not import face packages",
+			name:      "loop does not import faces or composition roots",
 			pkgDir:    "internal/loop",
-			forbidden: []string{"internal/tui", "internal/serve"},
-			reason:    "the agent loop is face-agnostic; faces drive the loop, not the reverse",
+			forbidden: []string{"internal/tui", "internal/serve", "cmd"},
+			reason:    "the agent loop is face-agnostic; faces and cmd/* drive the loop, not the reverse",
+		},
+		{
+			name:      "tui face does not import other faces or composition roots",
+			pkgDir:    "internal/tui",
+			forbidden: []string{"internal/serve", "cmd"},
+			reason:    "a face must not depend on another face or a composition root; cmd/* wires faces up, never the reverse",
+		},
+		{
+			name:      "serve face does not import other faces or composition roots",
+			pkgDir:    "internal/serve",
+			forbidden: []string{"internal/tui", "cmd"},
+			reason:    "a face must not depend on another face or a composition root; cmd/* wires faces up, never the reverse",
 		},
 		{
 			name:      "event log does not import projection, provider, loop, or faces",

@@ -40,6 +40,17 @@ The enforced contracts (guard test) are the corners most prone to drift:
 - the loop must not import face packages;
 - leaf primitives (`internal/render`, `internal/streamio`) must not import any other package in this module.
 
+The blanket form of "dependencies point inward" is enforced too
+(`internal/archtest/inward_core_test.go`, AS-146): every first-party package
+that is not in the orchestration/face/composition-root layer
+(`orchestrationAndFacePackages` — the loop, `benchmark`, `delegate`, the
+analytics consumers `insights`/`insightsmodel`/`stats`/`statsindex`/`improve`/
+`skillrollup`, the faces `tui`/`serve`, and the roots `smithapp`/`cmd/*`/`e2e`)
+must import nothing in that layer. Per-package guards in `layering_test.go` catch
+the most likely regressions; this guard closes the open-ended case and covers new
+inward packages automatically. A new orchestration/face package is the one
+maintenance point — append it to the allow-list.
+
 ## Where new code goes
 
 - **A new command** (slash or subcommand): the command's semantics live in
@@ -208,6 +219,58 @@ The enforced contracts (guard test) are the corners most prone to drift:
   (one `Render` for the TUI panel and headless `smith stats`); the report is
   recomputed from the append-only logs on every call (disposable derived state, no
   index). The persisted index and cross-project friction merge are AS-136.
+- **Model-tier routing** (`routing`, AS-042): `internal/routing` owns the
+  tier→model `Policy` (cheap / standard / strong). A feature that needs a model
+  resolves a *tier* through `routing.Policy.Resolve` / `FeatureTier` rather than
+  hardcoding model ids, so a model swap is one policy change, not a grep across
+  features. The composition root builds the policy (config overlay via
+  `routing.ConfigFrom`, D2 tolerate-but-warn) and hands it to the loop, `/compact`,
+  sub-agents, and the default selection; it is a stdlib + `schema` leaf and points
+  inward — `delegate` depends on it, not the reverse.
+- **Capture-time redaction** (`redaction`, AS-115): `internal/redaction` is the
+  best-effort secret-scrub filter installed on the event log's single write
+  chokepoint. It satisfies the `eventlog.Redactor` consumer seam (`Redact` a body
+  before persist) so secrets never reach the append-only log; the composition root
+  builds it from config (`redaction.Build` / `ConfigFrom`) and installs it with
+  `Log.SetRedactor`. A leaf over `schema` (+ `render`); `eventlog` declares the
+  seam and never imports back.
+- **Cosmetic personality** (`personality`, AS-053): the optional "Matrix" theme
+  layer. Its one architectural invariant is *containment* — no business/substance
+  path may import it — enforced by `internal/personality/no_business_imports_test.go`
+  (a package-local guard, not `archtest` and not review). Faces opt in; the loop
+  and inward core never learn it exists.
+- **Feature-leaf peers** that follow the same inward-pointing patterns as their
+  documented siblings, called out so the map is complete: `topic` (AS-027,
+  deterministic block topic/tag labels feeding `/context` and semantic `/clean`),
+  `tidy` (AS-043, lossless dedup of repeated reads via an appended exclusion
+  event — peer of `clean` / `compact`), and `improve` (AS-058, consolidates the
+  findings rollup into dismissible memory/skill edit proposals for `/improve` —
+  peer of `insights` / `skillrollup`). The **context-window leaves** are
+  `composition` (AS-026, the per-segment `/context` projection over the live
+  blocks — note this is the package `internal/composition`, *not* a "composition
+  root"; it imports no orchestration and points inward like any leaf) and `clean`
+  (AS-028, the manual `/clean` edit that appends an exclusion event — peer of
+  `tidy` / `compact`). The **session-objective leaf** is `goal` (AS-040, the
+  `/goal` text block appended to the log, read straight back by `insights`). The
+  **conversation-edit leaves** are `rewind` (AS-037, `/rewind` as an appended
+  exclusion event, peer of `clean`) and `snapshot` (the projected point-in-time
+  view those edits rely on). The **capability leaves** — discovered/configured
+  extension points the loop and faces wire in but never reach back into — are
+  `credential` (AS-017, the OS-keychain key store behind the `credential.Store`
+  seam; the one core-adjacent third-party exception, see
+  [dependency-boundaries.md](dependency-boundaries.md)), `customcmd` (AS-033,
+  Markdown-defined slash commands as prompt templates), and `hook` (AS-035,
+  user-configured lifecycle hooks), alongside the already-documented `memory`,
+  `skill`, and `mcp`. The **async-runner store** is `run` (AS-054, the durable,
+  execution-free queue under the data directory; the worker in `cmd/smith` drives
+  the headless path and writes outcomes back). `/init` is split into `initscaffold`
+  (AS-039, the deterministic scan and its `Enricher` seam) and `initenrich`
+  (AS-087, the provider-backed `Enricher` impl kept out of the deterministic
+  scaffold). Test/guard tooling (`archtest`, `harnessparity`, `schemajson`,
+  `schemaguard`, `capturefixture`, `e2e`) and derived caches/adapters
+  (`statsindex`, `insightsmodel`) sit at or above their feature's layer and need
+  no separate seam. Build-metadata (`version`, `-ldflags`-injected) is a stdlib
+  leaf with no dependents to constrain.
 ## Interface convention (AS-091)
 
 Go interfaces here follow **accept interfaces, return concrete structs**:
