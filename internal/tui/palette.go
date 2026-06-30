@@ -65,29 +65,62 @@ func (m *model) syncPalette() {
 	m.palette = palette{open: len(matches) > 0, matches: matches, sel: sel}
 }
 
+// paletteChrome is the fixed row overhead of the modal surface: rounded border
+// top+bottom (2) plus the search row, the rule, and the footer (3).
+const paletteChrome = 5
+
 // paletteHeight is the number of rows the palette occupies in the layout (zero
-// when closed), so relayout can shrink the transcript to fit it. It is measured
-// from the rendered view so the reserved height and the drawn block can never
-// disagree — including the modal border/search/footer chrome and the degraded
-// plain list a tiny window falls back to (paletteView clamps both to the same
-// budget). When even one row can't fit, the palette is dropped (0).
+// when closed), so relayout can shrink the transcript to fit it. It is computed
+// in O(1) from the same layout decision paletteView draws (paletteLayout), so the
+// reserved height and the drawn block can never disagree without re-rendering the
+// view on every keystroke.
 func (m *model) paletteHeight() int {
-	if !m.palette.open {
-		return 0
+	_, _, h := m.paletteLayout()
+	return h
+}
+
+// paletteLayout decides how the palette will be drawn for the current row budget
+// and returns (modal, rows, height): modal is false for the degraded plain list a
+// tiny window falls back to; rows is how many match rows fit; height is the total
+// rows the surface occupies (chrome included). It is the single source of truth
+// for both paletteHeight (height) and paletteView (modal + rows), so the two stay
+// in lockstep. Returns zeros when the palette is closed or can't fit even one row.
+func (m *model) paletteLayout() (modal bool, rows, height int) {
+	if !m.palette.open || len(m.palette.matches) == 0 {
+		return false, 0, 0
 	}
-	v := m.paletteView()
-	if v == "" {
-		return 0
+	budget := m.paletteBudget()
+	if budget < 1 {
+		return false, 0, 0
 	}
-	return lipgloss.Height(v)
+	n := len(m.palette.matches)
+	// Too short for the modal chrome plus a match: degrade to a plain list whose
+	// rows fill the whole budget (D-TUI-11).
+	if budget < paletteChrome+1 {
+		if n > budget {
+			n = budget
+		}
+		return false, n, n
+	}
+	limit := budget - paletteChrome
+	if limit > paletteMaxRows {
+		limit = paletteMaxRows
+	}
+	if n > limit {
+		n = limit
+	}
+	return true, n, paletteChrome + n
 }
 
 // paletteBudget is the total rows the palette may occupy above the input/status
-// chrome, keeping at least one transcript row (D-TUI-11). It mirrors the
-// permRows/relayout budgeting: on a tiny window the status line is dropped
-// (statusRows()==0), so only the chrome that actually renders is reserved.
+// chrome, keeping at least one transcript row (D-TUI-11). It mirrors relayout's
+// viewport budgeting exactly — subtracting every chrome row relayout does (input,
+// status, mode bar, permission card) — so a coding mode or a queued permission
+// prompt can't leave the palette budgeted for rows that aren't there. On a tiny
+// window the status line (and with it the mode bar) drops, so only the chrome that
+// actually renders is reserved.
 func (m *model) paletteBudget() int {
-	return m.height - inputHeight - m.statusRows() - 1
+	return m.height - inputHeight - m.statusRows() - m.modeBarRows() - m.permRows() - 1
 }
 
 // paletteRange returns the [start,end) slice of matches to show for a row limit,
@@ -126,27 +159,27 @@ func (m *model) completeFromPalette() {
 // chrome plus one match, it degrades to a plain bordered-less match list so a
 // small window still shows the commands (D-TUI-11).
 func (m *model) paletteView() string {
+	modal, rows, _ := m.paletteLayout()
+	if rows == 0 {
+		return ""
+	}
 	matches := m.palette.matches
-	if !m.palette.open || len(matches) == 0 {
-		return ""
-	}
-	budget := m.paletteBudget()
-	if budget < 1 {
-		return ""
-	}
-	// chrome = border top+bottom (2) + search row + rule + footer (3).
-	const chrome = 5
-	if budget < chrome+1 {
-		return m.paletteListPlain(budget)
+	start, end := m.paletteRange(rows)
+
+	brand := lipgloss.NewStyle().Foreground(ColorBrand)
+
+	if !modal {
+		// Degraded plain list: a borderless run of match rows.
+		lines := make([]string, 0, end-start)
+		for i := start; i < end; i++ {
+			lines = append(lines, m.paletteRow(matches[i], i == m.palette.sel, 0))
+		}
+		return strings.Join(lines, "\n")
 	}
 
-	limit := budget - chrome
-	if limit > paletteMaxRows {
-		limit = paletteMaxRows
-	}
-	start, end := m.paletteRange(limit)
-
-	// First pass: plain text of each row, to size the box to its widest line.
+	// First pass: size the box to its widest line, then clamp to the terminal's
+	// inner width (border + padding take 4 cells) so a long summary or a narrow
+	// window can't overflow into garbled borders / wrapping (Gemini review).
 	query := strings.TrimPrefix(m.textarea.Value(), "/")
 	search := "❯ /" + query
 	count := fmt.Sprintf("%d commands", len(matches))
@@ -160,23 +193,31 @@ func (m *model) paletteView() string {
 			innerWidth = w
 		}
 	}
+	if maxW := m.width - 4; maxW > 0 && innerWidth > maxW {
+		innerWidth = maxW
+	}
 
 	// Search field: caret + typed text + block cursor on the left, count right.
+	// The caret and cursor are brand-coloured per §7.6; only the typed text reads
+	// in command-green.
 	gap := innerWidth - lipglossWidth(search+"█") - lipglossWidth(count)
 	if gap < 1 {
 		gap = 1
 	}
-	searchRow := StyleSlashCommand.Render("❯ /"+query) +
-		lipgloss.NewStyle().Foreground(ColorBrand).Render("█") +
-		strings.Repeat(" ", gap) + StyleDim.Render(count)
+	searchRow := brand.Render("❯") + StyleSlashCommand.Render(" /"+query) +
+		brand.Render("█") + strings.Repeat(" ", gap) + StyleDim.Render(count)
 
-	// Every line is padded to innerWidth so the box border draws as a clean
-	// rectangle without wrapping (lipgloss .Width double-counts padding).
+	// Every line is fit to innerWidth (truncate if long, pad if short) so the box
+	// border draws as a clean rectangle without wrapping (lipgloss .Width
+	// double-counts padding).
 	lines := []string{searchRow, paletteRuleStyle.Render(strings.Repeat("─", innerWidth))}
 	for i := start; i < end; i++ {
 		lines = append(lines, m.paletteRow(matches[i], i == m.palette.sel, innerWidth))
 	}
-	lines = append(lines, padRight(StyleDim.Render(footer), innerWidth))
+	lines = append(lines, StyleDim.Render(footer))
+	for i, l := range lines {
+		lines[i] = fitWidth(l, innerWidth)
+	}
 
 	border := ColorBorder
 	if query != "" {
@@ -185,8 +226,12 @@ func (m *model) paletteView() string {
 	return paletteBoxStyle.BorderForeground(border).Render(strings.Join(lines, "\n"))
 }
 
-// padRight pads s on the right with plain spaces to a target display width.
-func padRight(s string, width int) string {
+// fitWidth truncates s to width cells (ANSI-aware) when too long, or right-pads it
+// with plain spaces when too short, so every modal line is exactly width wide.
+func fitWidth(s string, width int) string {
+	if lipglossWidth(s) > width {
+		return lipgloss.NewStyle().MaxWidth(width).Render(s)
+	}
 	if pad := width - lipglossWidth(s); pad > 0 {
 		return s + strings.Repeat(" ", pad)
 	}
@@ -224,19 +269,9 @@ func (m *model) paletteRow(c command.Command, selected bool, width int) string {
 	if c.Name == "serious" {
 		nameStyle = StyleRunning
 	}
-	row := "  " + nameStyle.Render(fmt.Sprintf("%-14s", inv)) + "  " + StyleMuted.Render(c.Summary)
-	return padRight(row, width)
-}
-
-// paletteListPlain is the degraded fallback for a window too short for the modal
-// chrome: a borderless match list, one row per match within the row budget.
-func (m *model) paletteListPlain(limit int) string {
-	start, end := m.paletteRange(limit)
-	lines := make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		lines = append(lines, m.paletteRow(m.palette.matches[i], i == m.palette.sel, 0))
-	}
-	return strings.Join(lines, "\n")
+	// Left unpadded: the modal caller fits each line to innerWidth (fitWidth); the
+	// plain fallback (width 0) wants a ragged, borderless list.
+	return "  " + nameStyle.Render(fmt.Sprintf("%-14s", inv)) + "  " + StyleMuted.Render(c.Summary)
 }
 
 // commandDoneMsg reports that a dispatched command's handler returned.

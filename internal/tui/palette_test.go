@@ -412,6 +412,24 @@ func TestPaletteModalChrome(t *testing.T) {
 	}
 }
 
+// TestPaletteFitsTerminalWidth guards the modal against horizontal overflow: a
+// long summary in a narrow window must not push any rendered row (border
+// included) past the terminal width, which would garble the box border.
+func TestPaletteFitsTerminalWidth(t *testing.T) {
+	reg := sampleRegistry(t,
+		command.Command{Name: "context", Summary: strings.Repeat("very long summary ", 6), Run: nopHandler},
+	)
+	m := newCommandModel(t, reg)
+	m = update(t, m, tea.WindowSizeMsg{Width: 30, Height: 24})
+	m = typeString(t, m, "/context")
+
+	for _, line := range strings.Split(m.paletteView(), "\n") {
+		if w := lipglossWidth(line); w > m.width {
+			t.Fatalf("palette row width %d exceeds terminal width %d: %q", w, m.width, line)
+		}
+	}
+}
+
 // nopHandler is a do-nothing command handler for palette/registry tests.
 func nopHandler(context.Context, []string) (command.Output, error) {
 	return command.Output{}, nil
