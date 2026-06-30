@@ -1,6 +1,6 @@
 # Agent Smith — working notes for Claude
 
-Provider-agnostic coding agent in Go. **Product truth: [docs/project/PRD.md](docs/project/PRD.md) — read the Decision Log (D0–D9) first; it overrides the rest of the doc where they conflict.**
+Provider-agnostic coding agent in Go. **Product truth: the Decision Log [docs/project/decisions.md](docs/project/decisions.md) (D0–D9) — read it first; it overrides the rest of [docs/project/PRD.md](docs/project/PRD.md) where they conflict.**
 
 ## Always (cheap invariants — keep these in head)
 
@@ -25,4 +25,4 @@ Prefer the **skill**: it pulls only the doc slice the task needs, keeping main c
 | Placing new code / reasoning about package deps | [docs/architecture/package-contracts.md](docs/architecture/package-contracts.md) (enforced by `internal/archtest`) |
 | Needing the full harness command / CI-parity contract | [docs/agent-quality-gates.md](docs/agent-quality-gates.md) |
 | Touching the TUI / terminal face | [internal/tui/CLAUDE.md](internal/tui/CLAUDE.md) (visual rules); full spec [docs/design/tui-visual-design.md](docs/design/tui-visual-design.md) |
-| Making a product / architecture decision | [docs/project/PRD.md](docs/project/PRD.md) Decision Log (D0–D9) |
+| Making a product / architecture decision | [docs/project/decisions.md](docs/project/decisions.md) (Decision Log D0–D9) first; wider context in [PRD.md](docs/project/PRD.md) |

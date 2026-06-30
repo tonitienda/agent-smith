@@ -24,9 +24,11 @@ Read before editing — context first, code second.
    and its "Suggested build order" define real ordering — the AS-NNN sequence is
    just stable identity. Prefer the ticket that unblocks the most or resolves the
    most uncertainty.
-3. **Product truth**: [`docs/project/PRD.md`](../../../docs/project/PRD.md) —
-   read the **Decision Log (D0–D9) first**; it overrides the rest. Stay inside
-   scope (D6: V1 = AS-001…AS-030); never pull deferred features in silently (D0).
+3. **Product truth**: the Decision Log
+   [`docs/project/decisions.md`](../../../docs/project/decisions.md) — read
+   **D0–D9 first**; it overrides the rest of
+   [`PRD.md`](../../../docs/project/PRD.md). Stay inside scope (D6: V1 =
+   AS-001…AS-030); never pull deferred features in silently (D0).
 4. **Architecture**: if the change touches runtime seams, data flow, storage, or
    provider/tool boundaries, read and plan to update the C4 docs under
    [`docs/architecture/`](../../../docs/architecture/) — contracts are guarded by
