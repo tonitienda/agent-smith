@@ -43,6 +43,7 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-052, AS-078–AS-079, AS-081, AS-111, AS-123, AS-125, AS-127–AS-131 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
 | AS-087 | Implemented | In a repo with a README, run `/init --describe` (or `smith init --describe`) with a provider configured, review the preview, then `/init --apply`. Compare against plain `/init`. | `--describe` adds model-authored prose sections (e.g. `## Overview`) after the deterministic Build & test / Layout sections; the commands are never restated or replaced; plain `/init` stays deterministic and prose-free; nothing is written until `--apply`. |
 | AS-137 | Implemented | With `subagents.insights_writer.model` **unset**, run a session with tool use, then `/insights` (and `smith insights describe`). The dashboard offers the on-demand retro; running `describe` adds grounded `(model)` suggestions and the spend shows in `/cost`. Set a tiny `/budget` first to see it skip with "Budget reached". | Base `/insights` stays free and offers the retro only when the model layer is off; `describe` merges only evidence-citing suggestions, charges the session budget, and is skipped (no model call) with no budget room. |
+| AS-080, AS-124, AS-139 | Implemented | Spike doc (AS-080); TUI tool-card polish under §6 (AS-124); `/improve` efficacy via `smith stats` per step 8.2c (AS-139). | Spike shipped as a design doc; tool cards show borders/left rule/truncation/elapsed time; applied-remedy before/after friction delta is computed in `internal/skillrollup` and surfaced in `smith stats`. |
 | AS-113 | Needs clarification | Read its ticket. | Open questions remain clear until a plugin install/marketplace path exists. |
 
 ## Detailed manual scenarios
@@ -137,7 +138,7 @@ Covers AS-020, AS-025 through AS-029, AS-041, AS-042, AS-043, AS-063, AS-068, AS
 
 ### 6. TUI, commands, custom commands, Matrix layer, and Coding Mode
 
-Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-126.
+Covers AS-021 through AS-023, AS-033, AS-039, AS-040, AS-053, AS-064, AS-067, AS-072 through AS-076, AS-114, AS-121, AS-122, AS-124, AS-126.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -166,7 +167,7 @@ Covers AS-031, AS-032, AS-034 through AS-036, AS-047, AS-048, AS-071, AS-082, AS
 
 ### 8. Subagents, insights, and plugin trust boundaries
 
-Covers AS-044, AS-045, AS-046, AS-050, AS-054, AS-056, AS-057, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113, AS-119, AS-120, AS-132, AS-136, AS-138.
+Covers AS-044, AS-045, AS-046, AS-050, AS-054, AS-056, AS-057, AS-059, AS-088, AS-107, AS-108, AS-112, AS-113, AS-119, AS-120, AS-132, AS-136, AS-138, AS-139.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -184,7 +185,7 @@ Covers AS-044, AS-045, AS-046, AS-050, AS-054, AS-056, AS-057, AS-059, AS-088, A
 
 ### 9. Headless, serve, GUI-adjacent faces, and external integrations
 
-Covers AS-051, AS-077, AS-110; not-yet-implemented: AS-052, AS-078, AS-079, AS-081.
+Covers AS-051, AS-077, AS-080, AS-110; not-yet-implemented: AS-052, AS-078, AS-079, AS-081.
 
 | Step | Action | Expected result |
 | --- | --- | --- |
@@ -428,4 +429,4 @@ describe.
 | `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
 | `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
 | `smith auth set openai` / `auth status` with no Secret Service | Pass (AS-144 holds) | `auth set` shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint and never writes a plaintext key; `auth status` shows `no keychain available (set OPENAI_API_KEY …)`. |
-| Campaign stale entries | Fixed | AS-080 (spike), AS-124, AS-139 corrected from "Not implemented" → "Implemented (`done`)" in the matrix, quick checklist, §9 header, and step 8.2c; all three confirmed `done` in their ticket frontmatter (AS-139 efficacy code in `internal/skillrollup`/`internal/stats`, AS-124 merged in #467). |
+| Campaign stale entries | Fixed | AS-080 (spike), AS-124, AS-139 moved from "Not implemented" → "Implemented (`done`)": removed from the not-implemented rows and added to the active lists — coverage matrix, a new Implemented quick-checklist row, the §6 and §8 `Covers` lists, the §9 header `Covers` list, and step 8.2c. All three confirmed `done` in their ticket frontmatter (AS-139 efficacy code in `internal/skillrollup`/`internal/stats`, AS-124 merged in #467). |
