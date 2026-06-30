@@ -42,6 +42,9 @@ var (
 	BgInset           = lipgloss.Color("#0c120e")
 	BgModeBar         = lipgloss.Color("#103a22") // mode bar; also selected-row fill
 	BgStatusLine      = lipgloss.Color("#16201a")
+	ColorModeName     = lipgloss.Color("#bdf0cf") // Coding Mode name on the mode bar (AS-125)
+	ColorPhaseIdle    = lipgloss.Color("#4f8a64") // idle phase names on the mode bar (AS-125)
+	ColorModeHint     = lipgloss.Color("#2f7a4c") // mode-bar key hint (AS-125)
 	ColorBorder       = lipgloss.Color("#16241b")
 	ColorBorderActive = lipgloss.Color("#1c3322")
 	ColorBorderSelect = lipgloss.Color("#1f6b3f")
