@@ -61,7 +61,7 @@ secrets:     [ ... ]       # optional, declared scopes only
 routing:     { ... }       # optional named policies referenced by steps
 steps:       [ ... ]       # required, >=1
 hooks:       { ... }       # optional lifecycle hooks
-merge_policy:{ ... }       # optional; required when any step enables merge
+merge_policy: { ... }      # optional; required when any step enables merge
 retention:   { ... }       # optional, defaults applied by daemon
 ```
 
@@ -117,13 +117,23 @@ concurrency:
 
 `limit` is **required and bounded** — there is no "unlimited" value; omitting it
 or setting `0`/negative is invalid (unbounded-concurrency AC). `key` may
-interpolate `${repository}`, `${org}`, `${id}`, and trigger inputs; unknown
-interpolation variables are an error.
+interpolate `${repository}`, `${org}`, `${id}`, and trigger inputs
+(`${trigger.inputs.*}`); unknown interpolation variables are an error.
+
+**Trigger-specific variables in multi-trigger jobs.** `${trigger.inputs.*}`
+resolves only for triggers that declare that input. If a job lists more than one
+trigger and its `concurrency.key` (or any `when` guard / step `with`) references
+`${trigger.inputs.X}`, then **every** trigger on the job must declare input `X`;
+otherwise the spec is **rejected at load** (fail-closed) rather than producing an
+undefined value at runtime when fired by a trigger that lacks it. In practice a
+key that keys off a manual input belongs on a single-trigger (manual) job, or
+each trigger must supply the same input set. This makes interpolation a
+load-time-checkable property, never a runtime surprise.
 
 ### 4.4 Timeout and retries
 
 ```yaml
-timeout: 45m            # required ISO-ish duration: <int>(s|m|h)
+timeout: 45m            # required duration (see "Duration format" below)
 retries:
   max: 2                # int >= 0, default 0
   backoff: exponential  # fixed | exponential ; default exponential
@@ -133,6 +143,14 @@ retries:
 `timeout` bounds a single run; the daemon fails the run closed when it elapses.
 Retries re-run the whole job under a fresh idempotency key derived from the run
 (AS-161 owns the key scheme).
+
+**Duration format.** Every duration in this DSL — `timeout`, `retries.initial`,
+and `retention.*` — uses the grammar `^[0-9]+(s|m|h|d)$`, where `d` = 24h. Note
+this is **wider than Go's `time.ParseDuration`**, which has no `d` unit. The
+AS-161 loader therefore uses the orchestrator's own small parser (parse the
+integer, multiply by the unit, with `d`→24h) rather than `time.ParseDuration`;
+authors may write `90d` instead of `2160h`. Anything outside the grammar (bare
+ints, compound `1h30m`, fractional units) is rejected.
 
 ### 4.5 Budget
 
@@ -176,6 +194,22 @@ secrets:
   capture (AS-154/AS-115). The mapping from scope name to a real credential is
   AS-154's job, not this format's.
 
+**How a step references a secret.** Two mechanisms, both load-time checkable:
+
+  1. **Implicit binding (default).** An action declares which secret scopes it
+     needs (e.g. `github.*` actions need `github-token`, `agent.*` steps need the
+     API-key scope of their resolved provider). The loader binds those from the
+     job's `secrets` list automatically; no syntax in the step. This is the
+     normal path and keeps specs free of credential plumbing.
+  2. **Explicit interpolation.** Where an action arg must carry a scope by name,
+     reference it as `${secrets.<scope-name>}` inside a `with:` value. The value
+     interpolated at runtime is the secret's *handle*, never its plaintext.
+
+  In both cases the referenced scope (whether bound implicitly or named via
+  `${secrets.*}`) must appear in the job's `secrets` list, or validation rule 9
+  fails. `${secrets.*}` is the **only** way a secret enters a step — a literal
+  that looks like a credential is rejected (rule 14).
+
 ### 4.7 Steps
 
 `steps` is a non-empty ordered list. Steps run in declaration order unless a
@@ -200,16 +234,27 @@ Two action families exist, and the distinction is load-time enforced:
 - **`github.*`** — *deterministic* action steps (`github.add_label`,
   `github.remove_label`, `github.create_or_update_pr`, `github.comment`,
   `github.set_status`, `github.enable_auto_merge`, `github.merge`). They take
-  declarative `with`/inline args, never a `role`. Modelling these as steps — not
+  declarative args under `with:`, never a `role`. Modelling these as steps — not
   as prose an agent emits — is the core safety property (ADR D-ORCH-6).
+
+All action-specific arguments live under the step's `with:` map. The step's own
+keys (`id`, `uses`, `role`, `provider_policy`, `budget`, `when`, `with`) are the
+**only** keys allowed directly on a step; any other key — e.g. a bare `label:` at
+step level — is rejected by rule 1. Put it under `with:` instead.
 
 `uses` must name an action from the known catalogue; an unknown action is
 rejected (unknown-action AC). The action *semantics* are defined by AS-147/AS-149;
 this format only fixes the call shape and the agent-vs-deterministic split.
 
-`when` is a **declarative** guard over a closed namespace (`policy.*`,
-`trigger.*`, `steps.<id>.outcome`). It is boolean data, not an expression an
-agent fills in; unknown identifiers are rejected.
+`when` is a **declarative** guard holding **exactly one** boolean identifier from
+a closed namespace (`policy.*`, `trigger.*`, `steps.<id>.outcome`). It is boolean
+data, not an expression an agent fills in; unknown identifiers are rejected. v1
+deliberately supports **no logical operators** (`and`/`or`/`not`) and no
+comparisons — a single named predicate only. Compound conditions are expressed by
+defining a named `policy.*` predicate (catalogue owned by AS-157/AS-152) rather
+than by embedding logic in the spec, keeping `when` trivially parseable and
+review-legible. Operators may be added additively in a later `version` if a real
+need appears.
 
 ### 4.8 Routing
 
@@ -251,25 +296,32 @@ hooks (a hook is bookkeeping, not cognition).
 
 ```yaml
 merge_policy:
-  mode: auto                 # off | auto | manual ; default off
-  required:
-    - pr_author_is_smith
-    - required_checks_green
+  mode: auto                          # off | auto | manual ; default off
+  required:                           # uniform list of single-key maps
+    - pr_author_is_smith: true
+    - required_checks_green: true
     - label_present: smith-generated
     - label_present: smith-auto-merge
   forbidden:
-    - unknown_checks
-    - branch_protection_bypass
-    - force_push
+    - unknown_checks: true
+    - branch_protection_bypass: true
+    - force_push: true
 ```
+
+`required` and `forbidden` are **uniform single-key maps**, never a mix of bare
+strings and maps: each item is `predicate: <arg>`, and a nullary predicate
+(`pr_author_is_smith`, `unknown_checks`, …) takes `true`. This deserialises in Go
+as a plain `[]map[string]Value` with no custom unmarshaler and no string-vs-map
+branching. (`label_present` repeats with different args, which a YAML list
+permits and a map would not — another reason these are lists, not maps.)
 
 `merge_policy` is **required whenever** a step or hook uses
 `github.enable_auto_merge` or `github.merge`; such a step without a policy is
-rejected (fail-closed). `required`/`forbidden` predicates come from a closed
-catalogue defined by AS-157; an unknown predicate is an error. The format
-guarantees the *forbidden* set can never be emptied below the protection
-invariants (no `branch_protection_bypass`, `force_push`, or `unknown_checks`
-merge is expressible as allowed).
+rejected (fail-closed). The predicate names come from a closed catalogue defined
+by AS-157; an unknown predicate is an error. The format guarantees the
+*forbidden* set can never be emptied below the protection invariants (no
+`branch_protection_bypass`, `force_push`, or `unknown_checks` merge is
+expressible as allowed).
 
 ### 4.11 Retention
 
@@ -300,8 +352,15 @@ A spec is **rejected at load** (the daemon refuses to schedule it) when any of:
 11. An `agent.*` step omits `role`, or a `github.*` step declares a `role`.
 12. A merge-enabling step/hook exists without a `merge_policy`, or a
     `merge_policy` tries to permit a forbidden-invariant action.
-13. A `when` guard or `concurrency.key` template references an unknown identifier.
-14. Any plaintext value matches a secret pattern (fail-closed; secrets are names).
+13. A `when` guard holds anything other than a single known boolean identifier
+    (no operators), or a `concurrency.key`/`with` template references an unknown
+    identifier.
+14. Any plaintext value matches a secret pattern (fail-closed; secrets are
+    names); a `${secrets.*}` reference names a scope absent from `secrets`.
+15. A `${trigger.inputs.X}` reference appears on a multi-trigger job whose triggers
+    do not all declare input `X` (undefined-at-runtime guard).
+16. Any duration field is outside `^[0-9]+(s|m|h|d)$`.
+17. A `merge_policy.required`/`forbidden` item is not a single-key map.
 
 Every rejection names the file, the field path, and the rule — specs are
 repo-reviewable, so validation must read like a review comment, not a stack
@@ -426,12 +485,19 @@ steps:
     uses: github.create_or_update_pr
   - id: mark
     uses: github.add_label
-    label: smith-generated
+    with:
+      label: smith-generated
 
 merge_policy:
   mode: manual
-  required: [pr_author_is_smith, required_checks_green, label_present: smith-generated]
-  forbidden: [unknown_checks, branch_protection_bypass, force_push]
+  required:
+    - pr_author_is_smith: true
+    - required_checks_green: true
+    - label_present: smith-generated
+  forbidden:
+    - unknown_checks: true
+    - branch_protection_bypass: true
+    - force_push: true
 ```
 
 ## 7. Versioning and evolution
