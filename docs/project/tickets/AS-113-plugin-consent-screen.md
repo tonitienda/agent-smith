@@ -37,6 +37,41 @@ AS-059 §4.2 residual risks require a human for. It needs:
 - **Grant persistence.** Where is a prior grant stored (config layer? a dedicated
   trust store?) so escalation re-prompts can compare scope sets across updates?
 
+## Clarification (2026-07-01)
+
+Both questions have documented answers; the first is a "wait," which is itself a
+resolution but does not unblock implementation.
+
+- **Install flow — wait, do not define a workaround.** `docs/design/plugin-trust.md`
+  §6 is explicit that the consent screen applies "when a third-party manifest is
+  installed (a future marketplace/`smith plugin add` flow, **not v1**)", and §8 lists
+  AS-113 as "Implement §6 when an install flow exists ... blocked by a
+  plugin-install/marketplace ticket (§7.26, not yet filed)." §7.26 is listed in
+  `docs/project/tickets/README.md` as "Not ticketed (intentionally) ... too far out
+  to spec honestly." Defining a minimal manual install here would invent an anchor
+  the source design doc deliberately does not specify. A 2026-06-30 QA re-triage
+  (`docs/project/tickets/README.md`, "Needs clarification" section) already reached
+  the same conclusion and confirmed AS-113 remains blocked on §7.26. This
+  clarification pass reconfirms that finding rather than overturning it.
+- **Grant persistence — the config layer, via a typed consumer view, no dedicated
+  trust store.** `internal/config` is already the substrate for exactly this shape of
+  decision: AS-016's permission model persists "'Always allow this' at prompt time
+  appends to the project allowlist" through the same layered config. AS-093
+  establishes the typed-view convention (`permission.ConfigFrom`, `budget.ConfigFrom`)
+  that a future `plugin`/`trust` package should follow (e.g. `plugin.ConfigFrom`) to
+  store the prior grant (manifest content hash + granted scope set) read/written
+  through `internal/config`. The two other persistence mechanisms in the codebase are
+  narrower special cases that don't fit: the OS keychain (AS-017) is reserved for
+  secret provider API keys, and the orchestrator's SQLite store (AS-161) is scoped to
+  the always-on daemon's run-control state. Neither applies to a non-secret grant
+  record.
+
+**Status unchanged.** Q1's answer is "wait for §7.26," so this ticket still has
+nothing to hang a consent screen on — it stays `needs-clarification`/blocked rather
+than moving to `ready-to-implement`. Re-triage once a plugin-install/marketplace
+ticket is filed; at that point Q2's answer (config-layer typed view) is ready to
+apply without further discussion.
+
 ## Acceptance criteria
 
 - [ ] (After clarification) A consent screen renders manifest identity + scopes in
