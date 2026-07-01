@@ -18,6 +18,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 
 	"github.com/tonitienda/agent-smith/internal/orchestrator/spec"
 	"github.com/tonitienda/agent-smith/internal/orchestrator/store"
@@ -55,16 +56,26 @@ func (e *SessionExecutor) Execute(ctx context.Context, run store.Run, job *spec.
 
 	out, execErr := e.inner.Execute(ctx, run, job)
 	if execErr != nil {
-		// The inner failed without naming a terminal outcome; record an internal
-		// failure so the session still closes with a terminal block.
-		out = store.Outcome{Status: store.StatusFailed, FailureClass: store.FailureInternal, Error: execErr.Error()}
+		// The inner failed without naming a terminal outcome; mark it a failure so
+		// the session still closes with a terminal block, but preserve any fields it
+		// did accumulate before failing (e.g. a partial CostUSD or a named class).
+		if !out.Status.Terminal() {
+			out.Status = store.StatusFailed
+		}
+		if out.FailureClass == store.FailureNone {
+			out.FailureClass = store.FailureInternal
+		}
+		if out.Error == "" {
+			out.Error = execErr.Error()
+		}
 	}
 	// Point the outcome at the run's real session, replacing any placeholder id the
 	// inner returned (the stub returns "stub-<run>").
 	out.SessionID = rec.SessionID()
 
 	if err := rec.Finish(out); err != nil {
-		return out, err
+		// Preserve the original execution error alongside the finish error.
+		return out, errors.Join(execErr, err)
 	}
 	return out, execErr
 }

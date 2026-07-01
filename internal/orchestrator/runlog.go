@@ -238,8 +238,7 @@ func (r *Recorder) GitHubAction(a GitHubAction) error {
 		return err
 	}
 	if a.URL != "" {
-		r.link.PRLinks = append(r.link.PRLinks, a.URL)
-		return r.rewriteLink()
+		return r.updateLink(func(l *RunLink) { l.PRLinks = append(l.PRLinks, a.URL) })
 	}
 	return nil
 }
@@ -254,8 +253,7 @@ func (r *Recorder) Artifact(a ArtifactRef) error {
 	if _, err := r.sess.Log.Append(newBlock(KindArtifactRef, a)); err != nil {
 		return err
 	}
-	r.link.ArtifactIDs = append(r.link.ArtifactIDs, a.ID)
-	return r.rewriteLink()
+	return r.updateLink(func(l *RunLink) { l.ArtifactIDs = append(l.ArtifactIDs, a.ID) })
 }
 
 // Usage appends a provider-turn usage block so an orchestrated run's spend is
@@ -283,13 +281,30 @@ func (r *Recorder) Finish(out store.Outcome) error {
 	return r.sess.Log.Close()
 }
 
-// rewriteLink persists the evolving linkage back onto the session metadata so the
-// listable index (PR links, artifact ids) tracks the log.
-func (r *Recorder) rewriteLink() error {
-	raw, _ := json.Marshal(r.link) //nolint:errcheck // fixed-shape struct never fails to marshal
-	if r.sess.Metadata.Ext == nil {
-		r.sess.Metadata.Ext = map[string]json.RawMessage{}
+// updateLink applies mutate to a copy of the run linkage, persists it onto the
+// session metadata, and commits the change to the in-memory linkage and metadata
+// only after the write succeeds. Deferring the mutation keeps the in-memory state
+// from drifting ahead of disk on a failed write — and avoids a double-append if a
+// caller retries an action whose metadata write failed.
+func (r *Recorder) updateLink(mutate func(*RunLink)) error {
+	next := r.link
+	next.PRLinks = append([]string(nil), r.link.PRLinks...)
+	next.ArtifactIDs = append([]string(nil), r.link.ArtifactIDs...)
+	mutate(&next)
+
+	raw, _ := json.Marshal(next) //nolint:errcheck // fixed-shape struct never fails to marshal
+	ext := make(map[string]json.RawMessage, len(r.sess.Metadata.Ext)+1)
+	for k, v := range r.sess.Metadata.Ext {
+		ext[k] = v
 	}
-	r.sess.Metadata.Ext[linkExtKey] = raw
-	return session.WriteMetadata(r.sess.Dir, r.sess.Metadata)
+	ext[linkExtKey] = raw
+	meta := r.sess.Metadata
+	meta.Ext = ext
+
+	if err := session.WriteMetadata(r.sess.Dir, meta); err != nil {
+		return err
+	}
+	r.link = next
+	r.sess.Metadata = meta
+	return nil
 }
