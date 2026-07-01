@@ -40,7 +40,8 @@ Use this shortened pass when time is limited; the detailed sections below explai
 | AS-060 | Manual capture | Follow section "AS-060 vendor session captures": grab a handful of redacted session artifacts (offline ones first, then one cheap live turn per vendor), run each through the `schema` types, record dispositions. | Each surface has at least one redacted capture round-tripped through AS-003; fields-without-a-home are classified promote / `ext` / out-of-scope; proposed additive deltas linked to AS-003. No CI keys needed. |
 | AS-017, AS-050, AS-054, AS-057–AS-058, AS-061, AS-077, AS-110, AS-119–AS-120, AS-132–AS-133, AS-135–AS-136, AS-138 | Implemented | See detailed sections 3.4b, 3.5–3.7, 5.7/5.7a, 8.0/8.0a, 8.2a–8.2d, 8.5, 9.3; run the CLI subcommands (`smith auth`, `smith stats`, `smith stats all`, `smith stats rebuild`, `smith improve`, `smith runs`). | Auth, stats, background runner, self-improving config, block-schema JSON, task delegation, vendor simulators, and route escalation are all implemented; see per-feature sections for details. |
 | AS-029, AS-043, AS-121 | Implemented | See detailed steps 5.3a (`/clean "<topic>"`), 5.8 (`/tidy`), and 6.9 (phosphor palette). | Semantic clean previews/excludes only matching segments; `/tidy` dedups reversibly; all TUI surfaces share the phosphor palette. |
-| AS-052, AS-078–AS-079, AS-081, AS-111, AS-123, AS-127–AS-131 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
+| AS-052, AS-078–AS-079, AS-081, AS-111, AS-128–AS-131 | Not implemented | Check README/help/tickets only. | Feature is ticketed but not yet implemented; no manual pass/fail expected. |
+| AS-123, AS-127 | Implemented | See steps 6.9 (typewriter streaming) and 6.1 (command palette). | Assistant replies type in char-by-char with a trailing block cursor (AS-123); the command palette renders the redesigned search field, per-command styling, and footer hints (AS-127). |
 | AS-087 | Implemented | In a repo with a README, run `/init --describe` (or `smith init --describe`) with a provider configured, review the preview, then `/init --apply`. Compare against plain `/init`. | `--describe` adds model-authored prose sections (e.g. `## Overview`) after the deterministic Build & test / Layout sections; the commands are never restated or replaced; plain `/init` stays deterministic and prose-free; nothing is written until `--apply`. |
 | AS-137 | Implemented | With `subagents.insights_writer.model` **unset**, run a session with tool use, then `/insights` (and `smith insights describe`). The dashboard offers the on-demand retro; running `describe` adds grounded `(model)` suggestions and the spend shows in `/cost`. Set a tiny `/budget` first to see it skip with "Budget reached". | Base `/insights` stays free and offers the retro only when the model layer is off; `describe` merges only evidence-citing suggestions, charges the session budget, and is skipped (no model call) with no budget room. |
 | AS-080, AS-124, AS-139 | Implemented | Spike doc (AS-080); TUI tool-card polish under §6 (AS-124); `/improve` efficacy via `smith stats` per step 8.2c (AS-139). | Spike shipped as a design doc; tool cards show borders/left rule/truncation/elapsed time; applied-remedy before/after friction delta is computed in `internal/skillrollup` and surfaced in `smith stats`. |
@@ -337,11 +338,11 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-120 | `task` per-child cost itemization, prompt attribution, budget | Implemented (`done`) — see steps 8.0 and 8.0a; child spend included in `/cost` |
 | AS-121 | TUI phosphor palette — centralize colour tokens and apply to all surfaces | Implemented (`done`) — visual pass; see step 6.9 |
 | AS-122 | TUI splash screen — logo, divider rule, invite text, blinking caret | Implemented (`done`) — see step 6.8 |
-| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Not implemented (`ready-to-implement`) |
+| AS-123 | TUI typewriter streaming — char-by-char reveal with trailing block cursor | Implemented (`done`) — see step 6.9 |
 | AS-124 | TUI tool card visual polish — bordered cards, left rule, truncation, elapsed time | Implemented (`done`) — bordered tool cards, left rule, truncation, elapsed time; visual pass (see §6) |
 | AS-125 | TUI status line + mode bar visual polish — spec-compliant layout and colours | Implemented (`done`) — phosphor status-line segments, goal/cost/running colours, alive-pulse, coloured mode-bar phase track; visual pass (see §6) |
 | AS-126 | TUI Matrix rain — medium intensity default, animated falling chars, /serious disables | Implemented (`done`) — see step 6.8 |
-| AS-127 | TUI command palette visual redesign — search border, per-command styling, footer hints | Not implemented (`ready-to-implement`) |
+| AS-127 | TUI command palette visual redesign — search field, per-command styling, footer hints | Implemented (`done`) — see step 6.1 |
 | AS-128 | TUI /context panel visual redesign — segmented bar, amber auto-compact marker, stats rail | Not implemented (`ready-to-implement`) |
 | AS-129 | TUI permission gate visual redesign — diff colours, dimmed context, option list | Not implemented (`ready-to-implement`) |
 | AS-130 | TUI /agents orchestrator panel — tree view, state dots, pulsing animation | Not implemented (`ready-to-implement`) |
@@ -350,6 +351,35 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-137 | `/insights describe` on-demand model retro when the session-end model layer is off | Implemented (`done`) — see row 8.2 |
 | AS-138 | `/improve` high-confidence single-fact threshold | Implemented (`done`) — see steps 8.2c and 8.2d; facts with remedy in 3+ sessions auto-promoted |
 | AS-139 | `/improve` proposal efficacy measurement (before/after friction delta) | Implemented (`done`) — before/after remedy efficacy in `internal/skillrollup`, surfaced via `smith stats`; see step 8.2c |
+| AS-140 | Manual test campaign — add detailed scenarios for newly-completed tickets | Implemented (`done`) — this document; detailed scenarios landed |
+| AS-141 | Archtest: `internal/serve` in faces forbidden list | Implemented (`done`) — guarded by `scripts/harness/arch.sh` |
+| AS-142 | Archtest: layering guard for `internal/provider/conformance` + `schema` | Implemented (`done`) — guarded by `scripts/harness/arch.sh` |
+| AS-143 | `smith serve` JSON-RPC/WebSocket runtime flow diagram | Implemented (`done`) — diagram in `docs/architecture/runtime-flows.md` |
+| AS-144 | `auth set/status` keychain-unreachable error classification | Implemented (`done`) — see step 3.7 |
+| AS-145 | Archtest: guard loop↛cmd and face↛face/cmd layering | Implemented (`done`) — guarded by `scripts/harness/arch.sh` |
+| AS-146 | Archtest: inward-core packages do not import orchestration | Implemented (`done`) — guarded by `scripts/harness/arch.sh` |
+| AS-147 | GitHub event ingestion and deterministic hooks | Not implemented (`ready-to-implement`) |
+| AS-148 | GitHub authentication strategy | Not implemented (`ready-to-implement`) |
+| AS-149 | PR lifecycle automation | Not implemented (`ready-to-implement`) |
+| AS-150 | Multi-provider workflow routing | Not implemented (`ready-to-implement`) |
+| AS-151 | Smith event-log integration for orchestrated runs | Not implemented (`ready-to-implement`) |
+| AS-152 | Smith implements Smith dogfood workflow pack | Not implemented (`ready-to-implement`) |
+| AS-153 | Sandbox abstraction and execution environments | Not implemented (`ready-to-implement`) |
+| AS-154 | Secret management and redaction contract | Not implemented (`ready-to-implement`) |
+| AS-155 | Operator API/UI | Not implemented (`ready-to-implement`) |
+| AS-156 | Private VPC deployment | Not implemented (`ready-to-implement`) |
+| AS-157 | Auto-merge policies and safety gates | Not implemented (`ready-to-implement`) |
+| AS-158 | Competitive agent workflow, sandbox, and secrets research spike | Implemented (`done`) — design/research spike |
+| AS-159 | Orchestrator architecture and product boundaries | Implemented (`done`) — architecture ADR (Accepted) |
+| AS-160 | Job specification and workflow DSL | Implemented (`done`) — see the AS-161 section (`.agent-smith/jobs/*.yaml` load + validate) |
+| AS-161 | Daemon, scheduler, and SQLite run store | Implemented (`done`) — see the AS-161 section |
+| AS-162 | Guard that every internal package is accounted for in package-contracts.md | Implemented (`done`) — `go test ./internal/archtest/...` |
+| AS-163 | Orchestrator job-spec model + validator | Implemented (`done`) — `go test ./internal/orchestrator/...` |
+| AS-164 | Run/verify skill generator | Not implemented (`ready-to-implement`) |
+| AS-165 | Background cost ledger and autonomous activity attribution | Not implemented (`ready-to-implement`) |
+| AS-166 | Shareable redacted session bundles | Not implemented (`ready-to-implement`) |
+| AS-167 | Command surface simplification and progressive disclosure audit | Needs debrief (`Pending Debrief`) |
+| AS-168 | Manual test campaign — stale rows + missing AS-140…AS-167 coverage | Implemented (`done`) — this pass; detailed scenarios for the `done` orchestrator/docs tickets remain a follow-on |
 
 ## Current local smoke pass (2026-06-22)
 
@@ -444,3 +474,39 @@ describe.
 | `./smith runs daemon start` in a repo with `.agent-smith/jobs/*.yaml` | — | Loads + validates specs (fail-closed per spec), arms cron/manual/GitHub triggers; MVP-0 `StubExecutor` runs steps as no-ops (real executor: AS-147/149/150/151). |
 | `runs daemon list` / `inspect <id>` / `cancel <id>` / `rerun <id>` | — | Operator read/control over orchestrated runs and attempt history. |
 | `runs daemon pause <job>` / `resume <job>` | — | Job-level pause survives a spec reload. |
+
+## QA campaign pass (2026-07-01)
+
+Campaign re-run against `make build` binary (commit `087285c`). All automated
+suites pass; CLI scenarios re-checked on a headless Linux host (no D-Bus /
+Secret Service). No product bugs found; the AS-144 fix still holds. Two
+coverage gaps between the campaign and the backlog were found and filed as
+**AS-168**:
+
+- **AS-123** (typewriter streaming) and **AS-127** (command palette redesign)
+  were still listed as "Not implemented" in the quick checklist and coverage
+  matrix even though both tickets are `status: done`. Corrected in this pass.
+- The coverage matrix stopped at AS-139 (plus the AS-161 side section) while the
+  backlog now runs to AS-167. Coverage-matrix rows for AS-140…AS-168 were added
+  in this pass; detailed scenarios for the newly-covered `done`
+  orchestrator/docs tickets (AS-143, AS-158–AS-163) remain a follow-on tracked
+  by AS-168.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `make build` | Pass | Static binary builds; `./smith --version` reports `smith dev (087285c)`. |
+| `make test` | Pass | All packages pass, including `internal/e2e` offline suite (AS-134). |
+| `scripts/harness/arch.sh` | Pass | Architecture contract tests pass. |
+| `go test ./internal/e2e/...` | Pass | Offline E2E suite passes (AS-133/AS-134/AS-135). |
+| `go test ./internal/orchestrator/...` | Pass | Loader, cron, scheduler, SQLite store (AS-161/AS-163). |
+| `./smith --help --output json` + leaf `run --help --output json` | Pass | Both parse as JSON (AS-118 holds). |
+| `./smith does-not-exist` | Pass | Exits 2 (invalid usage). |
+| `./smith run "say hello"` without credentials | Pass | Exits 6; `--output json` emits a machine-readable `{…,"error":…}` and still exits 6. |
+| `run -f` / `run --queue` / `serve --unsafe-bind` / `runs work --watch/--concurrency` help | Pass | AS-069, AS-054, AS-077, AS-132 surfaces documented. |
+| `./smith serve` startup | Pass | Binds `ws://127.0.0.1:8765` (loopback only) and notes Ctrl+C to stop. |
+| `./smith replay <missing>` | Pass | Exits 1 with a concise `session: read metadata … no such file` error. |
+| `./smith stats` / `stats all` / `stats rebuild` | Pass | Cross-session analytics; rebuild refreshes index. |
+| `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
+| `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
+| `smith auth set openai` / `auth status` with no Secret Service | Pass (AS-144 holds) | `auth set` shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint, exits 1, and never writes a plaintext key; `auth status` shows the `no keychain available` line. |
+| Campaign stale entries | Fixed → AS-168 | AS-123 and AS-127 moved "Not implemented" → "Implemented (`done`)"; coverage-matrix rows added for AS-140…AS-168. |
