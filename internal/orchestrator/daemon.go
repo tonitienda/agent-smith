@@ -172,9 +172,16 @@ func (d *Daemon) EnqueueManual(jobID string, inputs map[string]string) (store.Ru
 	return run, err
 }
 
-// GitHubEvent is a normalised inbound GitHub trigger. The webhook→event mapping is
-// AS-147's job; this is the shape the scheduler matches against jobs. DeliveryID
-// makes a re-delivered event idempotent.
+// GitHubEvent is a normalised inbound GitHub trigger — the stable Smith trigger
+// record the scheduler matches against jobs. [Normalize] (webhook.go) maps a raw
+// GitHub webhook delivery into this shape (AS-147); DeliveryID makes a re-delivered
+// event idempotent so a duplicate delivery never enqueues duplicate work.
+//
+// The first six fields are what trigger *matching* needs; Number/Actor/Labels/
+// EventTime are the additional trigger-record context (AS-147 AC) that downstream
+// deterministic action steps (AS-149) and the session log (AS-151) consume — e.g.
+// which issue/PR to label and who asked. They never influence matching, so a
+// trigger's behaviour is not encoded in prompt content (AS-147 AC).
 type GitHubEvent struct {
 	DeliveryID string
 	Kind       string // e.g. "github.issue_labeled"
@@ -182,6 +189,11 @@ type GitHubEvent struct {
 	Label      string
 	Base       string
 	Command    string
+
+	Number    int       // issue or PR number the event concerns (0 when N/A)
+	Actor     string    // GitHub login that caused the event
+	Labels    []string  // full label set on the issue/PR at event time
+	EventTime time.Time // timestamp of the source object (zero when absent)
 }
 
 // EnqueueGitHub fans an inbound event out to every matching job trigger, deduped by
