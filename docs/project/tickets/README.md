@@ -222,7 +222,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
 | [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | done | AS-160, AS-161 |
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | done | AS-159, AS-147 |
-| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | ready | AS-147, AS-148 |
+| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | done | AS-147, AS-148 |
 | [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | ready | AS-160 |
 | [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | done | AS-161 |
 | [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |

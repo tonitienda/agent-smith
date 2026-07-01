@@ -31,6 +31,7 @@ type SessionExecutor struct {
 	sessions *session.Store
 	inner    Executor
 	actions  GitHubActions // optional AS-147 deterministic-hook port; nil = no hooks
+	pr       PRActions     // optional AS-149 PR-lifecycle port; nil = no PR steps
 }
 
 // NewSessionExecutor wraps inner so its runs are recorded as Smith sessions in
@@ -50,6 +51,17 @@ func NewSessionExecutor(sessions *session.Store, inner Executor) *SessionExecuto
 // with no GitHub credentials still runs every job's cognitive work cleanly.
 func (e *SessionExecutor) WithGitHubActions(actions GitHubActions) *SessionExecutor {
 	e.actions = actions
+	return e
+}
+
+// WithPRActions wires the deterministic PR-lifecycle port (AS-149) so the executor
+// runs a job's github.create_or_update_pr body steps on an otherwise-successful
+// run — ensuring the run's Smith-owned branch and opening or updating its PR with
+// the run-summary body, recording each action on the run's session. It returns the
+// executor for chaining. Left unset (or nil), PR steps are skipped, so an
+// orchestrator with no GitHub credentials still runs every job's cognitive work.
+func (e *SessionExecutor) WithPRActions(pr PRActions) *SessionExecutor {
+	e.pr = pr
 	return e
 }
 
@@ -90,6 +102,18 @@ func (e *SessionExecutor) Execute(ctx context.Context, run store.Run, job *spec.
 			out.Error = execErr.Error()
 		}
 	}
+	// PR lifecycle (AS-149) runs the job's github.create_or_update_pr body steps on
+	// an otherwise-successful run: a PR is the deliverable, so a failure to open or
+	// update it fails the run closed (and the on_failure hook, not on_success, then
+	// fires). An ownership violation is classified blocked_policy; any other port
+	// error is internal. Skipped entirely when no PR port is wired.
+	if execErr == nil && out.Status == store.StatusSucceeded {
+		if fc, prErr := runPRSteps(ctx, e.pr, rec, job, run, tc); prErr != nil {
+			out.Status, out.FailureClass, out.Error = store.StatusFailed, fc, prErr.Error()
+			execErr = prErr
+		}
+	}
+
 	// Point the outcome at the run's real session, replacing any placeholder id the
 	// inner returned (the stub returns "stub-<run>").
 	out.SessionID = rec.SessionID()

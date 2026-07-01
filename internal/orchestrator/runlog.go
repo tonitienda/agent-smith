@@ -231,6 +231,10 @@ func NewRecorder(st *session.Store, run store.Run, job *spec.Spec) (*Recorder, e
 // it back into the run's terminal Outcome so the run store links to the session.
 func (r *Recorder) SessionID() string { return r.sess.ID }
 
+// artifactIDs returns the run's referenced artifact ids so the PR-lifecycle body
+// renderer (AS-149) can list them without re-reading the session metadata.
+func (r *Recorder) artifactIDs() []string { return r.link.ArtifactIDs }
+
 // PolicyDecision appends a policy-check verdict to the run's session.
 func (r *Recorder) PolicyDecision(d PolicyDecision) error {
 	_, err := r.sess.Log.Append(newBlock(KindPolicyDecision, d))
