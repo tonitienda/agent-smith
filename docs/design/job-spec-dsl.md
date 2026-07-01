@@ -236,6 +236,11 @@ Two action families exist, and the distinction is load-time enforced:
   `github.set_status`, `github.enable_auto_merge`, `github.merge`). They take
   declarative args under `with:`, never a `role`. Modelling these as steps — not
   as prose an agent emits — is the core safety property (ADR D-ORCH-6).
+  `add_label`/`remove_label`/`comment`/`set_status` execute in the AS-147 hook
+  runner; `create_or_update_pr` executes as an AS-149 body step (ensure the run's
+  `smith/…` branch, then open-or-update its PR with the run-summary body);
+  `enable_auto_merge`/`merge` are delegated to the AS-157 policy engine (AS-149
+  records a deferral rather than acting).
 
 All action-specific arguments live under the step's `with:` map. The step's own
 keys (`id`, `uses`, `role`, `provider_policy`, `budget`, `when`, `with`) are the
