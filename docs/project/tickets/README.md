@@ -266,7 +266,7 @@ These items come from competitor/product research and are intentionally marked `
 | [AS-165](AS-165-background-cost-ledger.md) | Background cost ledger and autonomous activity attribution | cost | ready-to-implement | AS-020, AS-041, AS-054, AS-120, AS-132 |
 | [AS-166](AS-166-shareable-session-bundles.md) | Shareable redacted session bundles | collaboration | ready-to-implement | AS-005, AS-055, AS-079, AS-115, AS-154 |
 | [AS-167](AS-167-command-surface-simplification.md) | Command surface simplification and progressive disclosure audit | commands | Pending Debrief | AS-022, AS-066, AS-090, AS-104, AS-105 |
-| [AS-171](AS-171-run-completion-notifications.md) | Outbound completion notifications for background & orchestrator runs | async | Pending Debrief | AS-054, AS-132, AS-155, AS-161 |
+| [AS-171](AS-171-run-completion-notifications.md) | Outbound completion notifications for background & orchestrator runs | async | Pending Debrief | AS-054, AS-115, AS-132, AS-155, AS-161 |
 | [AS-172](AS-172-team-credential-gateway-audit.md) | Team credential gateway and cross-session prompt/tool audit trail | security | Pending Debrief | AS-016, AS-017, AS-115, AS-154, AS-165 |
 
 ## PM discovery PRDs (Pending Debrief)

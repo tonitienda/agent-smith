@@ -4,7 +4,7 @@ title: Outbound completion notifications for background & orchestrator runs
 status: Pending Debrief
 area: async
 priority: P2
-depends_on: [AS-054, AS-132, AS-155, AS-161]
+depends_on: [AS-054, AS-115, AS-132, AS-155, AS-161]
 source: docs/project/competitors.md
 ---
 
@@ -59,4 +59,4 @@ existing event log rather than a new tracking mechanism.
 
 ## Dependencies
 
-[AS-054, AS-132, AS-155, AS-161]
+[AS-054, AS-115, AS-132, AS-155, AS-161]
