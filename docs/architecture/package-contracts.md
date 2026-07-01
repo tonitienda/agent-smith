@@ -33,6 +33,7 @@ those lower layers never depend back up.
 | **Orchestrator** | `internal/orchestrator` (orchestration tier, ADR D-ORCH-3) | its own `internal/orchestrator/spec` + `.../store` leaves, plus `internal/session` + `internal/eventlog` (AS-151: the `Recorder`/`SessionExecutor` persist each run as a normal Smith session so `/cost`+`/insights` reuse the core readers); remaining core-contract deps (provider, config, cost, the async runner) are injected through the `Executor` seam as AS-147/149/150 land (the ADR-vs-shipped-daemon reconciliation is tracked by AS-170) | inward-core packages, faces, `cmd/*` |
 | **Job-spec model** | `internal/orchestrator/spec` (stdlib-only leaf) | `schema`-style stdlib only | everything else |
 | **Run-control store** | `internal/orchestrator/store` (SQLite leaf, AS-161) | stdlib + `modernc.org/sqlite` | the daemon depends on it; it imports no daemon/loop/faces |
+| **Secret contract** | `internal/orchestrator/secret` (stdlib-only leaf, AS-154, [ADR-0004](../design/adr-0004-secret-management-redaction.md)) | stdlib only | the daemon and the AS-153/156 sandbox seam inject a concrete `Resolver` and consume the `Value`/`AuditRecord`/`Redactor`; the leaf depends on no credential backend, daemon, loop, or face |
 | **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
 | **Composition roots** | `cmd/*`, `internal/smithapp` | everything | — |
 

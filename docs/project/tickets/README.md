@@ -227,7 +227,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | done | AS-161 |
 | [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
 | [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | orchestrator | ready | AS-159, AS-161, AS-158 |
-| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | ready | AS-159, AS-148, AS-158 |
+| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | done | AS-159, AS-148, AS-158 |
 | [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | ready | AS-161, AS-151 |
 | [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | ready | AS-161, AS-148, AS-154 |
 | [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | ready | AS-147, AS-148, AS-149 |

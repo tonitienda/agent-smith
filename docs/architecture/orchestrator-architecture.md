@@ -78,7 +78,7 @@ second execution path.
 | Job spec / DSL | `.agent-smith/jobs/*.yaml` (AS-160, format in [job-spec-dsl.md](../design/job-spec-dsl.md)) | Repo-reviewed, versioned, declarative. Steps/hooks/actions/routing/policy declared, never prompt-controlled. |
 | GitHub integration | `internal/orchestrator` (AS-147/149) | Normalize webhooks → trigger events; deterministic action steps (labels, PR create/update, comment, status, guarded merge). |
 | Provider routing | core routing (AS-042/110) via per-step policy (AS-150) | Role↔provider separation; explicit per step or a named routing policy. |
-| Secrets | secret contract (AS-154) | Declared scopes; no plaintext in specs/logs; redaction-at-capture (AS-115); fail closed on missing scope. |
+| Secrets | secret contract (AS-154, [ADR-0004](../design/adr-0004-secret-management-redaction.md); leaf `internal/orchestrator/secret`) | Declared scopes classified into 4 classes; resolved through a proxy seam into a non-rendering `Value`; injection audit record carries name/scope/expiry/recipient/run — never a value; value-based redaction-at-capture plus the AS-115 pattern scrub; fail closed on missing/unknown scope. |
 | Sandbox seam | sandbox interface (AS-153) | Local checkout first; rootless container / microVM behind one interface later. |
 | Operator API/UI | AS-155 | Thin wrapper over the same run-control verbs; not a control path of its own. |
 
@@ -109,7 +109,7 @@ Explicitly **out of scope**, and the engine must refuse them rather than degrade
 | Q4 | Specs repo-only or UI-editable | **Decided:** repo-only and repo-reviewed for the dogfood wave; the future UI may *propose* and export to repo but the repo stays the source of truth. Reinforces non-goal "Smith editing its own job specs." → **AS-160**. |
 | Q5 | Auto-merge policy for Smith PRs | **Deferred to AS-157**, constrained by D-ORCH-6 (author-is-Smith + required-checks-green + required labels; never bypass protection / merge on unknown checks). |
 | Q6 | Routing explicit per step vs delegated | **Decided:** both supported — explicit per-step provider policy or a named routing policy/skill (D-ORCH-4). Mechanism → **AS-150**. |
-| Q7 | First secrets approach | **Deferred to AS-154**, informed by the **AS-158** research spike; contract (declared scopes, no plaintext, redaction-at-capture, fail-closed) is fixed here. |
+| Q7 | First secrets approach | **Decided (AS-154):** declared scopes in 4 classes, credential-proxy resolver seam so values never enter spec/DB/log, non-rendering `Value`, injection audit record without values, value-based redaction-at-capture (complementing AS-115), fail-closed on missing/unknown scope. Full record: [adr-0004-secret-management-redaction.md](../design/adr-0004-secret-management-redaction.md). |
 | Q8 | First sandbox backend | **Decided for MVP 0:** none / local checkout. Container/microVM behind the AS-153 interface, informed by **AS-158**. |
 | Q9 | First budget ceilings | **Deferred** to the dogfood workflow pack (**AS-152**); enforced via existing budget guardrails (AS-041/AS-086) per step and per run. |
 | Q-148 | GitHub auth: App vs scoped token | **Decided (AS-148):** MVP 0 = tightly scoped fine-grained maintainer PAT (Contents/PRs/Issues r/w, Checks read); GitHub App minting short-lived per-operation installation tokens is the MVP 1+ migration target behind a credential-accessor seam. Full record: [adr-0003-github-auth-strategy.md](../design/adr-0003-github-auth-strategy.md). |
