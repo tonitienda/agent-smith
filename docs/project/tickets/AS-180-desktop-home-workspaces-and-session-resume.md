@@ -1,15 +1,15 @@
 ---
-id: AS-172
+id: AS-180
 title: Desktop home, recent workspaces, and session resume
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-170, AS-007, AS-064]
+depends_on: [AS-178, AS-007, AS-064]
 area: faces
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-172 · Desktop home, recent workspaces, and session resume
+# AS-180 · Desktop home, recent workspaces, and session resume
 
 **Status: ready to implement**
 
@@ -43,4 +43,4 @@ feel meaningfully better than launching Smith manually each time.
 
 ## Dependencies
 
-- AS-170, AS-007, AS-064.
+- AS-178, AS-007, AS-064.

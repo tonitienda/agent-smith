@@ -1,15 +1,15 @@
 ---
-id: AS-170
+id: AS-178
 title: Desktop interactive transcript and composer
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-168, AS-169]
+depends_on: [AS-176, AS-177]
 area: faces
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-170 · Desktop interactive transcript and composer
+# AS-178 · Desktop interactive transcript and composer
 
 **Status: ready to implement**
 
@@ -47,4 +47,4 @@ desktop-specific conversation model.
 
 ## Dependencies
 
-- AS-168, AS-169.
+- AS-176, AS-177.

@@ -1,15 +1,15 @@
 ---
-id: AS-173
+id: AS-181
 title: Desktop context and cost rail
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-170, AS-025, AS-020, AS-063]
+depends_on: [AS-178, AS-025, AS-020, AS-063]
 area: faces
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-173 · Desktop context and cost rail
+# AS-181 · Desktop context and cost rail
 
 **Status: ready to implement**
 
@@ -41,4 +41,4 @@ in progress.
 
 ## Dependencies
 
-- AS-170, AS-025, AS-020, AS-063.
+- AS-178, AS-025, AS-020, AS-063.

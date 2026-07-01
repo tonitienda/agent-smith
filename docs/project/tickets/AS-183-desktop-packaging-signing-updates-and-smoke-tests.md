@@ -1,15 +1,15 @@
 ---
-id: AS-175
+id: AS-183
 title: Wails desktop packaging, signing, updates, and smoke tests
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-168, AS-169, AS-170]
+depends_on: [AS-176, AS-177, AS-178]
 area: quality
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-175 · Wails desktop packaging, signing, updates, and smoke tests
+# AS-183 · Wails desktop packaging, signing, updates, and smoke tests
 
 **Status: ready to implement**
 
@@ -46,4 +46,4 @@ This work is operationally important enough that it should not be deferred until
 
 ## Dependencies
 
-- AS-168, AS-169, AS-170.
+- AS-176, AS-177, AS-178.

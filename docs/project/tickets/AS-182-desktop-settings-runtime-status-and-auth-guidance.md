@@ -1,15 +1,15 @@
 ---
-id: AS-174
+id: AS-182
 title: Desktop settings, runtime status, and auth guidance
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-169, AS-170, AS-017]
+depends_on: [AS-177, AS-178, AS-017]
 area: faces
 priority: P2
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-174 · Desktop settings, runtime status, and auth guidance
+# AS-182 · Desktop settings, runtime status, and auth guidance
 
 **Status: ready to implement**
 
@@ -44,4 +44,4 @@ management.
 
 ## Dependencies
 
-- AS-169, AS-170, AS-017.
+- AS-177, AS-178, AS-017.

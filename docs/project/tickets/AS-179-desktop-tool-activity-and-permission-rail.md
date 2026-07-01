@@ -1,15 +1,15 @@
 ---
-id: AS-171
+id: AS-179
 title: Desktop tool activity and permission rail
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-170, AS-024, AS-016]
+depends_on: [AS-178, AS-024, AS-016]
 area: faces
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-171 · Desktop tool activity and permission rail
+# AS-179 · Desktop tool activity and permission rail
 
 **Status: ready to implement**
 
@@ -46,4 +46,4 @@ debug console.
 
 ## Dependencies
 
-- AS-170, AS-024, AS-016.
+- AS-178, AS-024, AS-016.

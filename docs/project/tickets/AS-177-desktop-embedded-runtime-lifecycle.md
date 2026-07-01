@@ -1,15 +1,15 @@
 ---
-id: AS-169
+id: AS-177
 title: Desktop embedded runtime lifecycle and app state
 status: ready-to-implement
 github_issue: null
-depends_on: [AS-168, AS-077]
+depends_on: [AS-176, AS-077]
 area: faces
 priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-169 · Desktop embedded runtime lifecycle and app state
+# AS-177 · Desktop embedded runtime lifecycle and app state
 
 **Status: ready to implement**
 
@@ -46,4 +46,4 @@ shell/core boundary.
 
 ## Dependencies
 
-- AS-168.
+- AS-176.

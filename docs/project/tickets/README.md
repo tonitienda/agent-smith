@@ -241,7 +241,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
 
-## Index — Desktop app wave (AS-168 … AS-175)
+## Index — Desktop app wave (AS-176 … AS-183)
 
 Single packaged desktop app on Wails, with a strict internal adapter boundary
 over the Smith core, per [smith-desktop-wails-prd.md](../smith-desktop-wails-prd.md).
@@ -250,14 +250,14 @@ broader workboard or IDE-style expansion.
 
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
-| [AS-168](AS-168-wails-desktop-shell-bootstrap.md) | Wails desktop shell bootstrap over Smith core adapter | faces | ready-to-implement | AS-077 |
-| [AS-169](AS-169-desktop-managed-runtime-lifecycle.md) | Desktop embedded runtime lifecycle and app state | faces | ready-to-implement | AS-168, AS-077 |
-| [AS-170](AS-170-desktop-interactive-transcript-and-composer.md) | Desktop interactive transcript and composer | faces | ready-to-implement | AS-168, AS-169 |
-| [AS-171](AS-171-desktop-tool-activity-and-permission-rail.md) | Desktop tool activity and permission rail | faces | ready-to-implement | AS-170, AS-024, AS-016 |
-| [AS-172](AS-172-desktop-home-workspaces-and-session-resume.md) | Desktop home, recent workspaces, and session resume | faces | ready-to-implement | AS-170, AS-007, AS-064 |
-| [AS-173](AS-173-desktop-context-and-cost-rail.md) | Desktop context and cost rail | faces | ready-to-implement | AS-170, AS-025, AS-020, AS-063 |
-| [AS-174](AS-174-desktop-settings-runtime-status-and-auth-guidance.md) | Desktop settings, runtime status, and auth guidance | faces | ready-to-implement | AS-169, AS-170, AS-017 |
-| [AS-175](AS-175-desktop-packaging-signing-updates-and-smoke-tests.md) | Wails desktop packaging, signing, updates, and smoke tests | quality | ready-to-implement | AS-168, AS-169, AS-170 |
+| [AS-176](AS-176-wails-desktop-shell-bootstrap.md) | Wails desktop shell bootstrap over Smith core adapter | faces | ready-to-implement | — |
+| [AS-177](AS-177-desktop-embedded-runtime-lifecycle.md) | Desktop embedded runtime lifecycle and app state | faces | ready-to-implement | AS-176 |
+| [AS-178](AS-178-desktop-interactive-transcript-and-composer.md) | Desktop interactive transcript and composer | faces | ready-to-implement | AS-176, AS-177 |
+| [AS-179](AS-179-desktop-tool-activity-and-permission-rail.md) | Desktop tool activity and permission rail | faces | ready-to-implement | AS-178, AS-024, AS-016 |
+| [AS-180](AS-180-desktop-home-workspaces-and-session-resume.md) | Desktop home, recent workspaces, and session resume | faces | ready-to-implement | AS-178, AS-007, AS-064 |
+| [AS-181](AS-181-desktop-context-and-cost-rail.md) | Desktop context and cost rail | faces | ready-to-implement | AS-178, AS-025, AS-020, AS-063 |
+| [AS-182](AS-182-desktop-settings-runtime-status-and-auth-guidance.md) | Desktop settings, runtime status, and auth guidance | faces | ready-to-implement | AS-177, AS-178, AS-017 |
+| [AS-183](AS-183-desktop-packaging-signing-updates-and-smoke-tests.md) | Wails desktop packaging, signing, updates, and smoke tests | quality | ready-to-implement | AS-176, AS-177, AS-178 |
 
 ## Index — PM discovery backlog (Pending Debrief)
 

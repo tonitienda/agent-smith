@@ -1,5 +1,5 @@
 ---
-id: AS-168
+id: AS-176
 title: Wails desktop shell bootstrap over Smith core adapter
 status: ready-to-implement
 github_issue: null
@@ -9,7 +9,7 @@ priority: P1
 source: docs/project/smith-desktop-wails-prd.md
 ---
 
-# AS-168 · Wails desktop shell bootstrap over Smith core adapter
+# AS-176 · Wails desktop shell bootstrap over Smith core adapter
 
 **Status: ready to implement**
 
