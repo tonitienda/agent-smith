@@ -143,9 +143,9 @@ func (s *Store) Enqueue(n NewRun, now time.Time) (Run, error) {
 	id := newRunID()
 	if _, err := tx.Exec(`
 		INSERT INTO runs (id, job_id, trigger_kind, concurrency_key, concurrency_limit,
-			idempotency_key, status, attempt, max_attempts, budget_usd, timeout_secs, queued_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
-		id, n.JobID, n.TriggerKind, n.ConcurrencyKey, limit, n.IdempotencyKey,
+			idempotency_key, trigger_context, status, attempt, max_attempts, budget_usd, timeout_secs, queued_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+		id, n.JobID, n.TriggerKind, n.ConcurrencyKey, limit, n.IdempotencyKey, n.TriggerContext,
 		string(StatusQueued), maxAttempts, n.BudgetUSD, int(n.Timeout.Seconds()), now.UTC(),
 	); err != nil {
 		return Run{}, err
@@ -407,6 +407,7 @@ func (s *Store) Rerun(runID string, now time.Time) (Run, error) {
 		ConcurrencyKey:   src.ConcurrencyKey,
 		ConcurrencyLimit: src.ConcurrencyLimit,
 		IdempotencyKey:   "rerun:" + runID + ":" + newRunID(),
+		TriggerContext:   src.TriggerContext,
 		BudgetUSD:        src.BudgetUSD,
 		Timeout:          time.Duration(src.TimeoutSecs) * time.Second,
 		MaxAttempts:      src.MaxAttempts,
@@ -544,7 +545,7 @@ func (s *Store) AuditEntries(limit int) ([]AuditEntry, error) {
 // --- internal helpers ---
 
 const runCols = `id, job_id, trigger_kind, concurrency_key, concurrency_limit, idempotency_key,
-	status, failure_class, attempt, max_attempts, budget_usd, timeout_secs, session_id, cost_usd,
+	trigger_context, status, failure_class, attempt, max_attempts, budget_usd, timeout_secs, session_id, cost_usd,
 	error, worker_id, queued_at, started_at, finished_at, heartbeat_at`
 
 // rowScanner is the shared shape of *sql.Row and *sql.Rows.
@@ -568,7 +569,7 @@ func scanRun(sc rowScanner) (Run, error) {
 	var r Run
 	var status, fc string
 	if err := sc.Scan(&r.ID, &r.JobID, &r.TriggerKind, &r.ConcurrencyKey, &r.ConcurrencyLimit, &r.IdempotencyKey,
-		&status, &fc, &r.Attempt, &r.MaxAttempts, &r.BudgetUSD, &r.TimeoutSecs, &r.SessionID, &r.CostUSD,
+		&r.TriggerContext, &status, &fc, &r.Attempt, &r.MaxAttempts, &r.BudgetUSD, &r.TimeoutSecs, &r.SessionID, &r.CostUSD,
 		&r.Error, &r.WorkerID, &r.QueuedAt, &r.StartedAt, &r.FinishedAt, &r.HeartbeatAt); err != nil {
 		return Run{}, err
 	}

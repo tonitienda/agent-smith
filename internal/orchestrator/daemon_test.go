@@ -166,6 +166,29 @@ func TestGitHubTriggerMatch(t *testing.T) {
 	}
 }
 
+// EnqueueGitHub stamps the event's targetable context onto the run so a later
+// deterministic hook can act on the originating issue/PR (AS-147).
+func TestGitHubTriggerPersistsContext(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	d := newTestDaemon(t, &now)
+
+	runs, err := d.EnqueueGitHub(GitHubEvent{
+		DeliveryID: "d3", Kind: "github.issue_labeled", Repository: "o/r",
+		Label: "implementation", Number: 99, Actor: "octocat",
+	})
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("enqueue = %v err=%v", runs, err)
+	}
+	stored, err := d.store.Run(runs[0].ID)
+	if err != nil {
+		t.Fatalf("load run: %v", err)
+	}
+	tc := decodeTriggerContext(stored.TriggerContext)
+	if tc.Repository != "o/r" || tc.Number != 99 || tc.Actor != "octocat" {
+		t.Fatalf("persisted trigger context = %+v", tc)
+	}
+}
+
 func TestOnConflictDrop(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	d := newTestDaemon(t, &now)

@@ -220,7 +220,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
-| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | ready | AS-160, AS-161 |
+| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | orchestrator | done | AS-160, AS-161 |
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | done | AS-159, AS-147 |
 | [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | ready | AS-147, AS-148 |
 | [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | ready | AS-160 |

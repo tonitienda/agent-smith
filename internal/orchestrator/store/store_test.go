@@ -1,6 +1,7 @@
 package store
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -184,4 +185,44 @@ func TestPauseFlagPersistsAcrossReload(t *testing.T) {
 	if !j.Paused {
 		t.Fatal("paused flag lost on reload")
 	}
+}
+
+// A run's opaque trigger context survives enqueue → read so a deterministic hook
+// can recover the originating GitHub target (AS-147).
+func TestTriggerContextRoundTrips(t *testing.T) {
+	s := openTest(t)
+	now := time.Now()
+	ctx := `{"repository":"o/r","number":42}`
+	r, err := s.Enqueue(NewRun{JobID: "job1", TriggerContext: ctx}, now)
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	got, err := s.Run(r.ID)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got.TriggerContext != ctx {
+		t.Fatalf("trigger context = %q, want %q", got.TriggerContext, ctx)
+	}
+}
+
+// migrate is idempotent: reopening the same on-disk store re-runs the schema and
+// the additive ADD COLUMN without error (the duplicate column is tolerated).
+func TestMigrateIsIdempotentOnReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runs.db")
+	s1, err := Open(path)
+	if err != nil {
+		t.Fatalf("open 1: %v", err)
+	}
+	if _, err := s1.Enqueue(NewRun{JobID: "job1", TriggerContext: "{}"}, time.Now()); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+	if err := s1.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatalf("open 2 (re-migrate): %v", err)
+	}
+	t.Cleanup(func() { _ = s2.Close() })
 }

@@ -95,6 +95,13 @@ type GitHubAction struct {
 	Ref        string `json:"ref,omitempty"` // branch or commit
 	PRNumber   int    `json:"pr_number,omitempty"`
 	URL        string `json:"url,omitempty"` // PR/comment link
+	// Outcome records whether the side effect succeeded ("ok") or failed
+	// ("failed"); Error carries the failure detail. Both are additive (D2) so the
+	// append-only session is a faithful record of hook success *and* failure
+	// (AS-147), not only the actions that landed. Empty Outcome reads as a legacy
+	// block written before the field existed (treat as succeeded).
+	Outcome string `json:"outcome,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // ArtifactRef is the decoded payload of a KindArtifactRef block: a large run

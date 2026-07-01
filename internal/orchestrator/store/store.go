@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -98,9 +99,14 @@ type NewRun struct {
 	ConcurrencyKey   string
 	ConcurrencyLimit int
 	IdempotencyKey   string
-	BudgetUSD        float64
-	Timeout          time.Duration
-	MaxAttempts      int
+	// TriggerContext is an opaque JSON blob the daemon stamps with the trigger's
+	// context (e.g. a GitHub event's repository, issue/PR number, and actor) so a
+	// deterministic hook can later target the right issue/PR without re-parsing the
+	// original webhook. The store treats it as opaque bytes (AS-147).
+	TriggerContext string
+	BudgetUSD      float64
+	Timeout        time.Duration
+	MaxAttempts    int
 }
 
 // Run is one queued/active/finished run's control row.
@@ -111,6 +117,7 @@ type Run struct {
 	ConcurrencyKey   string
 	ConcurrencyLimit int
 	IdempotencyKey   string
+	TriggerContext   string
 	Status           RunStatus
 	FailureClass     FailureClass
 	Attempt          int
@@ -212,6 +219,7 @@ CREATE TABLE IF NOT EXISTS runs (
 	concurrency_key   TEXT NOT NULL DEFAULT '',
 	concurrency_limit INTEGER NOT NULL DEFAULT 1,
 	idempotency_key   TEXT NOT NULL DEFAULT '',
+	trigger_context   TEXT NOT NULL DEFAULT '',
 	status            TEXT NOT NULL,
 	failure_class     TEXT NOT NULL DEFAULT '',
 	attempt           INTEGER NOT NULL DEFAULT 0,
@@ -264,6 +272,27 @@ CREATE TABLE IF NOT EXISTS audit (
 func (s *Store) migrate() error {
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("orchestrator/store: migrate: %w", err)
+	}
+	// Additively backfill columns onto stores created before they existed. The
+	// schema DDL is create-if-not-exists, so it never touches an existing table;
+	// an idempotent ADD COLUMN (ignoring the duplicate-column error) upgrades an
+	// older runs table in place (D2 additive-only).
+	if err := addColumn(s.db, "runs", "trigger_context", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// addColumn adds column to table if it is not already present. SQLite has no
+// ADD COLUMN IF NOT EXISTS, so a duplicate-column error on re-run is treated as
+// success, making migrate idempotent.
+func addColumn(db *sql.DB, table, column, decl string) error {
+	_, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, decl))
+	if err != nil && strings.Contains(err.Error(), "duplicate column name") {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("orchestrator/store: add column %s.%s: %w", table, column, err)
 	}
 	return nil
 }
