@@ -196,14 +196,20 @@ func createOrUpdatePR(ctx context.Context, pr PRActions, rec prRecorder, job *sp
 		if err != nil {
 			return recordPRFailure(rec, GitHubAction{Action: "update_pr", Repository: repo, Ref: head, PRNumber: existing.Number}, err)
 		}
-		return store.FailureNone, rec.GitHubAction(GitHubAction{Action: "update_pr", Repository: repo, Ref: head, PRNumber: existing.Number, URL: url, Outcome: "ok"})
+		if err := rec.GitHubAction(GitHubAction{Action: "update_pr", Repository: repo, Ref: head, PRNumber: existing.Number, URL: url, Outcome: "ok"}); err != nil {
+			return store.FailureInternal, err
+		}
+		return store.FailureNone, nil
 	}
 
 	opened, err := pr.CreatePR(ctx, repo, content)
 	if err != nil {
 		return recordPRFailure(rec, GitHubAction{Action: "open_pr", Repository: repo, Ref: head}, err)
 	}
-	return store.FailureNone, rec.GitHubAction(GitHubAction{Action: "open_pr", Repository: repo, Ref: head, PRNumber: opened.Number, URL: opened.URL, Outcome: "ok"})
+	if err := rec.GitHubAction(GitHubAction{Action: "open_pr", Repository: repo, Ref: head, PRNumber: opened.Number, URL: opened.URL, Outcome: "ok"}); err != nil {
+		return store.FailureInternal, err
+	}
+	return store.FailureNone, nil
 }
 
 // recordPRFailure records a failed PR action and returns the internal failure
