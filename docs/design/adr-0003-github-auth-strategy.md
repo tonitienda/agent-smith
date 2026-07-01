@@ -70,16 +70,19 @@ the deterministic shell; models never hold the credential):
 | Flow | Fine-grained permission | Level |
 | --- | --- | --- |
 | Read issues / PRs | Issues, Pull requests | read |
-| Read checks / statuses | Checks, Commit statuses | read |
+| Read others' checks (merge gating) | Checks | read |
+| Report Smith's own run outcome on a commit | Commit statuses | read/write |
 | Create branches, push contents | Contents | read/write |
 | Open / update PRs | Pull requests | read/write |
 | Comment | Issues, Pull requests | read/write |
 | Label (add/remove) | Issues, Pull requests | read/write |
 | Merge / auto-merge (guarded) | Contents, Pull requests | read/write |
 
-Net grant set = **Contents r/w, Pull requests r/w, Issues r/w, Checks read,
-Commit statuses read** — mirroring the Claude GitHub App's grant. No
-Administration, no Actions-write, no org scopes, no Secrets.
+Net grant set = **Contents r/w, Pull requests r/w, Issues r/w, Commit statuses
+r/w, Checks read**. Checks is read-only (Smith *reads* required-check results to
+gate merge, D-ORCH-6); Commit statuses is r/w because the `status` action hook
+*posts* Smith's run outcome back onto the commit. No Administration, no
+Actions-write, no org scopes, no Secrets.
 
 ## Fail-closed: permission failures are operator actions
 
@@ -106,7 +109,10 @@ failure (D-ORCH-6):
   plaintext-credential guard (`internal/orchestrator/spec/secrets.go`, which
   already rejects `github_pat_*`/`ghp_*` literals) enforce this. The run holds a
   scoped credential; branch pushes are restricted to the run's own
-  `claude/…`-prefixed branch (never force-push, never bypass protection).
+  `claude/…`-prefixed branch — enforced programmatically by the orchestrator's
+  executor before the push (and/or by repository branch-protection rules), since
+  a fine-grained PAT's `Contents: write` is repo-wide and cannot itself scope
+  writes to a branch (never force-push, never bypass protection).
 - **Lifetime.** Fine-grained PATs are created with a **fixed expiry**
   (≤ 90 days recommended); GitHub emails on approaching expiry. The App migration
   replaces this with per-operation installation tokens (~1 h TTL) minted on
