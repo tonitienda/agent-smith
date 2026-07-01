@@ -115,6 +115,13 @@ func isHighRiskPath(p string) bool {
 	if i := strings.LastIndex(q, "/"); i >= 0 {
 		base = q[i+1:]
 	}
+	switch {
+	case strings.HasPrefix(base, "id_rsa"), strings.HasPrefix(base, "id_dsa"),
+		strings.HasPrefix(base, "id_ecdsa"), strings.HasPrefix(base, "id_ed25519"):
+		// Common SSH private key filenames carry no secret/credential token or
+		// .pem/.key suffix, so name them explicitly.
+		return true
+	}
 	return strings.Contains(base, "secret") || strings.Contains(base, "credential") ||
 		strings.HasSuffix(base, ".pem") || strings.HasSuffix(base, ".key")
 }
@@ -144,6 +151,12 @@ func EvaluateMerge(policy *spec.MergePolicy, facts MergeFacts) MergeDecision {
 
 	block := func(reason string) MergeDecision {
 		return MergeDecision{Allowed: false, Mode: mode, Reason: reason, Inputs: inputs}
+	}
+
+	// An unknown author defeats the no-self-approval gates (sameLogin against "" is
+	// always false), so any merge-enabling mode is refused fail-closed.
+	if mode != "off" && facts.Author == "" {
+		return block("forbidden: PR author is unknown (cannot verify self-approval gates)")
 	}
 
 	switch mode {
@@ -202,8 +215,13 @@ func EvaluateMerge(policy *spec.MergePolicy, facts MergeFacts) MergeDecision {
 			if p.Name != "label_present" {
 				continue
 			}
-			label, _ := p.Arg.(string)
-			if label != "" && !hasLabel(facts.Labels, label) {
+			label, ok := p.Arg.(string)
+			if !ok || label == "" {
+				// A validated spec always carries a string label (validate.go rule 12);
+				// treat anything else as fail-closed rather than a silently-skipped gate.
+				return block("forbidden: label_present predicate has a non-string/empty argument")
+			}
+			if !hasLabel(facts.Labels, label) {
 				return block(fmt.Sprintf("required: missing label %q", label))
 			}
 		}
@@ -310,7 +328,10 @@ func hasIndependentApproval(f MergeFacts) bool {
 		if a == "" || sameLogin(a, f.Author) {
 			continue
 		}
-		if strings.Contains(strings.ToLower(a), "smith") {
+		// A bot approval is not an independent *human* review. Match the [bot] login
+		// suffix rather than the substring "smith", which would falsely reject a human
+		// reviewer named e.g. "johnsmith".
+		if strings.HasSuffix(strings.ToLower(a), "[bot]") {
 			continue
 		}
 		return true

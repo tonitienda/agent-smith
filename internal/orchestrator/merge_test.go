@@ -82,6 +82,8 @@ func TestEvaluateMergeBlocks(t *testing.T) {
 		{"secret file changed", func(f *orchestrator.MergeFacts) {
 			f.ChangedFiles = append(f.ChangedFiles, "config/prod.secret.env")
 		}, "high-risk"},
+		{"unknown author", func(f *orchestrator.MergeFacts) { f.Author = "" }, "author is unknown"},
+		{"bot-only approval", func(f *orchestrator.MergeFacts) { f.Approvals = []string{"github-actions[bot]"} }, "no independent human approval"},
 		{"not smith authored", func(f *orchestrator.MergeFacts) { f.Head = "feature/human" }, "not Smith-authored"},
 		{"missing required label", func(f *orchestrator.MergeFacts) { f.Labels = []string{"smith-generated"} }, "missing label"},
 		{"no approval", func(f *orchestrator.MergeFacts) { f.Approvals = nil }, "no independent human approval"},
