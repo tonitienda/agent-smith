@@ -203,6 +203,8 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 |---|---|---|---|---|
 | [AS-143](AS-143-serve-runtime-flow-diagram.md) | Add `smith serve` JSON-RPC/WebSocket runtime flow diagram to runtime-flows.md | architecture | done | AS-077 |
 | [AS-162](AS-162-archtest-package-contracts-completeness.md) | Guard that every internal package is accounted for in package-contracts.md | quality | done | AS-098, AS-146 |
+| [AS-169](AS-169-tool-runtime-eventlog-consumer-seam.md) | tool.Runtime couples to concrete `*eventlog.Log` instead of a consumer seam (AS-091) | architecture | needs-clarification | AS-091, AS-098 |
+| [AS-170](AS-170-orchestrator-async-runner-adr-reconciliation.md) | Orchestrator daemon ships its own scheduler/concurrency; ADR D-ORCH-3 still says it "reuses the async runner" | orchestrator | needs-clarification | AS-159, AS-161 |
 
 ## Index — Orchestrator dogfood wave (AS-159 … AS-161, AS-147 … AS-158)
 
@@ -298,6 +300,17 @@ dogfood wave (AS-147…AS-157, AS-162) and AS-117, against the now-landed AS-159
 ADR, the AS-158 research spike, and the AS-043/AS-048 implementations — all of
 those moved to `ready-to-implement`, with the resolution recorded in each
 ticket's "Clarification" section.
+
+A 2026-07-01 QA pass (comparing the architecture docs, arch tests, and code)
+corrected four stale dependency claims in `package-contracts.md` directly (the
+tools row and "A new tool" narrative now name the real `eventlog`/`provider`
+edges; `routing` gains `render`; `redaction` loses a phantom `render`; the
+orchestrator "Depends on" row now reflects the injected-`Executor` reality) and
+filed two `needs-clarification` items where the answer touches an interface
+convention or an Accepted ADR: **AS-169** (should `tool.Runtime` take an eventlog
+consumer seam per AS-091, or keep the concrete type?) and **AS-170** (the
+orchestrator daemon ships its own SQLite-lease scheduler rather than reusing the
+async runner as ADR D-ORCH-3 fixed — amend the ADR or the code?).
 
 One open item remains: **AS-113** (plugin consent screen), which has nothing to
 hang a consent flow on until a plugin-install/marketplace path exists (§7.26,
