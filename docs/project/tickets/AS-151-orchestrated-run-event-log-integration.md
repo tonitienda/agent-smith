@@ -1,7 +1,7 @@
 ---
 id: AS-151
 title: Smith event-log integration for orchestrated runs
-status: ready-to-implement
+status: done
 area: observability
 priority: P2
 depends_on: [AS-161]
@@ -16,11 +16,40 @@ Ensure every orchestrated job/run is persisted as a normal Smith append-only ses
 
 ## Acceptance criteria
 
-- [ ] Orchestrated runs create readable/resumable Smith sessions rather than a separate log format.
-- [ ] Session metadata links job ID, trigger ID, run DB ID, attempt number, provider role, GitHub refs, PR links, and artifact IDs.
-- [ ] GitHub actions, policy checks, provider calls, costs, and terminal outcomes are represented as event-log blocks or referenced metadata.
-- [ ] Cost and insights readers can process orchestrated sessions without a separate code path.
-- [ ] Large artifacts are integrity-checked and referenced rather than embedded in the JSONL event log.
+- [x] Orchestrated runs create readable/resumable Smith sessions rather than a separate log format.
+- [x] Session metadata links job ID, trigger ID, run DB ID, attempt number, provider role, GitHub refs, PR links, and artifact IDs.
+- [x] GitHub actions, policy checks, provider calls, costs, and terminal outcomes are represented as event-log blocks or referenced metadata.
+- [x] Cost and insights readers can process orchestrated sessions without a separate code path.
+- [x] Large artifacts are integrity-checked and referenced rather than embedded in the JSONL event log.
+
+## Implementation
+
+The session seam lives in `internal/orchestrator`:
+
+- **`runlog.go`** — a `Recorder` creates one ordinary Smith session per run
+  (`session.Store.CreateWith`), stamps the run linkage (`RunLink`: job/run/trigger
+  /attempt + repo/org/owner, growing PR links and artifact ids) onto the session
+  metadata under `Metadata.Ext["orchestration"]` so operators can list runs
+  without replaying the log, and appends lifecycle blocks. The five orchestration
+  kinds (`orchestration_run_start`/`_policy`/`_github`/`_artifact`/`_run_outcome`)
+  are non-content harness kinds whose payload rides on `Block.Ext` (D2 additive
+  escape hatch, like `KindEscalation`); the frozen union (AS-003) is untouched.
+  Provider spend is recorded as the standard `eventlog.KindUsage` block, so
+  `cost.Summarize` / `insights.Analyze` price an orchestrated session with no
+  separate code path. Artifacts are rejected unless they carry a `uri` + `sha256`
+  (integrity-checked reference, never embedded bytes).
+- **`sessionexec.go`** — `SessionExecutor` decorates an inner `Executor`
+  (default `StubExecutor`), opening a `Recorder`, running the real work, and
+  writing the terminal outcome back into the run's session; `Outcome.SessionID`
+  points at the recorded session so the run store links to it. AS-149/150 step
+  executors record their own GitHub/policy/usage blocks against the same run via
+  the exported `Recorder`.
+- **`internal/session`** — additive `Metadata.Ext` field + `CreateWith` /
+  exported `WriteMetadata` so identity metadata round-trips through `metadata.json`.
+- Wired into `smith runs daemon start` (`cmd/smith/orchestrator.go`).
+
+Decoders (`PolicyDecisionOf`, `GitHubActionOf`, `ArtifactRefOf`, `RunOutcomeOf`,
+`RunLinkOf`) are exported for the operator surface (AS-155).
 
 ## Clarification (resolved 2026-06-30)
 

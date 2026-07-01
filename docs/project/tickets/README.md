@@ -224,7 +224,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | orchestrator | done | AS-159, AS-147 |
 | [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | orchestrator | ready | AS-147, AS-148 |
 | [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | orchestrator | ready | AS-160 |
-| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | ready | AS-161 |
+| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | orchestrator | done | AS-161 |
 | [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | orchestrator | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
 | [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | orchestrator | ready | AS-159, AS-161, AS-158 |
 | [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | ready | AS-159, AS-148, AS-158 |

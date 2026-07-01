@@ -17,6 +17,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/orchestrator"
 	"github.com/tonitienda/agent-smith/internal/orchestrator/store"
 	"github.com/tonitienda/agent-smith/internal/run"
+	"github.com/tonitienda/agent-smith/internal/session"
 )
 
 // Orchestrator daemon timings (AS-161). The tick interval bounds cron resolution
@@ -128,7 +129,15 @@ func runsDaemonStart(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	d := orchestrator.New(st, orchestrator.Options{})
+	// Persist every run as a normal Smith session (AS-151) so /cost, /insights,
+	// and replay reach orchestrated runs through the existing readers.
+	sessions, err := session.NewStore("", wd)
+	if err != nil {
+		return err
+	}
+	d := orchestrator.New(st, orchestrator.Options{
+		Executor: orchestrator.NewSessionExecutor(sessions, nil),
+	})
 	if err := d.LoadDir(wd); err != nil {
 		// Per-spec fail-closed: warn about rejected specs but serve the clean ones.
 		_, _ = fmt.Fprintf(c.Stderr, "smith: %v\n", err)

@@ -60,6 +60,14 @@ type Metadata struct {
 	// and a child is discoverable as belonging to its parent. Empty for a normal,
 	// user-started session. Additive and omitempty (D2): older logs simply lack it.
 	Parent string `json:"parent,omitempty"`
+	// Ext is a forward-compatible escape hatch for callers that need to attach
+	// small, listable identity metadata to a session without teaching this
+	// generic package about their domain (mirrors schema.Block.Ext). An
+	// orchestrated run (AS-151) stores its job/run/trigger linkage here under the
+	// "orchestration" key so the operator surface can list runs cheaply from
+	// metadata.json without replaying the whole event log. Additive and omitempty
+	// (D2): older logs simply lack it, and unknown keys are preserved on rewrite.
+	Ext map[string]json.RawMessage `json:"ext,omitempty"`
 }
 
 // Summary is the project-scoped listing view for a stored session. Every field
@@ -118,12 +126,20 @@ func (s *Store) ProjectSessionsDir() string {
 // metadata file is fsynced before the session is returned, so a crash after
 // Create does not leave an undiscoverable log directory.
 func (s *Store) Create(title string) (*Session, error) {
+	return s.CreateWith(title, nil)
+}
+
+// CreateWith is Create with additive identity metadata attached to the session's
+// metadata.json under Metadata.Ext (AS-151). An orchestrated run passes its
+// job/run/trigger linkage so operator tooling can list runs without replaying
+// the log; a nil ext behaves exactly like Create.
+func (s *Store) CreateWith(title string, ext map[string]json.RawMessage) (*Session, error) {
 	id := newID()
 	dir := filepath.Join(s.ProjectSessionsDir(), id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("session: create dir: %w", err)
 	}
-	meta := Metadata{ID: id, ProjectPath: s.projectDir, CreatedAt: time.Now().UTC(), Title: title}
+	meta := Metadata{ID: id, ProjectPath: s.projectDir, CreatedAt: time.Now().UTC(), Title: title, Ext: ext}
 	if err := writeMetadata(dir, meta); err != nil {
 		return nil, err
 	}
@@ -313,6 +329,12 @@ func summarize(dir string, meta Metadata) (Summary, error) {
 	sort.Strings(models)
 	return Summary{Metadata: meta, UpdatedAt: updated, EventCount: len(events), SizeBytes: stat.Size(), Models: models, Dir: dir}, nil
 }
+
+// WriteMetadata atomically rewrites the metadata.json for the session rooted at
+// dir. It lets a caller update additive identity fields (Metadata.Ext, AS-151)
+// on an already-created session — an orchestrated run folds PR links and artifact
+// ids into its linkage as it progresses — without a second write path.
+func WriteMetadata(dir string, meta Metadata) error { return writeMetadata(dir, meta) }
 
 func writeMetadata(dir string, meta Metadata) error {
 	b, err := json.MarshalIndent(meta, "", "  ")
