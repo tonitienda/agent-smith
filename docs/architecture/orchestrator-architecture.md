@@ -120,7 +120,7 @@ Following AS-159, the architecture/boundary questions are resolved, so the two
 foundational build tickets move to **ready-to-implement**:
 
 - **AS-160** — job spec / DSL: location, shape, and declarative-action principle fixed here; the format is now specified in [job-spec-dsl.md](../design/job-spec-dsl.md) (status: done).
-- **AS-161** — daemon / scheduler / SQLite run store: command shape, package boundary, and store/session split fixed here. **Status: done** — `internal/orchestrator` (+ `/store`) ships the loader, SQLite run store, cron/manual/GitHub scheduler, bounded execution, and the `smith runs daemon` operator surface; the real step `Executor` is wired by AS-147/149/150/151.
+- **AS-161** — daemon / scheduler / SQLite run store: command shape, package boundary, and store/session split fixed here. **Status: done** — `internal/orchestrator` (+ `/store`) ships the loader, SQLite run store, cron/manual/GitHub scheduler, bounded execution, and the `smith runs daemon` operator surface; the real step `Executor` is wired by AS-147/149/150 (session persistence landed in AS-151 — `SessionExecutor` records each run as a normal Smith session).
 
 These stay **needs-clarification**, each gated on a product decision and/or the
 AS-158 research spike (their ticket Open-questions sections name the blocker):
