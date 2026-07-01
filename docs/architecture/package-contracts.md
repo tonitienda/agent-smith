@@ -26,11 +26,11 @@ those lower layers never depend back up.
 | **Projection** | `internal/projection` | `schema`, `internal/eventlog` | provider, loop, faces |
 | **Provider contracts** | `internal/provider` | `schema` | concrete providers, loop, faces |
 | **Concrete providers** | `internal/provider/anthropic`, `internal/provider/openai` | `internal/provider`, `schema` | loop, faces, `cmd/*` |
-| **Tools** | `internal/tool` (+ `builtin`) | `schema` | loop, faces |
+| **Tools** | `internal/tool` (+ `builtin`) | `schema`; the runtime also `internal/eventlog` (records `tool_result` blocks), the registry also `internal/provider` (renders defs into the wire format) | loop, faces |
 | **Run manifest** | `internal/manifest` | `schema`, `internal/cost`, `internal/render` | provider, loop, faces, `cmd/*` |
 | **OTel export** | `internal/otelexport` | `schema`, `internal/eventlog`, `internal/cost` | provider, loop, projection, faces, `cmd/*` |
 | **Loop** | `internal/loop` | provider contracts, tools, eventlog, projection, budget, subagent | faces (`internal/tui`, `internal/serve`), `cmd/*` |
-| **Orchestrator** | `internal/orchestrator` (orchestration tier, ADR D-ORCH-3) | core contracts (eventlog, provider, config, cost, async runner) | inward-core packages, faces, `cmd/*` |
+| **Orchestrator** | `internal/orchestrator` (orchestration tier, ADR D-ORCH-3) | today only its own `internal/orchestrator/spec` + `.../store` leaves; the core-contract deps (eventlog, provider, config, cost, the async runner) are injected through the `Executor` seam as AS-147/149/150/151 land (the ADR-vs-shipped-daemon reconciliation is tracked by AS-170) | inward-core packages, faces, `cmd/*` |
 | **Job-spec model** | `internal/orchestrator/spec` (stdlib-only leaf) | `schema`-style stdlib only | everything else |
 | **Run-control store** | `internal/orchestrator/store` (SQLite leaf, AS-161) | stdlib + `modernc.org/sqlite` | the daemon depends on it; it imports no daemon/loop/faces |
 | **Faces** | `internal/tui`, `internal/serve` | core packages below | other faces, `cmd/*` |
@@ -98,8 +98,16 @@ maintenance point — append it to the allow-list.
   the Go standard library; it must not import the loop, faces, or composition
   roots.
 - **A new tool**: under `internal/tool` (or `internal/tool/builtin` for the
-  shipped set), depending only on `schema` and stdlib. The loop and faces wire
-  tools in; a tool never reaches back into them.
+  shipped set). A concrete built-in *tool* is a leaf depending only on `schema`
+  (and `internal/tool`) — `internal/tool/builtin` imports nothing else. The
+  shared `internal/tool` package itself carries the `Runtime` and `Registry`, so
+  it points inward at two lower contracts: the `Runtime` records `tool_result`
+  blocks to `internal/eventlog`, and the `Registry` renders tool defs into
+  `internal/provider.ToolDef`. Neither is the loop or a face — the loop and faces
+  wire tools in; a tool never reaches back *up* into them. (Whether the `Runtime`
+  should take a tiny eventlog *consumer seam* instead of the concrete
+  `*eventlog.Log`, matching the loop's `EventLog` seam and AS-091, is tracked by
+  AS-169.)
 - **Application wiring**: shared, face-neutral construction belongs in
   `internal/smithapp`; process-specific entry/composition belongs in `cmd/*`.
 - **User-delegated subagents** (AS-046, the `task` tool): the tool itself
@@ -228,14 +236,15 @@ maintenance point — append it to the allow-list.
   hardcoding model ids, so a model swap is one policy change, not a grep across
   features. The composition root builds the policy (config overlay via
   `routing.ConfigFrom`, D2 tolerate-but-warn) and hands it to the loop, `/compact`,
-  sub-agents, and the default selection; it is a stdlib + `schema` leaf and points
+  sub-agents, and the default selection; it is a stdlib + `schema` + `render` leaf
+  (the shared `render` primitives format the `/route` output) and points
   inward — `delegate` depends on it, not the reverse.
 - **Capture-time redaction** (`redaction`, AS-115): `internal/redaction` is the
   best-effort secret-scrub filter installed on the event log's single write
   chokepoint. It satisfies the `eventlog.Redactor` consumer seam (`Redact` a body
   before persist) so secrets never reach the append-only log; the composition root
   builds it from config (`redaction.Build` / `ConfigFrom`) and installs it with
-  `Log.SetRedactor`. A leaf over `schema` (+ `render`); `eventlog` declares the
+  `Log.SetRedactor`. A stdlib + `schema` leaf; `eventlog` declares the
   seam and never imports back.
 - **Cosmetic personality** (`personality`, AS-053): the optional "Matrix" theme
   layer. Its one architectural invariant is *containment* — no business/substance
