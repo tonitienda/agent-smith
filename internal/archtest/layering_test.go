@@ -96,6 +96,12 @@ func TestLayeringContracts(t *testing.T) {
 			reason:    "the SQLite run store (AS-161) is a storage leaf under the orchestrator; the daemon depends on it, not the reverse, and it holds run-control state only — it never reaches into the spec model, the loop, or a face",
 		},
 		{
+			name:         "orchestrator secret contract is a stdlib-only leaf",
+			pkgDir:       "internal/orchestrator/secret",
+			forbidModule: true,
+			reason:       "the secret-handling contract (AS-154) owns the types and rules only; the daemon and sandbox seam (AS-153/AS-156) inject a concrete Resolver (credential proxy) and consume the Value/AuditRecord/Redactor, so the leaf depends on no credential backend, daemon, loop, or face",
+		},
+		{
 			name:      "loop does not import faces or composition roots",
 			pkgDir:    "internal/loop",
 			forbidden: []string{"internal/tui", "internal/serve", "cmd"},
