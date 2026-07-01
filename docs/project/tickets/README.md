@@ -266,6 +266,8 @@ These items come from competitor/product research and are intentionally marked `
 | [AS-165](AS-165-background-cost-ledger.md) | Background cost ledger and autonomous activity attribution | cost | ready-to-implement | AS-020, AS-041, AS-054, AS-120, AS-132 |
 | [AS-166](AS-166-shareable-session-bundles.md) | Shareable redacted session bundles | collaboration | ready-to-implement | AS-005, AS-055, AS-079, AS-115, AS-154 |
 | [AS-167](AS-167-command-surface-simplification.md) | Command surface simplification and progressive disclosure audit | commands | Pending Debrief | AS-022, AS-066, AS-090, AS-104, AS-105 |
+| [AS-171](AS-171-run-completion-notifications.md) | Outbound completion notifications for background & orchestrator runs | async | Pending Debrief | AS-054, AS-115, AS-132, AS-155, AS-161 |
+| [AS-172](AS-172-team-credential-gateway-audit.md) | Team credential gateway and cross-session prompt/tool audit trail | security | Pending Debrief | AS-016, AS-017, AS-115, AS-154, AS-165 |
 
 ## PM discovery PRDs (Pending Debrief)
 
@@ -289,7 +291,7 @@ These items come from competitor/product research and are intentionally marked `
 11. **Harness quality system**: 099 documents the shared contract, then 100 adds scripts, 101 wires agent/local hooks, and 102/103 add skills and CI-local parity guards. This sequence can run alongside feature work because it reduces round trips for all later tickets.
 12. **Recorded-provider regression harness**: 135 defines the safe capture-to-fixture workflow, 133 builds the fake vendor servers over AS-060 captures, and 134 promotes those fixtures into offline E2E coverage for the loop, TUI, subagents, cost, and append-only JSONL.
 13. **Orchestrator dogfood wave** (always-on deterministic workflow engine; ADR AS-159): 159 (architecture/boundaries, done) → 160 (job-spec DSL, done) / 161 (daemon + SQLite run store, done), with 158 (research spike, done — [research notes](../../research/orchestrator-competitive-research.md)) feeding 148/153/154/156/157. The GitHub, routing, event-log, sandbox, secrets, operator, deployment, and auto-merge tickets (147–157, plus 162) are now `ready`, clarified against the landed ADR and research spike; build them in roughly their dependency order (147/150/151 first, then 148/149, then 153/154/156/157, then 155, with 152 last as it composes the rest).
-14. **PM discovery backlog**: debrief the competitor-driven PRDs and tickets before implementation. AS-164…AS-166 have been accepted into `ready-to-implement`; the remaining open PM work is to split the Project Intelligence Map and Local Agent Workboard PRDs into numbered implementation tickets and debrief AS-167 before deciding which command families to collapse.
+14. **PM discovery backlog**: debrief the competitor-driven PRDs and tickets before implementation. AS-164…AS-166 have been accepted into `ready-to-implement`; the remaining open PM work is to split the Project Intelligence Map and Local Agent Workboard PRDs into numbered implementation tickets, debrief AS-167 before deciding which command families to collapse, and debrief the 2026-07-01 additions AS-171 (background/orchestrator completion notifications, spun out of AS-054's deferred webhook/desktop-notification scope) and AS-172 (whether a team credential gateway + audit export belongs in Smith at all, versus external tooling over the event log).
 
 ## Needs clarification — decisions to make
 

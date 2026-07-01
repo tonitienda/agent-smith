@@ -1285,6 +1285,20 @@ smith:
 
 ## 20. Open questions
 
+### 20.0 Market signal (research note, 2026-07-01)
+
+OpenAI's June 2026 acquisition of Ona (formerly Gitpod) is a direct competitive
+data point for this draft: Ona sells exactly the "execution zone" concept here
+(sandboxed, policy-governed environments with an audit trail) plus one
+capability this draft doesn't yet name explicitly — automatic ~10-minute
+checkpointing so a long-running remote agent survives the initiating machine
+going offline. See [docs/project/competitors.md](competitors.md) for the full
+writeup and [AS-171](tickets/AS-171-run-completion-notifications.md) for the
+narrower, local-first slice (completion notifications) split out so it doesn't
+wait on this draft's broader design questions. This does not change any
+decision recorded below; it's a signal that the "opt-in premium" framing this
+draft already uses is directionally validated by the market.
+
 ### 20.1 Product questions
 
 - Should distributed execution be enabled by default or opt-in?
