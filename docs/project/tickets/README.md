@@ -195,6 +195,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-144](AS-144-keychain-unreachable-error-classification.md) | `auth set/status` leaks a raw dbus error instead of the actionable env-var hint when no Secret Service is reachable | faces | done | AS-017 |
 | [AS-145](AS-145-archtest-loop-cmd-and-face-cross-imports.md) | Archtest: guard loop↛cmd and face↛face/cmd, the documented-but-unenforced layering rules | quality | done | AS-098, AS-141 |
 | [AS-146](AS-146-archtest-inward-core-no-orchestration.md) | Archtest: guard that inward-core packages do not import orchestration packages | quality | done | AS-098 |
+| [AS-168](AS-168-campaign-stale-and-missing-coverage.md) | Manual test campaign — stale not-implemented rows and missing coverage for AS-140…AS-167 | quality | ready-to-implement | AS-140, AS-123, AS-127, AS-143, AS-158, AS-159, AS-160, AS-161, AS-162, AS-163 |
 
 ## Index — Architecture documentation follow-ons
 
