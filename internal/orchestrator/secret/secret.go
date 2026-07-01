@@ -19,6 +19,7 @@
 package secret
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -211,8 +212,10 @@ type Redactor struct {
 // never persisting them.
 func NewRedactor(values ...Value) *Redactor {
 	r := &Redactor{}
+	seen := map[string]bool{}
 	for _, v := range values {
-		if raw := v.Reveal(); raw != "" {
+		if raw := v.Reveal(); raw != "" && !seen[raw] {
+			seen[raw] = true
 			r.values = append(r.values, raw)
 		}
 	}
@@ -239,5 +242,9 @@ func (r *Redactor) RedactBytes(b []byte) []byte {
 	if r == nil || len(r.values) == 0 {
 		return b
 	}
-	return []byte(r.Redact(string(b)))
+	placeholder := []byte(redactedPlaceholder)
+	for _, v := range r.values {
+		b = bytes.ReplaceAll(b, []byte(v), placeholder)
+	}
+	return b
 }
