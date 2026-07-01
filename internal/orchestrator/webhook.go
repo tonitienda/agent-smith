@@ -87,13 +87,13 @@ func Normalize(eventType, deliveryID string, payload []byte) (GitHubEvent, bool,
 // command (a leading "/smith" prefix is allowed, so "/smith implement" and
 // "/implement" both yield "implement"). Anything else yields "" (not a command).
 func parseCommand(body string) string {
-	line := ""
-	for _, l := range strings.Split(body, "\n") {
-		if strings.TrimSpace(l) != "" {
-			line = strings.TrimSpace(l)
-			break
-		}
+	// First non-empty line only; slice to the first newline rather than splitting
+	// the whole (untrusted, possibly large) body into a slice of every line.
+	line := strings.TrimLeft(body, " \t\r\n")
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
 	}
+	line = strings.TrimSpace(line)
 	if !strings.HasPrefix(line, "/") {
 		return ""
 	}
