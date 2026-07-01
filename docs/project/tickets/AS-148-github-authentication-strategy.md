@@ -1,7 +1,7 @@
 ---
 id: AS-148
 title: GitHub authentication strategy
-status: ready-to-implement
+status: done
 area: integrations
 priority: P2
 depends_on: [AS-159, AS-147]
@@ -16,11 +16,20 @@ Decide and document how the first dogfood orchestrator receives limited GitHub a
 
 ## Acceptance criteria
 
-- [ ] Decision record compares GitHub App installation access, fine-grained user access, and local `gh` delegation for private dogfood use.
-- [ ] Required access is listed per flow: read issues/PRs, read checks, create branches, push contents, open/update PRs, comment, label, and merge/auto-merge.
-- [ ] Permission failures are designed as clear user/operator actions rather than agent decisions.
-- [ ] Credential lifetime, storage location, rotation expectations, and audit behavior are documented.
-- [ ] Migration path from MVP dogfood auth to future GitHub App onboarding is documented.
+- [x] Decision record compares GitHub App installation access, fine-grained user access, and local `gh` delegation for private dogfood use.
+- [x] Required access is listed per flow: read issues/PRs, read checks, create branches, push contents, open/update PRs, comment, label, and merge/auto-merge.
+- [x] Permission failures are designed as clear user/operator actions rather than agent decisions.
+- [x] Credential lifetime, storage location, rotation expectations, and audit behavior are documented.
+- [x] Migration path from MVP dogfood auth to future GitHub App onboarding is documented.
+
+## Resolution (2026-07-01)
+
+Decided in [ADR-0003 — GitHub authentication strategy](../../design/adr-0003-github-auth-strategy.md):
+MVP 0 = tightly scoped fine-grained maintainer PAT (Contents/PRs/Issues r/w,
+Checks read), credential resolved by scope name behind an accessor seam, push
+restricted to the run's own branch, fail-closed on missing scope; GitHub App
+minting short-lived per-operation installation tokens is the MVP 1+ migration
+target (source swap behind the same seam). Resolves Q-148.
 
 ## Clarification (resolved 2026-06-30) — research input (AS-158)
 
