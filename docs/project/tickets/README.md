@@ -252,7 +252,7 @@ broader workboard or IDE-style expansion.
 | ID | Title | Area | Status | Depends on |
 |---|---|---|---|---|
 | [AS-168](AS-168-wails-desktop-shell-bootstrap.md) | Wails desktop shell bootstrap over Smith core adapter | faces | ready-to-implement | AS-077 |
-| [AS-169](AS-169-desktop-managed-runtime-lifecycle.md) | Desktop embedded runtime lifecycle and app state | faces | ready-to-implement | AS-168 |
+| [AS-169](AS-169-desktop-managed-runtime-lifecycle.md) | Desktop embedded runtime lifecycle and app state | faces | ready-to-implement | AS-168, AS-077 |
 | [AS-170](AS-170-desktop-interactive-transcript-and-composer.md) | Desktop interactive transcript and composer | faces | ready-to-implement | AS-168, AS-169 |
 | [AS-171](AS-171-desktop-tool-activity-and-permission-rail.md) | Desktop tool activity and permission rail | faces | ready-to-implement | AS-170, AS-024, AS-016 |
 | [AS-172](AS-172-desktop-home-workspaces-and-session-resume.md) | Desktop home, recent workspaces, and session resume | faces | ready-to-implement | AS-170, AS-007, AS-064 |
