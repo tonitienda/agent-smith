@@ -230,7 +230,7 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | orchestrator | done | AS-159, AS-148, AS-158 |
 | [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | ready | AS-161, AS-151 |
 | [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | orchestrator | ready | AS-161, AS-148, AS-154 |
-| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | ready | AS-147, AS-148, AS-149 |
+| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | orchestrator | done | AS-147, AS-148, AS-149 |
 | [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | orchestrator | done | AS-159 |
 
 ## Index — Orchestrator dogfood wave (`smith-orchestrator-dogfood-prd.md`)

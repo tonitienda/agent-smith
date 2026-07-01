@@ -86,6 +86,10 @@ type PolicyDecision struct {
 	Policy   string `json:"policy"`           // e.g. merge_policy, permissions, budget
 	Decision string `json:"decision"`         // e.g. approved, blocked, skipped
 	Reason   string `json:"reason,omitempty"` // structured, never invented (§9)
+	// Inputs records every fact the decision evaluated (AS-157 acceptance: the
+	// audit trail carries all evaluated inputs, not only the verdict). Additive
+	// (D2): a legacy block without it decodes to a nil map.
+	Inputs map[string]string `json:"inputs,omitempty"`
 }
 
 // GitHubAction is the decoded payload of a KindGitHubAction block.

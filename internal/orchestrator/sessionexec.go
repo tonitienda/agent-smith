@@ -32,6 +32,7 @@ type SessionExecutor struct {
 	inner    Executor
 	actions  GitHubActions // optional AS-147 deterministic-hook port; nil = no hooks
 	pr       PRActions     // optional AS-149 PR-lifecycle port; nil = no PR steps
+	merge    MergeActions  // optional AS-157 merge port; nil = merge steps deferred
 }
 
 // NewSessionExecutor wraps inner so its runs are recorded as Smith sessions in
@@ -62,6 +63,19 @@ func (e *SessionExecutor) WithGitHubActions(actions GitHubActions) *SessionExecu
 // orchestrator with no GitHub credentials still runs every job's cognitive work.
 func (e *SessionExecutor) WithPRActions(pr PRActions) *SessionExecutor {
 	e.pr = pr
+	return e
+}
+
+// WithMergeActions wires the AS-157 merge port so a job's github.enable_auto_merge
+// / github.merge steps are gated by the deterministic merge-policy engine
+// (merge.go): the job's merge_policy is evaluated against the observed PR facts
+// and GitHub native auto-merge is enabled only on a fail-closed allow, with every
+// evaluated input and the final reason recorded on the run's session. It returns
+// the executor for chaining. Left unset (or nil), merge steps record an explicit
+// deferral instead of acting, so an orchestrator without GitHub credentials still
+// runs every job's work cleanly.
+func (e *SessionExecutor) WithMergeActions(m MergeActions) *SessionExecutor {
+	e.merge = m
 	return e
 }
 
@@ -108,7 +122,7 @@ func (e *SessionExecutor) Execute(ctx context.Context, run store.Run, job *spec.
 	// fires). An ownership violation is classified blocked_policy; any other port
 	// error is internal. Skipped entirely when no PR port is wired.
 	if execErr == nil && out.Status == store.StatusSucceeded {
-		if fc, prErr := runPRSteps(ctx, e.pr, rec, job, run, tc); prErr != nil {
+		if fc, prErr := runPRSteps(ctx, e.pr, e.merge, rec, job, run, tc); prErr != nil {
 			out.Status, out.FailureClass, out.Error = store.StatusFailed, fc, prErr.Error()
 			execErr = prErr
 		}

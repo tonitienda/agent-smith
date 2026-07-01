@@ -12,10 +12,11 @@ package orchestrator
 // Like the AS-147 hook runner it is split from its transport: the authenticated
 // client that actually calls the GitHub API is AS-148's domain (scoped token in a
 // proxy outside the runner, push restricted to the run's own branch), injected
-// through [SessionExecutor.WithPRActions]. Merge and auto-merge are NOT performed
-// here — they are delegated to the AS-157 policy engine (this file records a
-// deferral decision rather than acting on a github.merge/enable_auto_merge step,
-// so the punt is explicit per D0, never a silent side effect from prompt text).
+// through [SessionExecutor.WithPRActions]. Merge and auto-merge are decided by the
+// AS-157 policy engine, not this deterministic shell: a github.merge /
+// github.enable_auto_merge step is routed to [runMergeStep] (merge.go), which
+// gates the side effect behind the job's merge_policy so eligibility is never a
+// silent side effect from prompt text.
 
 import (
 	"context"
@@ -118,27 +119,28 @@ func prRepo(job *spec.Spec, tc TriggerContext) string {
 // explicit. The returned failure class is the terminal class when a PR action
 // fails (blocked_policy for an ownership violation, internal otherwise); it is
 // FailureNone on success.
-func runPRSteps(ctx context.Context, pr PRActions, rec prRecorder, job *spec.Spec, run store.Run, tc TriggerContext) (store.FailureClass, error) {
-	if pr == nil || job == nil {
+func runPRSteps(ctx context.Context, pr PRActions, mergePort MergeActions, rec prRecorder, job *spec.Spec, run store.Run, tc TriggerContext) (store.FailureClass, error) {
+	if job == nil {
+		return store.FailureNone, nil
+	}
+	if pr == nil && mergePort == nil {
 		return store.FailureNone, nil
 	}
 	for _, st := range job.Steps {
 		switch st.Uses {
 		case "github.enable_auto_merge", "github.merge":
-			// Merge decisions belong to the AS-157 policy engine, not this
-			// deterministic shell; record the deferral rather than acting (D0).
-			if err := rec.PolicyDecision(PolicyDecision{
-				Policy:   "merge_policy",
-				Decision: "deferred",
-				Reason:   fmt.Sprintf("%s delegated to AS-157 policy engine", st.Uses),
-			}); err != nil {
-				return store.FailureInternal, err
+			// Merge decisions belong to the AS-157 policy engine (merge.go): evaluate
+			// the job's merge_policy against the observed PR facts and act only on a
+			// fail-closed allow, recording every evaluated input either way. With no
+			// merge port wired it records a deferral instead of acting (D0).
+			if fc, err := runMergeStep(ctx, mergePort, rec, job, run, tc, st); err != nil {
+				return fc, err
 			}
 		case "github.create_or_update_pr":
 			// A guarded PR step is skipped fail-closed until the policy engine can
 			// evaluate the guard, mirroring the AS-147 hook runner: opening a PR on
 			// an unevaluated guard would be an unsafe side effect.
-			if st.When != "" {
+			if st.When != "" || pr == nil {
 				continue
 			}
 			if fc, err := createOrUpdatePR(ctx, pr, rec, job, run, tc); err != nil {
