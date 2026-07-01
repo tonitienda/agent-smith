@@ -243,18 +243,24 @@ AS-163 carves the job-spec model + validator out of AS-161 so the daemon builds 
 | [AS-160](AS-160-job-spec-workflow-dsl.md) | Job specification and workflow DSL | orchestrator | done | AS-159 |
 | [AS-161](AS-161-daemon-scheduler-sqlite-run-store.md) | Daemon, scheduler, and SQLite run store | orchestrator | done | AS-159, AS-160, AS-163 |
 | [AS-163](AS-163-job-spec-model-validator.md) | Orchestrator job-spec model + validator | orchestrator | done | AS-159, AS-160 |
-| [AS-147](AS-147-github-events-deterministic-hooks.md) | GitHub event ingestion and deterministic hooks | integrations | ready | AS-160, AS-161 |
-| [AS-148](AS-148-github-authentication-strategy.md) | GitHub authentication strategy | integrations | ready | AS-159, AS-147 |
-| [AS-149](AS-149-pr-lifecycle-automation.md) | PR lifecycle automation | integrations | ready | AS-147, AS-148 |
-| [AS-150](AS-150-multi-provider-workflow-routing.md) | Multi-provider workflow routing | provider | ready | AS-160 |
-| [AS-151](AS-151-orchestrated-run-event-log-integration.md) | Smith event-log integration for orchestrated runs | observability | ready | AS-161 |
-| [AS-152](AS-152-smith-implements-smith-workflows.md) | Smith implements Smith dogfood workflow pack | dogfood | ready | AS-160, AS-161, AS-147, AS-149, AS-150, AS-151, AS-157 |
-| [AS-153](AS-153-sandbox-abstraction-execution-environments.md) | Sandbox abstraction and execution environments | security | ready | AS-159, AS-161, AS-158 |
-| [AS-154](AS-154-secret-management-redaction-contract.md) | Secret management and redaction contract | security | ready | AS-159, AS-148, AS-158 |
-| [AS-155](AS-155-operator-api-ui.md) | Operator API/UI | orchestrator | ready | AS-161, AS-151 |
-| [AS-156](AS-156-private-vpc-deployment.md) | Private VPC deployment | deployment | ready | AS-161, AS-148, AS-154 |
-| [AS-157](AS-157-auto-merge-policies-safety-gates.md) | Auto-merge policies and safety gates | integrations | ready | AS-147, AS-148, AS-149 |
-| [AS-158](AS-158-agent-workflow-sandbox-secrets-research.md) | Competitive agent workflow, sandbox, and secrets research spike | research | done | AS-159 |
+
+## Index — Desktop app wave (AS-176 … AS-183)
+
+Single packaged desktop app on Wails, with a strict internal adapter boundary
+over the Smith core, per [smith-desktop-wails-prd.md](../smith-desktop-wails-prd.md).
+This wave aims for a simple, local-first interactive desktop product before any
+broader workboard or IDE-style expansion.
+
+| ID | Title | Area | Status | Depends on |
+|---|---|---|---|---|
+| [AS-176](AS-176-wails-desktop-shell-bootstrap.md) | Wails desktop shell bootstrap over Smith core adapter | faces | ready-to-implement | — |
+| [AS-177](AS-177-desktop-embedded-runtime-lifecycle.md) | Desktop embedded runtime lifecycle and app state | faces | ready-to-implement | AS-176 |
+| [AS-178](AS-178-desktop-interactive-transcript-and-composer.md) | Desktop interactive transcript and composer | faces | ready-to-implement | AS-176, AS-177 |
+| [AS-179](AS-179-desktop-tool-activity-and-permission-rail.md) | Desktop tool activity and permission rail | faces | ready-to-implement | AS-178, AS-024, AS-016 |
+| [AS-180](AS-180-desktop-home-workspaces-and-session-resume.md) | Desktop home, recent workspaces, and session resume | faces | ready-to-implement | AS-178, AS-007, AS-064 |
+| [AS-181](AS-181-desktop-context-and-cost-rail.md) | Desktop context and cost rail | faces | ready-to-implement | AS-178, AS-025, AS-020, AS-063 |
+| [AS-182](AS-182-desktop-settings-runtime-status-and-auth-guidance.md) | Desktop settings, runtime status, and auth guidance | faces | ready-to-implement | AS-177, AS-178, AS-017 |
+| [AS-183](AS-183-desktop-packaging-signing-updates-and-smoke-tests.md) | Wails desktop packaging, signing, updates, and smoke tests | quality | ready-to-implement | AS-176, AS-177, AS-178 |
 
 ## Index — PM discovery backlog (Pending Debrief)
 
