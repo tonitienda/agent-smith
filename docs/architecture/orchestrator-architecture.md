@@ -112,7 +112,7 @@ Explicitly **out of scope**, and the engine must refuse them rather than degrade
 | Q7 | First secrets approach | **Deferred to AS-154**, informed by the **AS-158** research spike; contract (declared scopes, no plaintext, redaction-at-capture, fail-closed) is fixed here. |
 | Q8 | First sandbox backend | **Decided for MVP 0:** none / local checkout. Container/microVM behind the AS-153 interface, informed by **AS-158**. |
 | Q9 | First budget ceilings | **Deferred** to the dogfood workflow pack (**AS-152**); enforced via existing budget guardrails (AS-041/AS-086) per step and per run. |
-| Q-148 | GitHub auth: App vs scoped token | **Deferred to AS-148**, informed by **AS-158**; MVP 0 may use a tightly scoped maintainer token while the App is spiked. |
+| Q-148 | GitHub auth: App vs scoped token | **Decided (AS-148):** MVP 0 = tightly scoped fine-grained maintainer PAT (Contents/PRs/Issues r/w, Checks read); GitHub App minting short-lived per-operation installation tokens is the MVP 1+ migration target behind a credential-accessor seam. Full record: [adr-0003-github-auth-strategy.md](../design/adr-0003-github-auth-strategy.md). |
 
 ## Downstream ticket disposition
 
