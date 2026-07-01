@@ -17,6 +17,7 @@ import (
 type fakeActions struct {
 	calls  []string
 	target orchestrator.GitHubTarget
+	label  string // last label passed to AddLabel/RemoveLabel
 	failOn string // action name (e.g. "add_label") to return an error for
 }
 
@@ -29,7 +30,8 @@ func (f *fakeActions) record(action string, t orchestrator.GitHubTarget) (string
 	return "https://gh/" + action, nil
 }
 
-func (f *fakeActions) AddLabel(_ context.Context, t orchestrator.GitHubTarget, _ string) (string, error) {
+func (f *fakeActions) AddLabel(_ context.Context, t orchestrator.GitHubTarget, label string) (string, error) {
+	f.label = label
 	return f.record("add_label", t)
 }
 func (f *fakeActions) RemoveLabel(_ context.Context, t orchestrator.GitHubTarget, _ string) (string, error) {
@@ -135,6 +137,45 @@ func TestSessionExecutorSkipsHooksWithoutTarget(t *testing.T) {
 	}
 	if len(fake.calls) != 0 {
 		t.Fatalf("hooks fired without a target: %v", fake.calls)
+	}
+}
+
+// A trigger context with a repository but no issue/PR number (number 0) skips
+// hooks rather than calling GitHub with an invalid target.
+func TestSessionExecutorSkipsHooksWithoutNumber(t *testing.T) {
+	sessions := newSessionStore(t)
+	fake := &fakeActions{}
+	exec := orchestrator.NewSessionExecutor(sessions, orchestrator.StubExecutor{}).WithGitHubActions(fake)
+
+	run := sampleRun()
+	raw, _ := json.Marshal(orchestrator.TriggerContext{Repository: "acme/widgets"}) // Number 0
+	run.TriggerContext = string(raw)
+	job := &spec.Spec{ID: "job_a", Repository: "acme/widgets", Hooks: map[string][]spec.Step{
+		"on_success": {{Uses: "github.add_label", With: map[string]any{"label": "x"}}},
+	}}
+	if _, err := exec.Execute(context.Background(), run, job); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("hook fired for numberless target: %v", fake.calls)
+	}
+}
+
+// A non-string scalar hook argument (unquoted YAML `label: 123`) is stringified
+// rather than dropped to "".
+func TestSessionExecutorStringifiesScalarArg(t *testing.T) {
+	sessions := newSessionStore(t)
+	fake := &fakeActions{}
+	exec := orchestrator.NewSessionExecutor(sessions, orchestrator.StubExecutor{}).WithGitHubActions(fake)
+
+	job := &spec.Spec{ID: "job_a", Repository: "acme/widgets", Hooks: map[string][]spec.Step{
+		"on_start": {{Uses: "github.add_label", With: map[string]any{"label": 123}}},
+	}}
+	if _, err := exec.Execute(context.Background(), ghRun(t, 5), job); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if fake.label != "123" {
+		t.Fatalf("scalar label = %q, want %q", fake.label, "123")
 	}
 }
 

@@ -113,7 +113,10 @@ type hookRecorder interface {
 // unsafe. The first action error stops the point and is returned, so the caller
 // decides whether it fails the run (on_start) or is merely logged (terminal hooks).
 func runHooks(ctx context.Context, actions GitHubActions, rec hookRecorder, steps []spec.Step, tc TriggerContext) error {
-	if actions == nil || len(steps) == 0 || tc.Repository == "" {
+	// A run with no repository or no positive issue/PR number (cron/manual, or a
+	// GitHub event that named no target) has nothing to act on; every AS-147 action
+	// targets an issue/PR, so acting with Number 0 would only produce API errors.
+	if actions == nil || len(steps) == 0 || tc.Repository == "" || tc.Number <= 0 {
 		return nil
 	}
 	target := GitHubTarget{Repository: tc.Repository, Number: tc.Number}
@@ -184,12 +187,19 @@ func commentBody(st spec.Step) string {
 }
 
 // withString reads a string argument from a step's with map, returning "" when the
-// key is absent or not a string (validation of required args is a future policy
-// concern; a missing arg here simply yields an empty value).
+// key is absent. A non-string scalar (an unquoted YAML `label: 123` decodes to an
+// int) is stringified with fmt.Sprint so a common formatting omission still yields
+// the intended value rather than silently dropping to "".
 func withString(st spec.Step, key string) string {
 	if st.With == nil {
 		return ""
 	}
-	s, _ := st.With[key].(string)
-	return s
+	val, ok := st.With[key]
+	if !ok {
+		return ""
+	}
+	if s, ok := val.(string); ok {
+		return s
+	}
+	return fmt.Sprint(val)
 }

@@ -215,7 +215,15 @@ func (d *Daemon) EnqueueGitHub(ev GitHubEvent) ([]store.Run, error) {
 			if t.Kind != ev.Kind || !githubArgsMatch(t, ev) {
 				continue
 			}
-			run, enq, err := d.enqueue(s, ev.Kind, nil, tctx, idemKey(ev.DeliveryID, s.ID, fmt.Sprint(ti)))
+			// Only derive an idempotency key from a real delivery id. An empty
+			// DeliveryID would otherwise build a non-empty ":job:ti" key that
+			// silently dedupes every keyless event for the same job/trigger; an
+			// empty key instead behaves like the manual/cron path (no dedup).
+			var idem string
+			if ev.DeliveryID != "" {
+				idem = idemKey(ev.DeliveryID, s.ID, fmt.Sprint(ti))
+			}
+			run, enq, err := d.enqueue(s, ev.Kind, nil, tctx, idem)
 			if err != nil {
 				return out, err
 			}
