@@ -140,7 +140,7 @@ func (d *Daemon) FireDueCron(now time.Time) ([]store.Run, error) {
 		for !d.crons[i].next.After(now) {
 			s := d.jobs[d.crons[i].jobID]
 			fired := d.crons[i].next
-			run, enq, err := d.enqueue(s, "cron", nil, idemKey("cron", s.ID, fired.UTC().Format(time.RFC3339)))
+			run, enq, err := d.enqueue(s, "cron", nil, "", idemKey("cron", s.ID, fired.UTC().Format(time.RFC3339)))
 			if err != nil {
 				return out, err
 			}
@@ -168,7 +168,7 @@ func (d *Daemon) EnqueueManual(jobID string, inputs map[string]string) (store.Ru
 	if !hasTrigger(s, "manual") {
 		return store.Run{}, fmt.Errorf("orchestrator: job %q has no manual trigger", jobID)
 	}
-	run, _, err := d.enqueue(s, "manual", inputs, "")
+	run, _, err := d.enqueue(s, "manual", inputs, "", "")
 	return run, err
 }
 
@@ -204,6 +204,7 @@ func (d *Daemon) EnqueueGitHub(ev GitHubEvent) ([]store.Run, error) {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	tctx := ev.triggerContextJSON()
 	var out []store.Run
 	for _, id := range ids {
 		s := d.jobs[id]
@@ -214,7 +215,15 @@ func (d *Daemon) EnqueueGitHub(ev GitHubEvent) ([]store.Run, error) {
 			if t.Kind != ev.Kind || !githubArgsMatch(t, ev) {
 				continue
 			}
-			run, enq, err := d.enqueue(s, ev.Kind, nil, idemKey(ev.DeliveryID, s.ID, fmt.Sprint(ti)))
+			// Only derive an idempotency key from a real delivery id. An empty
+			// DeliveryID would otherwise build a non-empty ":job:ti" key that
+			// silently dedupes every keyless event for the same job/trigger; an
+			// empty key instead behaves like the manual/cron path (no dedup).
+			var idem string
+			if ev.DeliveryID != "" {
+				idem = idemKey(ev.DeliveryID, s.ID, fmt.Sprint(ti))
+			}
+			run, enq, err := d.enqueue(s, ev.Kind, nil, tctx, idem)
 			if err != nil {
 				return out, err
 			}
@@ -229,7 +238,7 @@ func (d *Daemon) EnqueueGitHub(ev GitHubEvent) ([]store.Run, error) {
 // enqueue applies the job's concurrency on_conflict policy then records the run.
 // The second result reports whether a run was actually queued (a drop policy or an
 // idempotency hit can suppress it).
-func (d *Daemon) enqueue(s *spec.Spec, triggerKind string, inputs map[string]string, idem string) (store.Run, bool, error) {
+func (d *Daemon) enqueue(s *spec.Spec, triggerKind string, inputs map[string]string, triggerContext, idem string) (store.Run, bool, error) {
 	now := d.now()
 	// Idempotency wins over on_conflict: a re-delivered trigger maps back to its
 	// existing run instead of being counted as a fresh conflict.
@@ -265,6 +274,7 @@ func (d *Daemon) enqueue(s *spec.Spec, triggerKind string, inputs map[string]str
 		ConcurrencyKey:   key,
 		ConcurrencyLimit: s.Concurrency.Limit,
 		IdempotencyKey:   idem,
+		TriggerContext:   triggerContext,
 		BudgetUSD:        s.Budget.Run,
 		Timeout:          s.Timeout.Std(),
 		MaxAttempts:      maxAttempts(s),
