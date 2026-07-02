@@ -1,6 +1,7 @@
 package tidy_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -35,6 +36,53 @@ func text(id string, role schema.Role, chars, ageMinutes int) schema.Block {
 		Role: role,
 		TS:   base.Add(-time.Duration(ageMinutes) * time.Minute),
 		Text: &schema.TextBody{Text: strings.Repeat("x", chars)},
+	}
+}
+
+// shellCall builds a shell tool_call block running cmd, tagged with useID so a
+// result can pair to it.
+func shellCall(id, useID, cmd string, ageMinutes int) schema.Block {
+	args, _ := json.Marshal(struct {
+		Command string `json:"command"`
+	}{Command: cmd})
+	return schema.Block{
+		ID:       id,
+		Kind:     schema.KindToolCall,
+		Role:     schema.RoleAssistant,
+		TS:       base.Add(-time.Duration(ageMinutes) * time.Minute),
+		ToolCall: &schema.ToolCallBody{ToolUseID: useID, Name: "shell", Arguments: args},
+	}
+}
+
+// shellResult builds the tool_result paired to useID; failed sets a non-zero exit
+// code so the detector reads it as a failure.
+func shellResult(id, useID string, failed bool, chars, ageMinutes int) schema.Block {
+	body := &schema.ToolResultBody{ToolUseID: useID, Stdout: strings.Repeat("z", chars)}
+	if failed {
+		code := 1
+		body.ExitCode = &code
+		body.IsError = true
+	}
+	return schema.Block{
+		ID:         id,
+		Kind:       schema.KindToolResult,
+		Role:       schema.RoleTool,
+		TS:         base.Add(-time.Duration(ageMinutes) * time.Minute),
+		ToolResult: body,
+	}
+}
+
+// grepCall builds a grep tool_call searching for pattern.
+func grepCall(id, pattern string, ageMinutes int) schema.Block {
+	args, _ := json.Marshal(struct {
+		Pattern string `json:"pattern"`
+	}{Pattern: pattern})
+	return schema.Block{
+		ID:       id,
+		Kind:     schema.KindToolCall,
+		Role:     schema.RoleAssistant,
+		TS:       base.Add(-time.Duration(ageMinutes) * time.Minute),
+		ToolCall: &schema.ToolCallBody{ToolUseID: "g-" + id, Name: "grep", Arguments: args},
 	}
 }
 
@@ -194,6 +242,149 @@ func TestRecentDropWarns(t *testing.T) {
 	}
 	if !strings.Contains(plan.Warnings[0], "main.go") {
 		t.Errorf("warning = %q, want it to name the file", plan.Warnings[0])
+	}
+}
+
+// TestRepeatedFailureCollapses: a shell command that fails more than once has its
+// earlier identical failures collapsed, keeping the latest failing attempt.
+func TestRepeatedFailureCollapses(t *testing.T) {
+	events := []schema.Block{
+		shellCall("c1", "u1", "go test ./...", 10),
+		shellResult("r1", "u1", true, 300, 10),
+		shellCall("c2", "u2", "go test ./...", 5),
+		shellResult("r2", "u2", true, 300, 5),
+		shellCall("c3", "u3", "go test ./...", 1),
+		shellResult("r3", "u3", true, 300, 1),
+	}
+	plan := preview(events)
+	if len(plan.DeadEnds) != 1 {
+		t.Fatalf("dead ends = %d, want 1", len(plan.DeadEnds))
+	}
+	de := plan.DeadEnds[0]
+	if de.Kind != tidy.KindFailedCommand {
+		t.Errorf("kind = %q, want %q", de.Kind, tidy.KindFailedCommand)
+	}
+	// The two earlier attempts (call+result each) drop; the latest attempt stays.
+	dropped := map[string]bool{}
+	for _, id := range plan.IDs() {
+		dropped[id] = true
+	}
+	for _, id := range []string{"c1", "r1", "c2", "r2"} {
+		if !dropped[id] {
+			t.Errorf("expected %s dropped; drops=%v", id, plan.IDs())
+		}
+	}
+	for _, id := range []string{"c3", "r3"} {
+		if dropped[id] {
+			t.Errorf("latest failing attempt %s should be kept; drops=%v", id, plan.IDs())
+		}
+	}
+}
+
+// TestSingleFailureNotCollapsed: one failed command is a fact the thread may act
+// on, not a dead end.
+func TestSingleFailureNotCollapsed(t *testing.T) {
+	events := []schema.Block{
+		shellCall("c1", "u1", "go build ./...", 5),
+		shellResult("r1", "u1", true, 300, 5),
+	}
+	if plan := preview(events); !plan.Empty() {
+		t.Fatalf("plan not empty for a single failure: %+v", plan)
+	}
+}
+
+// TestAbandonedReadCollapses: a file read the thread moved on from — a later
+// search still hunts it by name and the exact path is never referenced again —
+// is surfaced as a dead end (once past the recency window).
+func TestAbandonedReadCollapses(t *testing.T) {
+	events := []schema.Block{
+		fileRead("r", "scratch/tmp.go", 400, 10),
+		grepCall("g", "tmp.go", 5), // still searching for it after reading it
+		text("u", schema.RoleUser, 40, 4),
+	}
+	plan := preview(events)
+	if len(plan.DeadEnds) != 1 {
+		t.Fatalf("dead ends = %d, want 1", len(plan.DeadEnds))
+	}
+	if plan.DeadEnds[0].Kind != tidy.KindAbandonedRead {
+		t.Errorf("kind = %q, want %q", plan.DeadEnds[0].Kind, tidy.KindAbandonedRead)
+	}
+	if got := plan.IDs(); len(got) != 1 || got[0] != "r" {
+		t.Errorf("drops = %v, want [r]", got)
+	}
+}
+
+// TestReferencedReadNotAbandoned: even with a later search naming the file, a read
+// whose exact path a later block still uses is in use and must not be collapsed.
+func TestReferencedReadNotAbandoned(t *testing.T) {
+	events := []schema.Block{
+		fileRead("r", "pkg/thing.go", 400, 10),
+		grepCall("g", "thing.go", 6),
+		shellCall("c1", "u1", "go vet ./pkg/thing.go", 5),
+		shellResult("r1", "u1", false, 20, 5),
+	}
+	if plan := preview(events); !plan.Empty() {
+		t.Fatalf("plan not empty; a referenced read was collapsed: %+v", plan)
+	}
+}
+
+// TestReadNeverSearchedNotAbandoned: an ordinary read the thread simply keeps in
+// context (no later search for it) is not a dead end — the precision bar.
+func TestReadNeverSearchedNotAbandoned(t *testing.T) {
+	events := []schema.Block{
+		fileRead("r", "keep.go", 400, 10),
+		text("u", schema.RoleUser, 40, 5),
+	}
+	if plan := preview(events); !plan.Empty() {
+		t.Fatalf("plan not empty; a plain kept read was collapsed: %+v", plan)
+	}
+}
+
+// TestRecentReadNotAbandoned: a just-read file is left alone even if unreferenced,
+// mirroring the dedup recency caution.
+func TestRecentReadNotAbandoned(t *testing.T) {
+	events := []schema.Block{
+		fileRead("r", "fresh.go", 400, 0), // within the recent window
+	}
+	if plan := preview(events); !plan.Empty() {
+		t.Fatalf("plan not empty; a very recent read was collapsed: %+v", plan)
+	}
+}
+
+// TestDeadEndApplyUndoRoundTrips: dead ends ride the same exclusion event as
+// dedup, so a single --apply drops them and --undo restores them.
+func TestDeadEndApplyUndoRoundTrips(t *testing.T) {
+	log := eventlog.New()
+	for _, b := range []schema.Block{
+		shellCall("c1", "u1", "make lint", 10),
+		shellResult("r1", "u1", true, 300, 10),
+		shellCall("c2", "u2", "make lint", 1),
+		shellResult("r2", "u2", true, 300, 1),
+	} {
+		if _, err := log.Append(b); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+	}
+	plan := tidy.Preview(projection.Project(log.Events(), projection.Options{TargetModel: model}), cost.Embedded(), model, base)
+	event, ok := tidy.Apply(plan)
+	if !ok {
+		t.Fatal("Apply returned false on a dead-end plan")
+	}
+	if _, err := log.Append(event); err != nil {
+		t.Fatalf("append exclusion: %v", err)
+	}
+	if live := liveIDs(log.Events()); live["c1"] || live["r1"] {
+		t.Errorf("earlier failing attempt still live after collapse; live=%v", live)
+	}
+	undo, _, ok := tidy.Undo(log.Events())
+	if !ok {
+		t.Fatal("Undo returned false; expected a collapse to undo")
+	}
+	if _, err := log.Append(undo); err != nil {
+		t.Fatalf("append undo: %v", err)
+	}
+	if live := liveIDs(log.Events()); !live["c1"] || !live["r1"] {
+		t.Errorf("collapse not restored after undo; live=%v", live)
 	}
 }
 

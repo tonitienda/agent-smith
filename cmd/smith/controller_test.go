@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -354,6 +357,74 @@ func TestTidyNothingToDo(t *testing.T) {
 	}
 	if ctl.pendingTidy != nil {
 		t.Error("/tidy staged a plan when there was nothing to dedupe")
+	}
+}
+
+// appendShell appends a shell tool_call and its paired tool_result, exitCode
+// deciding success/failure — the trial-and-error trace the fact detector reads.
+func appendShell(t *testing.T, ctl *chatSession, useID, cmd string, exitCode int) {
+	t.Helper()
+	args, err := json.Marshal(struct {
+		Command string `json:"command"`
+	}{Command: cmd})
+	if err != nil {
+		t.Fatalf("marshal args: %v", err)
+	}
+	appendBlock(t, ctl, schema.Block{
+		ID:       schema.NewID(),
+		Kind:     schema.KindToolCall,
+		Role:     schema.RoleAssistant,
+		ToolCall: &schema.ToolCallBody{ToolUseID: useID, Name: "shell", Arguments: args},
+	})
+	appendBlock(t, ctl, schema.Block{
+		ID:         schema.NewID(),
+		Kind:       schema.KindToolResult,
+		Role:       schema.RoleTool,
+		ToolResult: &schema.ToolResultBody{ToolUseID: useID, ExitCode: &exitCode, IsError: exitCode != 0},
+	})
+}
+
+// TestTidyPromotesWorkingMemory covers the AS-117 working-memory promotion half:
+// /tidy surfaces a fact the session rediscovered through trial and error, and
+// /tidy --promote writes it to its memory file through AS-048's single
+// memory-writing path (the same path /improve apply uses).
+func TestTidyPromotesWorkingMemory(t *testing.T) {
+	ctl := newTestController(t)
+	// Flail then succeed on a related command: `make tset` fails, `make test`
+	// works — the durable command fact AS-048 detects.
+	appendShell(t, ctl, "u1", "make tset", 1)
+	appendShell(t, ctl, "u2", "make test", 0)
+
+	out, err := runTidy(t, ctl)
+	if err != nil {
+		t.Fatalf("/tidy preview: %v", err)
+	}
+	if !strings.Contains(out.Text, "Working memory") || !strings.Contains(out.Text, "make test") {
+		t.Errorf("preview did not surface the working-memory candidate:\n%s", out.Text)
+	}
+	if len(ctl.pendingTidyFacts) != 1 {
+		t.Fatalf("staged working-memory candidates = %d, want 1", len(ctl.pendingTidyFacts))
+	}
+	target := ctl.pendingTidyFacts[0].Proposal.Target
+
+	pout, err := runTidy(t, ctl, "--promote")
+	if err != nil {
+		t.Fatalf("/tidy --promote: %v", err)
+	}
+	if !strings.Contains(pout.Text, "Promoted to working memory") {
+		t.Errorf("promote did not confirm the save:\n%s", pout.Text)
+	}
+	if ctl.pendingTidyFacts != nil {
+		t.Error("promoted facts not cleared after --promote")
+	}
+	// The fact landed in its memory file through the shared write path.
+	path := filepath.Join(ctl.wd, target)
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read promoted memory file %s: %v", path, err)
+	}
+	if !strings.Contains(string(body), "make test") {
+		t.Errorf("memory file %s missing the promoted fact:\n%s", path, body)
 	}
 }
 

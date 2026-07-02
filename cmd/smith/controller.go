@@ -20,6 +20,7 @@ import (
 	"github.com/tonitienda/agent-smith/internal/composition"
 	"github.com/tonitienda/agent-smith/internal/cost"
 	"github.com/tonitienda/agent-smith/internal/eventlog"
+	"github.com/tonitienda/agent-smith/internal/factdetector"
 	"github.com/tonitienda/agent-smith/internal/goal"
 	"github.com/tonitienda/agent-smith/internal/hook"
 	"github.com/tonitienda/agent-smith/internal/improve"
@@ -192,6 +193,11 @@ type chatSession struct {
 	// invalidates it rather than deduping the wrong log (mirrors pendingClean).
 	pendingTidy    *tidy.Plan
 	pendingTidyFor *session.Session
+	// pendingTidyFacts holds the working-memory promotion candidates surfaced with
+	// the same /tidy preview (AS-117): durable facts the session rediscovered
+	// (AS-048's detector) not yet in their target memory file. /tidy --promote
+	// writes them through AS-048's single memory-writing path.
+	pendingTidyFacts []subagent.Finding
 
 	// pendingRewind holds the previewed /rewind plan awaiting confirmation
 	// (/rewind --apply) or discard (/rewind --cancel), keyed to the session it was
@@ -2142,11 +2148,12 @@ func (s *chatSession) cleanCancel() (command.Output, error) {
 // appended exclusion event, so history is never mutated (D3); the preview is a
 // fidelity diff and /tidy --undo restores the most recent dedup exactly.
 //
-//   - /tidy           preview the dedup (mutates nothing) and stage it
-//   - /tidy --apply   confirm the staged preview, appending the exclusion
-//   - /tidy --undo    restore the most recent dedup
-//   - /tidy --cancel  discard the staged preview
-func (s *chatSession) cmdTidy(ctx context.Context, _ []string) (command.Output, error) {
+//   - /tidy             preview the dedup + dead-end collapse (mutates nothing) and stage it
+//   - /tidy --apply     confirm the staged preview, appending the exclusion
+//   - /tidy --undo      restore the most recent collapse
+//   - /tidy --cancel    discard the staged preview
+//   - /tidy --promote   save a surfaced working-memory fact (AS-117) to its memory file
+func (s *chatSession) cmdTidy(ctx context.Context, args []string) (command.Output, error) {
 	switch f := command.FlagsFrom(ctx); {
 	case f.Bool("apply"):
 		return s.tidyApply()
@@ -2154,23 +2161,122 @@ func (s *chatSession) cmdTidy(ctx context.Context, _ []string) (command.Output, 
 		return s.tidyUndo()
 	case f.Bool("cancel"):
 		return s.tidyCancel()
+	case f.Bool("promote"):
+		return s.tidyPromote(args)
 	}
 	return s.tidyPreview()
 }
 
-// tidyPreview stages a dedup: it projects the live window, builds the plan, and
-// stores it pending confirmation. Nothing is appended to the log.
+// tidyPreview stages a collapse: it projects the live window, builds the plan
+// (dedup + dead ends), surfaces working-memory promotion candidates, and stores
+// both pending confirmation. Nothing is appended to the log or written to disk.
 func (s *chatSession) tidyPreview() (command.Output, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	proj := projection.Project(s.sess.Log.Events(), projection.Options{TargetModel: s.model})
 	plan := tidy.Preview(proj, s.pricing, s.model, time.Now())
+	s.pendingTidyFacts = s.workingMemoryCandidates(proj.Live())
 	if plan.Empty() {
 		s.pendingTidy, s.pendingTidyFor = nil, nil
-		return command.Output{Text: tidy.RenderPreview(plan)}, nil
+		return command.Output{Text: s.renderTidy(plan)}, nil
 	}
 	s.pendingTidy, s.pendingTidyFor = &plan, s.sess
-	return command.Output{Text: tidy.RenderPreview(plan)}, nil
+	return command.Output{Text: s.renderTidy(plan)}, nil
+}
+
+// renderTidy joins the exclusion fidelity diff with the working-memory promotion
+// candidates so one preview shows both halves of §7.13.
+func (s *chatSession) renderTidy(plan tidy.Plan) string {
+	out := tidy.RenderPreview(plan)
+	if len(s.pendingTidyFacts) == 0 {
+		return out
+	}
+	var b strings.Builder
+	b.WriteString(out)
+	b.WriteString("\n\nWorking memory — durable facts rediscovered this session:\n")
+	for i, f := range s.pendingTidyFacts {
+		target := f.Summary
+		if f.Proposal != nil {
+			target = fmt.Sprintf("%s → %s", f.Proposal.Description, f.Proposal.Target)
+		}
+		fmt.Fprintf(&b, "  [%d] %s\n", i+1, target)
+	}
+	b.WriteString("Save one with /tidy --promote <n>, or all with /tidy --promote.\n")
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// workingMemoryCandidates runs AS-048's rediscovered-fact detector over the live
+// window and keeps the propose-only facts not already recorded in their target
+// memory file. It reuses the same detector and save-target resolver the passive
+// sub-agent uses, so /tidy only surfaces candidates — the write is deferred to
+// AS-048's single memory-writing path (tidyPromote). Requires the caller to hold
+// s.mu (it reads s.wd/s.skills).
+func (s *chatSession) workingMemoryCandidates(live []schema.Block) []subagent.Finding {
+	resolve := saveTargetResolver(s.wd, s.skills)
+	res := factdetector.New(resolve, nil).Teardown(subagent.Scope{Session: s.sess.ID}, live)
+	var out []subagent.Finding
+	for _, f := range res.Findings {
+		if f.Proposal == nil {
+			continue
+		}
+		path, ok := resolveApplyTarget(s.wd, f.Proposal.Target)
+		if !ok {
+			continue
+		}
+		existing, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			continue
+		}
+		if containsLine(existing, f.Proposal.Description) {
+			continue // already saved: nothing to promote
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// tidyPromote saves surfaced working-memory facts to their target memory file
+// through AS-048's single memory-writing path (resolveApplyTarget +
+// appendMemoryLine) — /tidy never invents a second write path. With no argument
+// it promotes every surfaced fact; with a 1-based index it promotes just that one.
+func (s *chatSession) tidyPromote(args []string) (command.Output, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	facts := s.pendingTidyFacts
+	if len(facts) == 0 {
+		return command.Output{Text: "No working-memory candidates. Run /tidy to surface them first."}, nil
+	}
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 || n > len(facts) {
+			return command.Output{Text: fmt.Sprintf("Not a candidate number: %q (the list has %d).", args[0], len(facts))}, nil
+		}
+		facts = facts[n-1 : n]
+	}
+	var saved []string
+	for _, f := range facts {
+		path, ok := resolveApplyTarget(s.wd, f.Proposal.Target)
+		if !ok {
+			return command.Output{Text: fmt.Sprintf("Refusing to promote: target %q escapes the working directory.", f.Proposal.Target)}, nil
+		}
+		existing, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return command.Output{}, fmt.Errorf("read memory file: %w", err)
+		}
+		if containsLine(existing, f.Proposal.Description) {
+			continue
+		}
+		if err := appendMemoryLine(path, existing, f.Proposal.Description); err != nil {
+			return command.Output{}, fmt.Errorf("write memory file: %w", err)
+		}
+		saved = append(saved, fmt.Sprintf("%s → %s", f.Proposal.Description, f.Proposal.Target))
+	}
+	// Promoted facts are done — drop them so a re-run does not re-offer them.
+	s.pendingTidyFacts = nil
+	if len(saved) == 0 {
+		return command.Output{Text: "Nothing to promote — the facts are already saved."}, nil
+	}
+	return command.Output{Text: "Promoted to working memory:\n  " + strings.Join(saved, "\n  ")}, nil
 }
 
 // tidyApply confirms the staged preview, appending the exclusion event that
@@ -2195,8 +2301,28 @@ func (s *chatSession) tidyApply() (command.Output, error) {
 		return command.Output{}, fmt.Errorf("record exclusion: %w", err)
 	}
 	s.pendingTidy, s.pendingTidyFor = nil, nil
-	return command.Output{Text: fmt.Sprintf("Deduped %s, reclaiming %d tokens. Restore with /tidy --undo.",
-		pluralReads(plan.DroppedCount()), plan.Tokens)}, nil
+	return command.Output{Text: fmt.Sprintf("Tidied %s, reclaiming %d tokens. Restore with /tidy --undo.",
+		tidySummary(plan), plan.Tokens)}, nil
+}
+
+// tidySummary describes what an applied plan removed — deduped reads, collapsed
+// dead ends, or both — for the confirm line.
+func tidySummary(plan tidy.Plan) string {
+	var dedup int
+	for _, g := range plan.Groups {
+		dedup += len(g.Drop)
+	}
+	var parts []string
+	if dedup > 0 {
+		parts = append(parts, pluralReads(dedup))
+	}
+	if n := len(plan.DeadEnds); n > 0 {
+		parts = append(parts, render.Count(n, "dead end"))
+	}
+	if len(parts) == 0 {
+		return pluralReads(plan.DroppedCount())
+	}
+	return strings.Join(parts, " and ")
 }
 
 // tidyUndo restores the most recent /tidy dedup by appending a counter-exclusion.
@@ -2218,10 +2344,10 @@ func (s *chatSession) tidyUndo() (command.Output, error) {
 func (s *chatSession) tidyCancel() (command.Output, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pendingTidy == nil {
+	if s.pendingTidy == nil && len(s.pendingTidyFacts) == 0 {
 		return command.Output{Text: "Nothing staged to cancel."}, nil
 	}
-	s.pendingTidy, s.pendingTidyFor = nil, nil
+	s.pendingTidy, s.pendingTidyFor, s.pendingTidyFacts = nil, nil, nil
 	return command.Output{Text: "Discarded the staged /tidy preview. Nothing changed."}, nil
 }
 
