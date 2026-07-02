@@ -16,18 +16,29 @@ import (
 // modulePath is this module's import path. Imports under it are first-party.
 const modulePath = "github.com/tonitienda/agent-smith"
 
-// thirdPartyAllowed lists the module-relative package directory prefixes that
-// may import third-party (non-stdlib, non-first-party) dependencies: the
-// terminal face and the process composition roots under cmd/. Everything else is
-// the stdlib-first core (see docs/architecture/dependency-boundaries.md).
+// thirdPartyAllowedTree lists the module-relative package directory prefixes
+// whose whole subtree may import third-party (non-stdlib, non-first-party)
+// dependencies: the terminal face and the process composition roots under cmd/.
+// Everything else is the stdlib-first core (see
+// docs/architecture/dependency-boundaries.md).
 //
 // Adding an entry here is the documented escape hatch for a justified exception
 // (PRD D6); keep this list and the boundaries doc in lockstep.
-var thirdPartyAllowed = []string{
-	"internal/tui",          // the interactive TUI face (Bubble Tea / Lip Gloss / Glamour)
-	"internal/credential",   // OS-keychain secret-store adapter (go-keyring); AS-017, D9
-	"internal/orchestrator", // orchestrator daemon: SQLite run store (modernc.org/sqlite) + YAML job loader (gopkg.in/yaml.v3); AS-161, ADR D-ORCH-4
-	"cmd",                   // executable composition roots wire faces and terminal setup
+var thirdPartyAllowedTree = []string{
+	"internal/tui",                // the interactive TUI face (Bubble Tea / Lip Gloss / Glamour)
+	"internal/credential",         // OS-keychain secret-store adapter (go-keyring); AS-017, D9
+	"internal/orchestrator/store", // orchestrator run store: SQLite (modernc.org/sqlite); AS-161, ADR D-ORCH-4
+	"cmd",                         // executable composition roots wire faces and terminal setup
+}
+
+// thirdPartyAllowedPkg lists module-relative directories whose *own* files may
+// import third-party deps, matched exactly so the walker still descends into the
+// subpackages below them and applies the stdlib-first check there. This is what
+// keeps the orchestrator daemon's YAML loader exempt while still guarding its
+// stdlib-only leaves (internal/orchestrator/spec, internal/orchestrator/secret)
+// against a regression that adds a third-party import (AS-185).
+var thirdPartyAllowedPkg = []string{
+	"internal/orchestrator", // orchestrator daemon: YAML job loader (gopkg.in/yaml.v3); AS-161, ADR D-ORCH-4
 }
 
 // TestCoreStaysStdlibFirst walks every non-test Go source in the module and
@@ -53,7 +64,7 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 			}
 			// Skip whole subtrees that are allowed to import third-party code, so
 			// the guard never parses the face or executable layers at all.
-			if isThirdPartyAllowed(filepath.ToSlash(rel)) {
+			if isThirdPartyAllowedTree(filepath.ToSlash(rel)) {
 				return fs.SkipDir
 			}
 			return nil
@@ -64,6 +75,12 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
+		// A package whose own files are exempt (e.g. the orchestrator daemon root)
+		// still has its subpackages walked, but its direct sources may import
+		// third-party deps.
+		if isThirdPartyAllowedPkg(filepath.ToSlash(filepath.Dir(rel))) {
+			return nil
+		}
 
 		file, parseErr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if parseErr != nil {
@@ -72,7 +89,7 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 		for _, imp := range file.Imports {
 			p := strings.Trim(imp.Path.Value, `"`)
 			if isThirdParty(p) {
-				t.Errorf("%s imports third-party %q; core packages must stay stdlib-first (AS-095, PRD D6). If this is a justified exception, add the package to thirdPartyAllowed and docs/architecture/dependency-boundaries.md.", rel, p)
+				t.Errorf("%s imports third-party %q; core packages must stay stdlib-first (AS-095, PRD D6). If this is a justified exception, add the package to thirdPartyAllowedTree/thirdPartyAllowedPkg and docs/architecture/dependency-boundaries.md.", rel, p)
 			}
 		}
 		return nil
@@ -82,11 +99,23 @@ func TestCoreStaysStdlibFirst(t *testing.T) {
 	}
 }
 
-// isThirdPartyAllowed reports whether a module-relative package directory is in
-// (or under) a layer permitted to import third-party dependencies.
-func isThirdPartyAllowed(dir string) bool {
-	for _, prefix := range thirdPartyAllowed {
+// isThirdPartyAllowedTree reports whether a module-relative package directory is
+// in (or under) a subtree permitted to import third-party dependencies.
+func isThirdPartyAllowedTree(dir string) bool {
+	for _, prefix := range thirdPartyAllowedTree {
 		if dir == prefix || strings.HasPrefix(dir, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// isThirdPartyAllowedPkg reports whether a module-relative package directory is
+// exactly one whose own files may import third-party dependencies (its
+// subpackages are still walked and guarded).
+func isThirdPartyAllowedPkg(dir string) bool {
+	for _, pkg := range thirdPartyAllowedPkg {
+		if dir == pkg {
 			return true
 		}
 	}

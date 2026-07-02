@@ -1,7 +1,7 @@
 ---
 id: AS-185
 title: "Archtest: the orchestrator stdlib-only leaves (spec, secret) have no third-party guard"
-status: ready-to-implement
+status: done
 github_issue: null
 depends_on: [AS-095, AS-098, AS-154, AS-163]
 area: quality
