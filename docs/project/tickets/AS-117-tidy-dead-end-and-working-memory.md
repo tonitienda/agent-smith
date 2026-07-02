@@ -1,7 +1,7 @@
 ---
 id: AS-117
 title: /tidy dead-end collapse + working-memory promotion (spun out of AS-043)
-status: ready-to-implement
+status: done
 github_issue: 382
 depends_on: [AS-043, AS-048]
 area: context-wedge
@@ -11,7 +11,25 @@ source: PRD.md §7.13, §9; AS-043 clarified decisions
 
 # AS-117 · /tidy dead-end collapse + working-memory promotion
 
-**Status: ready to implement**
+**Status: done**
+
+## Implementation notes
+
+- **Dead-end collapse** lives in `internal/tidy/deadend.go`, folded into
+  `tidy.Preview`/`Plan` so it rides the *same* `KindExclusion` event and fidelity
+  diff as the dedup half — one preview→apply/undo cycle (`/tidy` · `--apply` ·
+  `--undo`), no second removal path. Two high-precision signals per the AS-043
+  clarified decision: (1) a shell command that failed **more than once** (keep the
+  latest failure, drop the earlier identical ones), and (2) a file read the thread
+  visibly moved on from — a later grep/glob still hunts it by name and the exact
+  path is never referenced again (the later-search requirement is the precision
+  bar so an ordinary kept read is never collapsed). Recent reads are left alone.
+- **Working-memory promotion** is surfaced in the same `/tidy` preview but the
+  write is deferred to AS-048's single memory-writing path: `tidyPreview` runs the
+  `factdetector` (AS-048) over the live window with the shared `saveTargetResolver`
+  and `/tidy --promote [<n>]` writes accepted facts via the same
+  `resolveApplyTarget`/`appendMemoryLine` helpers `/improve apply` uses — no second
+  memory-writing path is introduced.
 
 ## Description
 

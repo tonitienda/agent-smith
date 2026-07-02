@@ -16,10 +16,14 @@
 // read is retained, every live fact survives by construction — there is nothing
 // to summarize and nothing to lose.
 //
-// Dead-end collapse and working-memory promotion (§7.13) are deferred follow-on
-// work (AS-117): they need dead-end heuristics and share AS-048's single
-// memory-writing path, and must not become a second silent removal path. This
-// package is the dedup half — the part the ticket calls pure mechanics.
+// Dead-end collapse (AS-117, §7.13) extends the same reversible exclusion: over
+// the live window it surfaces heuristic dead ends — shell commands that failed
+// repeatedly and file reads never referenced again — and folds them into the one
+// exclusion event dedup already builds, so both share a single preview→apply/undo
+// cycle and neither becomes a silent removal path (the fidelity diff still
+// decides). Working-memory promotion — the other §7.13 half — is not here: it is
+// a memory-file *write*, so it reuses AS-048's single memory-writing path in the
+// command layer rather than this exclusion engine (see deadend.go).
 package tidy
 
 import (
@@ -75,11 +79,12 @@ type Group struct {
 // the fidelity diff the user confirms before any change is applied (§9). The
 // Before/After fields are the segment + token inventory the diff reports.
 type Plan struct {
-	Groups   []Group // deduped paths, largest reclaim first
-	Tokens   int     // total estimated tokens reclaimed
-	CostUSD  float64 // total cost reclaimed at the input rate
-	Priced   bool    // false when the active model is unpriced ($ blank)
-	Currency string  // money prefix, e.g. "$"
+	Groups   []Group   // deduped paths, largest reclaim first
+	DeadEnds []DeadEnd // heuristic dead ends (AS-117), largest reclaim first
+	Tokens   int       // total estimated tokens reclaimed (dedup + dead ends)
+	CostUSD  float64   // total cost reclaimed at the input rate
+	Priced   bool      // false when the active model is unpriced ($ blank)
+	Currency string    // money prefix, e.g. "$"
 	Warnings []string
 
 	BeforeSegments int // live segments before tidy
@@ -89,14 +94,20 @@ type Plan struct {
 }
 
 // Empty reports whether the plan would change nothing.
-func (p Plan) Empty() bool { return len(p.Groups) == 0 }
+func (p Plan) Empty() bool { return len(p.Groups) == 0 && len(p.DeadEnds) == 0 }
 
-// IDs returns the block IDs the plan drops (the older reads), in plan order.
-// These are the targets of the exclusion event Apply builds.
+// IDs returns the block IDs the plan drops — the older duplicate reads plus the
+// dead-end spans — in plan order. These are the targets of the single exclusion
+// event Apply builds, so dedup and dead-end collapse share one apply/undo cycle.
 func (p Plan) IDs() []string {
 	var out []string
 	for _, g := range p.Groups {
 		for _, it := range g.Drop {
+			out = append(out, it.ID)
+		}
+	}
+	for _, d := range p.DeadEnds {
+		for _, it := range d.Drop {
 			out = append(out, it.ID)
 		}
 	}
@@ -160,6 +171,20 @@ func Preview(proj *projection.Projection, table *cost.Table, model string, now t
 
 	// Largest reclaim first: the diff leads with the path that frees the most.
 	sort.SliceStable(plan.Groups, func(i, j int) bool { return plan.Groups[i].Tokens > plan.Groups[j].Tokens })
+
+	// Dead-end collapse (AS-117) rides the same exclusion event: mark the blocks
+	// the dedup already claims so a dead end never double-counts a dropped read,
+	// then fold each span's reclaim into the plan total.
+	dropped := make(map[string]bool)
+	for _, id := range plan.IDs() {
+		dropped[id] = true
+	}
+	plan.DeadEnds = detectDeadEnds(proj.Live(), segByID, dropped)
+	for _, d := range plan.DeadEnds {
+		plan.Tokens += d.Tokens
+		plan.CostUSD += d.CostUSD
+	}
+
 	plan.AfterSegments = plan.BeforeSegments - plan.DroppedCount()
 	plan.AfterTokens = plan.BeforeTokens - plan.Tokens
 	return plan

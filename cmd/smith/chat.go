@@ -402,16 +402,17 @@ func chatCommands(ctl *chatSession) *command.Registry {
 	})
 	mustRegisterCommand(reg, command.Command{
 		Name:          "tidy",
-		Summary:       "Dedupe repeated file reads in the context window",
-		Args:          "[--apply | --undo | --cancel]",
-		ArgSpec:       &command.ArgSpec{Min: 0, Max: 0},
+		Summary:       "Dedupe repeated reads, collapse dead ends, and promote working memory",
+		Args:          "[--apply | --undo | --cancel | --promote [<n>]]",
+		ArgSpec:       &command.ArgSpec{Min: 0, Max: 1},
 		Mode:          command.FullScreen,
 		Scriptability: command.Both,
-		Examples:      []string{"smith tidy", "smith tidy --apply"},
+		Examples:      []string{"smith tidy", "smith tidy --apply", "smith tidy --promote 1"},
 		Flags: func(fs *flag.FlagSet) {
-			fs.Bool("apply", false, "confirm the staged dedup")
-			fs.Bool("undo", false, "restore the most recent dedup")
+			fs.Bool("apply", false, "confirm the staged dedup + dead-end collapse")
+			fs.Bool("undo", false, "restore the most recent collapse")
 			fs.Bool("cancel", false, "discard the staged preview")
+			fs.Bool("promote", false, "save a surfaced working-memory fact (all, or the numbered one)")
 		},
 		Run: ctl.cmdTidy,
 	})

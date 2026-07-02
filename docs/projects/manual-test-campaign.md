@@ -256,7 +256,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-040 | /goal — explicit session objective that anchors insights | Implemented (`done`) |
 | AS-041 | Budget guardrails + /budget command | Implemented (`done`) |
 | AS-042 | Model routing/tiering + /route command | Implemented (`done`) |
-| AS-043 | /tidy — context reorganization without lossy summarization (flagship wedge) | Implemented (`done`) — mechanical dedup core shipped as TUI `/tidy` slash command (see step 5.8); dead-end collapse + working-memory promotion spun out to AS-117 (needs-clarification) |
+| AS-043 | /tidy — context reorganization without lossy summarization (flagship wedge) | Implemented (`done`) — mechanical dedup core shipped as TUI `/tidy` slash command (see step 5.8); dead-end collapse + working-memory promotion spun out to AS-117 (`done`) |
 | AS-044 | System sub-agent lifecycle framework + plugin registry | Implemented (`done`) |
 | AS-045 | /insights — model-assisted session retrospective dashboard (flagship wedge) | Implemented (`done`) |
 | AS-046 | User-delegated subagents (scoped child agents with own context) | Implemented (`done`) — interactive face; headless/serve + per-child cost itemization spun out to AS-119/AS-120 |
@@ -330,7 +330,7 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-114 | Scope Coding Mode process-skill blocks to the active phase | Implemented (`done`) |
 | AS-115 | Redaction-at-capture — best-effort secret/PII scrub before the log (spun out of AS-056) | Implemented (`done`) |
 | AS-116 | Surface auto-escalation in `/route` and `/cost` + wire the first producer | Implemented (`done`) |
-| AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Needs clarification (`needs-clarification`) |
+| AS-117 | `/tidy` dead-end collapse + working-memory promotion (spun out of AS-043) | Implemented (`done`) — dead-end collapse (repeated-failure + abandoned-read) rides the same `/tidy` exclusion/undo cycle; `/tidy --promote [<n>]` saves rediscovered facts via AS-048's memory-writing path |
 | AS-118 | Root help ignores `--output json` | Implemented (`done`) |
 | AS-132 | Background runner daemon (`runs work --watch`) + worker concurrency (`--concurrency N`) | Implemented (`done`) — see step 8.5; enqueue runs (`smith run "…" --queue`), start `smith runs work --watch --concurrency 2`; confirm runs enqueued after start are picked up, two workers never double-run a record, Ctrl+C drains cleanly, and plain `smith runs work` still drains-and-exits |
 | AS-133 | Recorded vendor simulators for Anthropic, OpenAI, and compatible providers | Implemented (`done`) — used by `internal/e2e`; see steps 3.4a and 3.4b |

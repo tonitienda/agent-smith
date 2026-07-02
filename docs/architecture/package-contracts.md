@@ -255,8 +255,10 @@ maintenance point — append it to the allow-list.
 - **Feature-leaf peers** that follow the same inward-pointing patterns as their
   documented siblings, called out so the map is complete: `topic` (AS-027,
   deterministic block topic/tag labels feeding `/context` and semantic `/clean`),
-  `tidy` (AS-043, lossless dedup of repeated reads via an appended exclusion
-  event — peer of `clean` / `compact`), and `improve` (AS-058, consolidates the
+  `tidy` (AS-043/AS-117, lossless dedup of repeated reads plus heuristic dead-end
+  collapse via one appended exclusion event — peer of `clean` / `compact`; the
+  AS-117 working-memory promotion half reuses AS-048's memory-writing path in the
+  command layer, not this leaf), and `improve` (AS-058, consolidates the
   findings rollup into dismissible memory/skill edit proposals for `/improve` —
   peer of `insights` / `skillrollup`). The **context-window leaves** are
   `composition` (AS-026, the per-segment `/context` projection over the live
