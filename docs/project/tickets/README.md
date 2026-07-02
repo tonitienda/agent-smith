@@ -196,6 +196,7 @@ Not ticketed (intentionally): §7.26 plugin marketplace / team config — PRD ma
 | [AS-145](AS-145-archtest-loop-cmd-and-face-cross-imports.md) | Archtest: guard loop↛cmd and face↛face/cmd, the documented-but-unenforced layering rules | quality | done | AS-098, AS-141 |
 | [AS-146](AS-146-archtest-inward-core-no-orchestration.md) | Archtest: guard that inward-core packages do not import orchestration packages | quality | done | AS-098 |
 | [AS-168](AS-168-campaign-stale-and-missing-coverage.md) | Manual test campaign — stale not-implemented rows and missing coverage for AS-140…AS-167 | quality | ready-to-implement | AS-140, AS-123, AS-127, AS-143, AS-158, AS-159, AS-160, AS-161, AS-162, AS-163 |
+| [AS-184](AS-184-campaign-missing-coverage-169-183.md) | Manual test campaign — missing coverage for AS-169…AS-183 | quality | ready-to-implement | AS-168, AS-169, AS-170, AS-171, AS-172, AS-176, AS-177, AS-178, AS-179, AS-180, AS-181, AS-182, AS-183 |
 
 ## Index — Architecture documentation follow-ons
 
