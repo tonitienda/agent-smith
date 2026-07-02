@@ -55,6 +55,13 @@ var (
 	ColorDiffAddedText   = lipgloss.Color("#7dffa8")
 	ColorDiffRemovedText = lipgloss.Color("#e08a8a")
 	ColorDiffContextText = lipgloss.Color("#6f8a76")
+
+	// /context segmented-bar fills (AS-128, §7.3): the two darker phosphor greens
+	// the bar needs for file/subagent buckets beyond the existing ramp, plus the
+	// near-background fill for free window space.
+	ColorSegFile = lipgloss.Color("#3f8a5a") // file-read share of the window
+	ColorSegSub  = lipgloss.Color("#2f6f4a") // subagent / delegated share
+	ColorFree    = lipgloss.Color("#12211a") // unused window (free space)
 )
 
 // Semantic role styles (docs/design/tui-visual-design.md §3). Roles map to color

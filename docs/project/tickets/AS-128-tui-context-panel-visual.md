@@ -1,7 +1,7 @@
 ---
 id: AS-128
 title: TUI /context panel visual redesign — segmented bar, legend grid, stats rail
-status: ready-to-implement
+status: done
 github_issue: 393
 depends_on: [AS-121, AS-026]
 area: tui
@@ -68,9 +68,29 @@ Use a Lipgloss box with `BgInset` background and `ColorBorder` border.
 
 ## Acceptance criteria
 
-- `go test ./internal/tui/...` passes.
-- `/context` renders the segmented bar with correct proportional widths at multiple
+- [x] `go test ./internal/tui/...` passes.
+- [x] `/context` renders the segmented bar with correct proportional widths at multiple
   terminal widths (80, 120, 200 cols).
-- Amber auto-compact marker appears when `used > 0.9 * window`.
-- Stats rail shows cost in `ColorCommand`.
-- Panel degrades gracefully when token data is unavailable (shows `—` placeholders).
+- [x] Amber auto-compact marker appears when `used > 0.9 * window`.
+- [x] Stats rail shows cost in `ColorCommand`.
+- [x] Panel degrades gracefully when token data is unavailable (shows `—` placeholders).
+
+## Implementation notes
+
+- The rich dashboard is TUI-owned. The handler (`cmd/smith` `cmdContext`) builds a
+  face-agnostic `command.ContextView` (plain numbers/labels, no colour) alongside the
+  existing plain `Text`; the TUI renders it in `internal/tui/contextpanel.go` and a
+  headless face falls back to `Text`. This mirrors the additive `Picker`/`Selector`
+  seam on `command.Output` (D2), so `internal/command` stays engine- and face-neutral.
+- **Category ↔ colour mapping (D0 — no silent punt).** The spec §7.3 lists illustrative
+  categories (System prompt, Tool definitions, …). The live composition engine
+  (`internal/composition`) buckets blocks into the *real* groups
+  `system+memory / tool result / assistant / user / file read / reasoning / skill`, so
+  the bar is driven by those actual buckets rather than the illustrative names. Colours
+  honour the semantic role→colour invariant (user amber, assistant green, reasoning
+  muted) from `internal/tui/CLAUDE.md`; the two new darker-green fills and the free-space
+  fill are named tokens in `colors.go`.
+- Bar cells use largest-remainder rounding so the coloured runs always sum to exactly the
+  panel width (verified at 80/120/200 and awkward token splits). Cache read/write/hit-rate
+  and session cost come from `cost.Summarize`; each figure degrades to `—` when its
+  source data is absent (unknown window, unpriced model, no usage yet).

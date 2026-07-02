@@ -400,6 +400,14 @@ func (m model) finishCommand(msg commandDoneMsg) model {
 		}
 		m.curAssistant, m.curReasoning = -1, -1
 	}
+	// The rich /context dashboard (AS-128): when the handler supplies structured
+	// context data, render the flagship segmented-bar panel instead of the plain
+	// Text breakdown. A non-interactive face has no Context field and falls back to
+	// Text, so the two stay in sync.
+	if msg.out.Context != nil {
+		m.openPanel(msg.cmd.Name, renderContextPanel(*msg.out.Context, m.panel.Width))
+		return m
+	}
 	switch msg.cmd.Mode {
 	case command.FullScreen:
 		m.openPanel(msg.cmd.Name, msg.out.Text)

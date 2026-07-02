@@ -93,6 +93,54 @@ type Output struct {
 	// cannot ignores it. Advisory and additive (D2); a handler setting Prompt
 	// normally leaves Text empty.
 	Prompt string
+	// Context, when non-nil, carries the structured /context data model so a rich
+	// interactive face (the TUI, AS-128) can render the flagship token-budget
+	// dashboard — segmented bar, legend grid, stats rail — instead of the plain
+	// Text breakdown. A non-interactive face ignores it and renders Text, so a
+	// handler supplies both. The fields are plain numbers/labels only, keeping this
+	// package face- and engine-agnostic (the face owns colour). Advisory, additive
+	// (D2).
+	Context *ContextView
+}
+
+// ContextView is the face-agnostic data model behind the rich /context panel
+// (AS-128): the window's token budget reduced to what a dashboard needs, with no
+// colour, layout, or engine types so an interactive face owns the visuals and a
+// non-interactive face can ignore it. Any zero/false "known" flag tells the face
+// to degrade that figure to a placeholder rather than print a misleading value.
+type ContextView struct {
+	// Segments are the window's category buckets, largest first, for the bar and
+	// legend. They exclude free space; the face derives Free from Used vs Window.
+	Segments []ContextSegment
+	// Used is the live window occupancy in tokens (sum of Segments' tokens).
+	Used int
+	// Window is the model's context-window size; 0 when unknown (the face then
+	// drops the free segment, the scale, and the auto-compact marker).
+	Window int
+	// CompactThreshold is the token count at which auto-compact fires, so the face
+	// can place the amber marker; 0 when unknown or disabled (no marker).
+	CompactThreshold int
+	// CostUSD is the session cost so far; Priced is false when it is a lower bound
+	// (an unpriced model), so the face marks the figure unknown.
+	CostUSD  float64
+	Priced   bool
+	Currency string
+	// Cache reports the session caching payoff. CacheKnown is false when no usage
+	// has been recorded yet, so the face shows placeholders for the cache stats.
+	CacheReadTokens  int
+	CacheWriteTokens int
+	CacheHitRate     float64 // read tokens / (read + fresh input); 0..1
+	CacheKnown       bool
+	// MemoryLoaded is true when project memory (CLAUDE.md, AS-032) occupies the
+	// window, so the face can show the "CLAUDE.md loaded" affordance.
+	MemoryLoaded bool
+}
+
+// ContextSegment is one category's share of the window in the /context bar and
+// legend: a stable Label the face maps to a colour, and its token count.
+type ContextSegment struct {
+	Label  string
+	Tokens int
 }
 
 // Picker is an interactive single-select list a Handler offers to interactive

@@ -1147,6 +1147,8 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	events := s.sess.Log.Events()
 	model := s.model
 	table := s.pricing
+	autoCompact := s.autoCompact
+	threshold := s.autoCompactThreshold
 	s.mu.Unlock()
 
 	sortBy := composition.SortSize
@@ -1155,7 +1157,60 @@ func (s *chatSession) cmdContext(_ context.Context, args []string) (command.Outp
 	}
 	proj := projection.Project(events, projection.Options{TargetModel: model})
 	comp := composition.Build(proj, table, model, time.Now(), sortBy)
-	return command.Output{Text: composition.Render(comp)}, nil
+	return command.Output{
+		Text:    composition.Render(comp),
+		Context: contextView(comp, cost.Summarize(events, table), proj, autoCompact, threshold),
+	}, nil
+}
+
+// contextView projects the /context data into the face-agnostic dashboard model
+// the rich TUI panel (AS-128) renders. It carries plain numbers only — the face
+// owns colour and layout — and leaves each figure's "known" flag false when the
+// data is absent so the panel degrades to a placeholder instead of a misleading
+// zero.
+func contextView(comp composition.Composition, sum cost.Summary, proj *projection.Projection, autoCompact bool, threshold float64) *command.ContextView {
+	v := &command.ContextView{
+		Used:         comp.TotalTokens,
+		Window:       comp.Window,
+		CostUSD:      comp.TotalCostUSD,
+		Priced:       comp.Priced,
+		Currency:     comp.Currency,
+		MemoryLoaded: hasMemory(proj),
+	}
+	for _, g := range comp.ByGroup {
+		v.Segments = append(v.Segments, command.ContextSegment{Label: g.Group, Tokens: g.Tokens})
+	}
+	// The auto-compact marker sits at threshold×window, but only when the guard is
+	// armed and the window size is known — otherwise the fraction has nothing to
+	// scale and the face draws no marker.
+	if autoCompact && comp.Window > 0 && threshold > 0 {
+		v.CompactThreshold = int(threshold*float64(comp.Window) + 0.5)
+	}
+	// Cache stats come from the session usage totals; with no usage recorded yet
+	// the ratio is undefined, so leave CacheKnown false for placeholder rendering.
+	if fresh := sum.Total.Input + sum.CacheReadTokens; fresh > 0 || sum.Total.CacheWrite > 0 {
+		v.CacheReadTokens = sum.CacheReadTokens
+		v.CacheWriteTokens = sum.Total.CacheWrite
+		if fresh > 0 {
+			v.CacheHitRate = float64(sum.CacheReadTokens) / float64(fresh)
+		}
+		v.CacheKnown = true
+	}
+	return v
+}
+
+// hasMemory reports whether a project-memory file (CLAUDE.md, AS-032) occupies
+// the live window, so /context can surface the "CLAUDE.md loaded" affordance.
+func hasMemory(proj *projection.Projection) bool {
+	for _, b := range proj.Blocks() {
+		if !b.Live {
+			continue
+		}
+		if _, ok := memory.Source(b.Block); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // cmdRoute inspects the model routing/tiering policy (AS-042, PRD §7.15) and, with
