@@ -2,6 +2,7 @@
 id: AS-187
 title: Repo-convention rules miner for /init and memory
 status: Pending Debrief
+github_issue: null
 area: capability
 priority: P2
 depends_on: [AS-039, AS-087, AS-032, AS-034]

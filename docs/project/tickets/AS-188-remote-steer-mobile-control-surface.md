@@ -2,6 +2,7 @@
 id: AS-188
 title: Remote-steer & mobile-friendly control surface over smith serve
 status: Pending Debrief
+github_issue: null
 area: faces
 priority: P2
 depends_on: [AS-077, AS-078, AS-171, AS-155]

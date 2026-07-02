@@ -2,6 +2,7 @@
 id: AS-186
 title: Interactive PTY-driven shell tool ("full terminal use")
 status: Pending Debrief
+github_issue: null
 area: tools
 priority: P2
 depends_on: [AS-015, AS-016]
