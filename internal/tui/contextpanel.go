@@ -24,6 +24,9 @@ import (
 const (
 	contextBarMinWidth = 20
 	contextPlaceholder = "—"
+	// legendTwoColMinWidth is the narrowest panel that still fits two legend
+	// columns; below it the grid collapses to one column so rows don't wrap.
+	legendTwoColMinWidth = 70
 )
 
 // renderContextPanel formats a ContextView as the styled /context panel body,
@@ -41,7 +44,7 @@ func renderContextPanel(v command.ContextView, width int) string {
 	b.WriteByte('\n')
 	b.WriteString(scaleLine(v, barWidth))
 	b.WriteString("\n\n")
-	b.WriteString(legendGrid(v))
+	b.WriteString(legendGrid(v, barWidth))
 	if v.MemoryLoaded {
 		b.WriteByte('\n')
 		b.WriteString(StyleSuccess.Render("✓ CLAUDE.md loaded"))
@@ -59,7 +62,10 @@ func renderContextPanel(v command.ContextView, width int) string {
 // when there is nothing to scale, so callers render an empty/placeholder bar.
 func barDenom(v command.ContextView) int {
 	if v.Window > 0 {
-		return v.Window
+		// An over-budget window (Used > Window) would otherwise let the segments
+		// sum past the window and overflow barWidth; scaling by the larger of the
+		// two keeps the bar exactly barWidth wide (free space is then zero).
+		return max(v.Window, v.Used)
 	}
 	return v.Used
 }
@@ -154,17 +160,18 @@ func writeCompactMarker(b *strings.Builder, v command.ContextView, barWidth int)
 		col = barWidth - 1
 	}
 	label := "auto-compact " + humanTokens(v.CompactThreshold)
-	// Place the label left of the marker when it would overflow the right edge,
-	// else to its right.
+	// Place the label to the right of the marker, or to its left when it would
+	// overflow the right edge. When it fits on neither side draw the bare marker so
+	// │ still lines up with its column on the bar below (shifting it would point at
+	// the wrong column).
 	var line string
-	if col+1+len(label) <= barWidth {
+	switch {
+	case col+1+len(label) <= barWidth:
 		line = strings.Repeat(" ", col) + StyleRunning.Render("│ "+label)
-	} else {
-		start := col - len(label) - 1
-		if start < 0 {
-			start = 0
-		}
-		line = strings.Repeat(" ", start) + StyleRunning.Render(label+" │")
+	case col >= len(label)+1:
+		line = strings.Repeat(" ", col-len(label)-1) + StyleRunning.Render(label+" │")
+	default:
+		line = strings.Repeat(" ", col) + StyleRunning.Render("│")
 	}
 	b.WriteString(line)
 	b.WriteByte('\n')
@@ -192,9 +199,10 @@ func scaleLine(v command.ContextView, barWidth int) string {
 	return StyleMuted.Render(left + strings.Repeat(" ", gapL) + center + strings.Repeat(" ", gapR) + right)
 }
 
-// legendGrid lays the categories out in a two-column grid: a coloured swatch, the
-// category name, its token count, and its window share.
-func legendGrid(v command.ContextView) string {
+// legendGrid lays the categories out as a swatch · name · token count · window
+// share. It uses two columns on a roomy panel and collapses to one column on a
+// narrow one (< legendTwoColMinWidth) so the rows don't wrap and break.
+func legendGrid(v command.ContextView, width int) string {
 	if len(v.Segments) == 0 {
 		return StyleMuted.Render("(context is empty)")
 	}
@@ -205,13 +213,17 @@ func legendGrid(v command.ContextView) string {
 		val := StyleMuted.Render(fmt.Sprintf("%7s  %s", render.Tokens(s.Tokens), sharePct(s.Tokens, v.Window, v.Used)))
 		cells = append(cells, swatch+" "+name+" "+val)
 	}
+	cols := 2
+	if width < legendTwoColMinWidth {
+		cols = 1
+	}
 	var b strings.Builder
-	for i := 0; i < len(cells); i += 2 {
+	for i := 0; i < len(cells); i += cols {
 		b.WriteString("  " + cells[i])
-		if i+1 < len(cells) {
+		if cols == 2 && i+1 < len(cells) {
 			b.WriteString("    " + cells[i+1])
 		}
-		if i+2 < len(cells) {
+		if i+cols < len(cells) {
 			b.WriteByte('\n')
 		}
 	}

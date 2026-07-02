@@ -98,6 +98,58 @@ func TestContextBarRunsSumToWidth(t *testing.T) {
 	}
 }
 
+func TestContextBarOverBudget(t *testing.T) {
+	// Used exceeds Window: the bar must still be exactly barWidth wide (no overflow)
+	// and carry no free space.
+	v := command.ContextView{
+		Segments: []command.ContextSegment{
+			{Label: "assistant", Tokens: 150_000},
+			{Label: "tool result", Tokens: 120_000},
+		},
+		Used:   270_000,
+		Window: 200_000,
+	}
+	colors, cells := barRuns(v, 100)
+	sum := 0
+	for _, n := range cells {
+		sum += n
+	}
+	if sum != 100 {
+		t.Errorf("over-budget bar cells sum = %d, want 100 (%v)", sum, cells)
+	}
+	// No free run should be emitted (free space is zero when over budget).
+	for i, c := range colors {
+		if c == ColorFree && cells[i] > 0 {
+			t.Errorf("unexpected free cells when over budget: run %d has %d", i, cells[i])
+		}
+	}
+	if got := lipgloss.Width(barLine(t, renderContextPanel(v, 100))); got != 100 {
+		t.Errorf("over-budget panel bar width = %d, want 100", got)
+	}
+}
+
+func TestContextLegendResponsive(t *testing.T) {
+	v := sampleContextView()
+	// Narrow panel → one legend cell per line (single column).
+	narrow := stripANSI(legendGrid(v, 50))
+	for _, line := range strings.Split(narrow, "\n") {
+		if strings.Count(line, "█") > 1 {
+			t.Errorf("narrow legend line has >1 column: %q", line)
+		}
+	}
+	// Wide panel → two cells per line where segments allow it.
+	wide := stripANSI(legendGrid(v, 120))
+	twoCol := false
+	for _, line := range strings.Split(wide, "\n") {
+		if strings.Count(line, "█") == 2 {
+			twoCol = true
+		}
+	}
+	if !twoCol {
+		t.Errorf("wide legend never used two columns:\n%s", wide)
+	}
+}
+
 func TestContextCompactMarker(t *testing.T) {
 	v := sampleContextView()
 	// used (100k) < 0.9*window (180k): the panel still shows the marker at the
