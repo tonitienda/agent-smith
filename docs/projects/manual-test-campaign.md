@@ -1,6 +1,8 @@
 # Agent Smith manual test campaign
 
-_Last updated: 2026-06-26 (AS-140: added dedicated detailed scenario steps for AS-029, AS-043, AS-054/AS-132, AS-057/AS-136, AS-110, AS-119/AS-120, AS-133/AS-135, AS-138, and AS-121 that previously only appeared in the coverage matrix or as composite footnotes)._
+_Last updated: 2026-07-02 (AS-184: added coverage-matrix rows for AS-169…AS-183 and corrected the stale AS-168 row; QA campaign pass 2026-07-02 — no product bugs found)._
+
+_Earlier: 2026-06-26 (AS-140: added dedicated detailed scenario steps for AS-029, AS-043, AS-054/AS-132, AS-057/AS-136, AS-110, AS-119/AS-120, AS-133/AS-135, AS-138, and AS-121 that previously only appeared in the coverage matrix or as composite footnotes)._
 
 _Earlier: 2026-06-25 (QA pass: corrected stale not-implemented entries, added coverage for AS-029, AS-043, AS-054, AS-057, AS-061, AS-110, AS-119, AS-120, AS-133, AS-135, AS-136, AS-138; added TUI visual polish wave AS-121–AS-131 and AS-139 to coverage matrix)._
 
@@ -379,7 +381,19 @@ Covers AS-030 and AS-095 through AS-103.
 | AS-165 | Background cost ledger and autonomous activity attribution | Not implemented (`ready-to-implement`) |
 | AS-166 | Shareable redacted session bundles | Not implemented (`ready-to-implement`) |
 | AS-167 | Command surface simplification and progressive disclosure audit | Needs debrief (`Pending Debrief`) |
-| AS-168 | Manual test campaign — stale rows + missing AS-140…AS-167 coverage | Implemented (`done`) — this pass; detailed scenarios for the `done` orchestrator/docs tickets remain a follow-on |
+| AS-168 | Manual test campaign — stale rows + missing AS-140…AS-167 coverage | Not implemented (`ready-to-implement`, type `bug`) — coverage-matrix rows landed; detailed scenarios for the `done` orchestrator/docs tickets remain the open follow-on |
+| AS-169 | tool.Runtime couples to concrete `*eventlog.Log` instead of a consumer seam (AS-091) | Needs clarification (`needs-clarification`) — design/refactor question, no runtime feature to test |
+| AS-170 | Orchestrator daemon ships its own scheduler/concurrency vs ADR D-ORCH-3 "reuses the async runner" | Needs clarification (`needs-clarification`) — ADR reconciliation, no runtime feature to test |
+| AS-171 | Outbound completion notifications for background & orchestrator runs | Needs debrief (`Pending Debrief`) |
+| AS-172 | Team credential gateway and cross-session prompt/tool audit trail | Needs debrief (`Pending Debrief`) |
+| AS-176 | Wails desktop shell bootstrap over Smith core adapter | Not implemented (`ready-to-implement`) — desktop wave; help/README must not advertise it as complete |
+| AS-177 | Desktop embedded runtime lifecycle and app state | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-178 | Desktop interactive transcript and composer | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-179 | Desktop tool activity and permission rail | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-180 | Desktop home, recent workspaces, and session resume | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-181 | Desktop context and cost rail | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-182 | Desktop settings, runtime status, and auth guidance | Not implemented (`ready-to-implement`) — desktop wave |
+| AS-183 | Wails desktop packaging, signing, updates, and smoke tests | Not implemented (`ready-to-implement`) — desktop wave |
 
 ## Current local smoke pass (2026-06-22)
 
@@ -510,3 +524,38 @@ coverage gaps between the campaign and the backlog were found and filed as
 | `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
 | `smith auth set openai` / `auth status` with no Secret Service | Pass (AS-144 holds) | `auth set` shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint, exits 1, and never writes a plaintext key; `auth status` shows the `no keychain available` line. |
 | Campaign stale entries | Fixed → AS-168 | AS-123 and AS-127 moved "Not implemented" → "Implemented (`done`)"; coverage-matrix rows added for AS-140…AS-168. |
+
+## QA campaign pass (2026-07-02)
+
+Campaign re-run against `make build` binary (commit `5f18d5b`). All automated
+suites pass; CLI scenarios re-checked on a headless Linux host (no D-Bus /
+Secret Service). **No product bugs found** — every documented CLI behaviour
+matched. One coverage gap between the campaign and the backlog was found and
+filed as **AS-184**: the campaign says it "covers every ticket in the backlog",
+but the coverage matrix stopped at AS-168 while the backlog now runs to AS-183.
+Coverage-matrix rows for AS-169…AS-183 (the AS-169/AS-170 architecture
+follow-ons, the AS-171/AS-172 Pending-Debrief items, and the AS-176…AS-183
+desktop wave) were added in this pass; the stale AS-168 row was corrected to
+match its `ready-to-implement` frontmatter. None of AS-169…AS-183 is `done`, so
+no shipped feature was untested — the fix is documentation-only.
+
+| Check | Result | Notes |
+| --- | --- | --- |
+| `make build` | Pass | Static binary builds; `./smith --version` reports `smith dev (5f18d5b)`. |
+| `make test` | Pass | All packages pass, including `internal/e2e` offline suite (AS-134). |
+| `scripts/harness/arch.sh` | Pass | Architecture contract tests pass. |
+| `go test ./internal/e2e/...` | Pass | Offline E2E suite passes (AS-133/AS-134/AS-135). |
+| `go test ./internal/orchestrator/...` | Pass | Loader, cron, scheduler, SQLite store, secret (AS-161/AS-163). |
+| `./smith --help --output json` + leaf `run --help --output json` | Pass | Both parse as JSON (AS-118 holds). |
+| `./smith does-not-exist` | Pass | Exits 2 (invalid usage). |
+| `./smith run "say hello"` without credentials | Pass | Exits 6; `--output json` emits `{…,"error":"provider: auth: no API key…"}` and still exits 6. |
+| `run -f` / `run --queue` / `serve --unsafe-bind` / `runs work --watch/--concurrency` help | Pass | AS-069, AS-054, AS-077, AS-132 surfaces documented. |
+| `./smith serve` startup | Pass | Binds `ws://127.0.0.1:8765` (localhost only) and notes Ctrl+C to stop. |
+| `./smith replay <missing>` | Pass | Exits 1 with a concise `session: read metadata … no such file` error. |
+| `./smith runs daemon health --output json` | Pass | Reports `{"jobs":0,"runs":{}}` for the project-scoped run-control DB (AS-161). |
+| `./smith runs daemon start` with an invalid `.agent-smith/jobs/*.yaml` | Pass | Fail-closed: rejects the spec (`budget: … missing required budget block`), starts with 0 jobs loaded (AS-160/AS-161). |
+| `./smith stats` / `stats all` / `stats rebuild` | Pass | Cross-session analytics; rebuild refreshes index. |
+| `./smith improve --help` / `route cheap anthropic …` / `insights --help` | Pass | `apply/dismiss/snooze`, per-session route override, `insights describe` present. |
+| `ANTHROPIC_API_KEY=… smith auth status anthropic` | Pass | Reports `set (env ANTHROPIC_API_KEY)` — env overrides keychain (step 3.6). |
+| `smith auth set openai` with no Secret Service | Pass (AS-144 holds) | Shows the actionable `no OS keychain available … set OPENAI_API_KEY` hint, exits 1, never writes a plaintext key; empty key exits 2; `auth status` shows the `no keychain available` line. |
+| Campaign coverage | Fixed → AS-184 | Coverage-matrix rows added for AS-169…AS-183; stale AS-168 row corrected to match its `ready-to-implement` frontmatter. |
