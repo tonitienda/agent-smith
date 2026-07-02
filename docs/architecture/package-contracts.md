@@ -237,7 +237,7 @@ maintenance point — append it to the allow-list.
   hardcoding model ids, so a model swap is one policy change, not a grep across
   features. The composition root builds the policy (config overlay via
   `routing.ConfigFrom`, D2 tolerate-but-warn) and hands it to the loop, `/compact`,
-  sub-agents, and the default selection; it is a stdlib + `schema` + `render` leaf
+  sub-agents, and the default selection; it is a stdlib + `render` leaf
   (the shared `render` primitives format the `/route` output) and points
   inward — `delegate` depends on it, not the reverse.
 - **Capture-time redaction** (`redaction`, AS-115): `internal/redaction` is the
@@ -309,13 +309,17 @@ interface as one of three kinds:
 - **Product boundary** — a deliberate, central seam that is part of the product's
   shape and has (or will have) several implementations. Keep these where they
   are: `provider.Provider`, `provider.Stream`, `tool.Tool`, `permission.Asker`,
-  `loop.Observer`, `subagent.SubAgent`, `subagent.Store`. They are justified by
+  `subagent.SubAgent`, `subagent.Store`. They are justified by
   vendor normalization, pluggable tools/faces/analyzers, or documented future
-  backends — not by a single caller's convenience.
+  backends — not by a single caller's convenience. (The loop's central
+  `loop.Observer` seam is the same kind of product boundary but is expressed as a
+  *function* value — `type Observer func(UIEvent)` — not an interface; see
+  [interface conventions](interface-conventions.md), which classifies the loop's
+  function-typed seams.)
 - **Consumer seam** — a tiny interface defined next to the code that uses it,
   naming just the method(s) that code needs, satisfied by a concrete type from
   another package. Prefer this over importing a whole subsystem. Examples: the
-  `configReader`/`configDecoder` views over `*config.Config` (see below), and the
+  `configReader` view over `*config.Config` (see below), and the
   loop's `EventLog` (`Append`/`Events`), `ToolExecutor` (`ExecuteBatch`), and
   `ToolDefs` (`ProviderDefs`) — each names the one or two methods the loop uses
   instead of taking the whole `*eventlog.Log`, `*tool.Runtime`, or
